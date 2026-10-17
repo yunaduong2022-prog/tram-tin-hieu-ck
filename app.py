@@ -154,10 +154,10 @@ with st.sidebar:
     repo_files = sorted(glob.glob("data/*.xlsx"))
     source = uploaded
     if source is None and repo_files:
-        chosen = st.selectbox("Hoặc dùng file trong repo", repo_files, index=len(repo_files) - 1)
-        source = chosen
+        source = st.selectbox("Hoặc dùng file trong repo", repo_files, index=len(repo_files) - 1)
 
 if source is None:
+    st.title("📈 Trạm Tín Hiệu Chứng Khoán Việt Nam")
     st.info("👈 Hãy tải file Excel lên (hoặc đặt file `.xlsx` vào thư mục `data/` của repo).")
     st.stop()
 
@@ -169,12 +169,8 @@ except Exception as e:
 
 latest_date = df["Ngày"].max()
 n_sessions = df.groupby("Mã").size().min()
-st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · tối thiểu {n_sessions} phiên/mã")
-if n_sessions < 60:
-    st.warning("Dữ liệu dưới 60 phiên/mã: Ichimoku, MA50/MA200 và backtest sẽ thiếu hoặc không đáng tin. "
-               "Nên dùng file lịch sử giá dài hơn (≥ 1 năm).")
-
 latest_df = df[df["Ngày"] == latest_date]
+
 results = []
 for _, row in latest_df.iterrows():
     sig, sc, reas, entry, sl, tp, rr = analyze_signal(row)
@@ -187,33 +183,68 @@ for _, row in latest_df.iterrows():
     })
 res_df = pd.DataFrame(results)
 
-tab_scan, tab_chart = st.tabs(["🔍 Screener", "📊 Biểu đồ & Thẻ lý do"])
 
-with tab_scan:
+def header():
+    st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · "
+               f"tối thiểu {n_sessions} phiên/mã")
+    if n_sessions < 60:
+        st.warning("Dữ liệu dưới 60 phiên/mã: Ichimoku, MA50/MA200 và backtest sẽ thiếu hoặc không đáng tin.")
+
+
+# ------------------------------------------------------------------ TRANG 1: BỘ LỌC
+def page_filter():
+    st.title("🔍 Bộ Lọc Cổ Phiếu")
+    header()
+
     c1, c2, c3 = st.columns(3)
     with c1:
         filter_sig = st.multiselect("Lọc tín hiệu", ["MUA MỚI (BREAKOUT)", "MUA GOM (SPRING)", "WAIT"],
-                                    default=["MUA MỚI (BREAKOUT)", "MUA GOM (SPRING)"])
+                                    default=["MUA MỚI (BREAKOUT)", "MUA GOM (SPRING)", "WAIT"])
     with c2:
-        min_score = st.slider("Điểm tối thiểu", 0.0, 6.0, 3.0, 0.5)
+        min_score = st.slider("Điểm tối thiểu", 0.0, 6.0, 0.0, 0.5)
     with c3:
         search = st.text_input("Tìm mã", "").upper()
+
     f = res_df[res_df["Tín hiệu"].isin(filter_sig) & (res_df["Điểm số"] >= min_score)]
     if search:
         f = f[f["Mã"].str.contains(search)]
-    st.dataframe(f.drop(columns=["reasons"]), use_container_width=True, hide_index=True)
+    f = f.sort_values("Điểm số", ascending=False).reset_index(drop=True)
 
-with tab_chart:
-    code = st.selectbox("Chọn mã:", res_df["Mã"].unique())
+    st.caption(f"{len(f)} mã phù hợp · bấm vào một dòng để chọn, rồi bấm nút bên dưới để xem biểu đồ.")
+    event = st.dataframe(
+        f.drop(columns=["reasons"]), use_container_width=True, hide_index=True,
+        on_select="rerun", selection_mode="single-row",
+    )
+    rows = event.selection.rows if event and event.selection else []
+    if rows:
+        code = f.iloc[rows[0]]["Mã"]
+        if st.button(f"📊 Xem biểu đồ {code}", type="primary"):
+            st.session_state["selected_code"] = code
+            st.switch_page(chart_page)
+
+
+# ------------------------------------------------------------------ TRANG 2: BIỂU ĐỒ
+def page_chart():
+    st.title("📊 Biểu Đồ & Thẻ Lý Do")
+    header()
+
+    codes = list(res_df["Mã"].unique())
+    saved = st.session_state.get("selected_code")
+    idx = codes.index(saved) if saved in codes else 0
+    code = st.selectbox("Chọn mã:", codes, index=idx)
+    st.session_state["selected_code"] = code
+
     info = res_df[res_df["Mã"] == code].iloc[0]
-    col_main, col_ticket = st.columns([2.2, 1])
 
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Giá", info["Giá"])
+    m2.metric("Vol vs MA10", info["Vol vs MA10"])
+    m3.metric("Position %", info["Position_%"])
+    m4.metric("Điểm số", f"{info['Điểm số']}/6.0")
+    m5.metric("R:R", f"1 : {info['R:R']}")
+
+    col_main, col_ticket = st.columns([2.2, 1])
     with col_main:
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Giá", info["Giá"])
-        m2.metric("Vol vs MA10", info["Vol vs MA10"])
-        m3.metric("Position %", info["Position_%"])
-        m4.metric("R:R", f"1 : {info['R:R']}")
         st.plotly_chart(make_chart(df[df["Mã"] == code], code), use_container_width=True)
 
     with col_ticket:
@@ -229,14 +260,17 @@ with tab_chart:
             </div>""", unsafe_allow_html=True)
         else:
             st.warning("ĐỨNG NGOÀI (WAIT) – chưa đủ điểm đồng thuận")
-        for cat, pts, txt in info["reasons"]:
-            st.write(f"• **{cat} (+{pts}đ):** {txt}")
+        if info["reasons"]:
+            for cat, pts, txt in info["reasons"]:
+                st.write(f"• **{cat} (+{pts}đ):** {txt}")
+        else:
+            st.write("Chưa có chỉ báo nào đóng góp điểm.")
 
         st.markdown("---")
         st.markdown("#### Backtest (tính từ dữ liệu đã tải)")
         trades = run_backtest(df)
-        t = trades[trades["Mã"] == code]
-        stats = backtest_stats(t)
+        t = trades[trades["Mã"] == code] if not trades.empty else trades
+        stats = backtest_stats(t) if not t.empty else None
         if stats is None or stats["n"] < 5:
             st.caption("Chưa đủ lệnh mô phỏng cho mã này (cần dữ liệu dài hơn).")
         else:
@@ -245,4 +279,10 @@ with tab_chart:
             st.metric("Max drawdown", f"{stats['mdd']:.1f}R")
             st.caption(f"{stats['n']} lệnh · kỳ vọng {stats['exp']:.2f}R/lệnh · thoát tối đa 20 phiên")
 
-st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+
+
+# ------------------------------------------------------------------ ĐIỀU HƯỚNG
+filter_page = st.Page(page_filter, title="Bộ lọc", icon="🔍", url_path="bo-loc", default=True)
+chart_page = st.Page(page_chart, title="Biểu đồ", icon="📊", url_path="bieu-do")
+st.navigation([filter_page, chart_page]).run()
