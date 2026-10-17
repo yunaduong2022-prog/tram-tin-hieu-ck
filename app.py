@@ -1,578 +1,535 @@
-"""Lõi tính toán của Trạm Tín Hiệu (không phụ thuộc Streamlit).
-
-- Gộp nến Ngày -> Tuần -> Tháng từ chính dữ liệu người dùng đưa vào
-- Chỉ báo: MA/EMA, Ichimoku, Bollinger, MACD, KDJ, StochRSI, ATR
-- Chấm điểm đa chỉ báo (thang -6.5 .. +6.5), dự báo, backtest, vùng giá, Fibonacci, Elliott
-"""
-from __future__ import annotations
+import glob
+import inspect
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from plotly.subplots import make_subplots
 
-NUMERIC_COLS = ["Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh"]
-VOL = "Khối lượng khớp lệnh"
+import engine as E
 
-TF_NAME = {"D": "Ngày", "W": "Tuần", "M": "Tháng"}
-TF_ROLE = {"M": "Xu hướng lớn", "W": "Xác nhận", "D": "Điểm vào"}
-TF_UNIT = {"D": "phiên", "W": "tuần", "M": "tháng"}
-TF_WEIGHT = {"M": 0.30, "W": 0.30, "D": 0.40}
-PIVOT_K = {"D": 5, "W": 3, "M": 2}
+st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
 
-MIN_BARS = 35          # tối thiểu để chấm điểm (MACD cần ~34 nến)
-FULL_BARS = 80         # đủ cho Ichimoku (52 + 26)
-SIG_TH = 2.0           # ngưỡng điểm sinh tín hiệu Mua/Bán
-MAX_SCORE = 6.5
-HORIZON = 10           # số nến của kịch bản dự báo
-MAX_PTS = {"Ichimoku": 1.5, "MACD": 1.0, "KDJ": 0.5, "StochRSI": 0.5,
-           "Bollinger": 0.5, "Fibonacci": 1.0, "Xu hướng": 1.5}
+st.markdown("""
+<style>
+ .ticket-buy{background:#DDF1EB;border-left:5px solid #0E8A6D;padding:12px 15px;border-radius:8px;color:#0A6B54;margin-bottom:12px}
+ .card{background:#fff;border:1px solid #E3E8EF;border-radius:12px;padding:14px 16px;margin-bottom:14px}
+ .ct{font-weight:700;font-size:14px;margin-bottom:8px;color:#1F2937}
+ .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;font-size:13px}
+ .muted{color:#6B7280;font-size:12px;line-height:1.5}
+ .big{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0 6px}
+ .c-red{color:#C93A52}.c-green{color:#0E8A6D}.c-amber{color:#B7791F}.c-gray{color:#6B7280}
+ .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+ .tag-red{background:#FCE4E8;color:#C93A52}.tag-green{background:#DDF1EB;color:#0A6B54}
+ .tag-amber{background:#FDF1D6;color:#8A5A00}.tag-gray{background:#EEF1F5;color:#4B5563}
+ .box{background:#F4F6F9;border-radius:8px;padding:8px 12px;margin:8px 0}
+ .bar{height:7px;background:#E5E7EB;border-radius:99px;overflow:hidden;margin:6px 0 4px}
+ .bar>div{height:100%;border-radius:99px}.bg-red{background:#C93A52}.bg-green{background:#0E8A6D}.bg-gray{background:#9CA3AF}
+ .chip{display:inline-block;min-width:42px;text-align:center;padding:2px 6px;border-radius:6px;font-size:12px;font-weight:700;margin-right:8px}
+ .chip-red{background:#FCE4E8;color:#C93A52}.chip-green{background:#DDF1EB;color:#0A6B54}.chip-gray{background:#EEF1F5;color:#4B5563}
+ .item{padding:6px 0;border-bottom:1px solid #F0F2F5;font-size:13px}
+</style>
+""", unsafe_allow_html=True)
+
+_STRETCH = ({"width": "stretch"} if "width" in inspect.signature(st.plotly_chart).parameters
+            else {"use_container_width": True})
+_STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe).parameters
+               else {"use_container_width": True})
+TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
+BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
+              "Elliott", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
-def clean_raw(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-    for col in NUMERIC_COLS:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df["Ngày"] = pd.to_datetime(df["Ngày"], format="%d/%m/%Y", errors="coerce")
-    return df.dropna(subset=["Mã", "Ngày", "Giá đóng cửa"]).sort_values(["Mã", "Ngày"]).reset_index(drop=True)
+@st.cache_data(show_spinner="Đang đọc file Excel...")
+def load_raw(source) -> pd.DataFrame:
+    return E.clean_raw(pd.read_excel(source, sheet_name=0))
 
 
-def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
-    """Gộp nến ngày thành tuần (W-FRI) hoặc tháng. Khối lượng = tổng."""
-    g = g.sort_values("Ngày")
-    if tf == "D":
-        r = g.copy()
-        r["Số phiên"] = 1
-        return r.reset_index(drop=True)
-    key = g["Ngày"].dt.to_period("W-FRI" if tf == "W" else "M")
-    r = g.groupby(key).agg(**{
-        "Mã": ("Mã", "first"), "Ngày": ("Ngày", "last"),
-        "Giá mở cửa": ("Giá mở cửa", "first"), "Giá cao nhất": ("Giá cao nhất", "max"),
-        "Giá thấp nhất": ("Giá thấp nhất", "min"), "Giá đóng cửa": ("Giá đóng cửa", "last"),
-        VOL: (VOL, "sum"), "Số phiên": ("Ngày", "size"),
+@st.cache_data(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...")
+def build_frames(raw: pd.DataFrame) -> dict:
+    parts = {"D": [], "W": [], "M": []}
+    for _, g in raw.groupby("Mã"):
+        base = g[["Mã", "Ngày"] + E.NUMERIC_COLS]
+        for tf in parts:
+            parts[tf].append(E.add_indicators(E.resample_ohlcv(base, tf)))
+    return {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
+
+
+@st.cache_data(show_spinner="Đang phân tích...")
+def analyze_cached(_frames: dict, code: str, tf: str, key: str) -> dict:
+    g = _frames[tf]
+    return E.analyze_frame(g[g["Mã"] == code], tf)
+
+
+# ------------------------------------------------------------------ NGUỒN DỮ LIỆU
+with st.sidebar:
+    st.header("📂 Dữ liệu")
+    uploaded = st.file_uploader("Tải file Excel CafeF (.xlsx)", type=["xlsx"])
+    repo_files = sorted(glob.glob("data/*.xlsx"))
+    source = uploaded
+    if source is None and repo_files:
+        source = st.selectbox("Hoặc dùng file trong repo", repo_files, index=len(repo_files) - 1)
+
+if source is None:
+    st.title("📈 Trạm Tín Hiệu Chứng Khoán Việt Nam")
+    st.info("👈 Hãy tải file Excel lên (hoặc đặt file `.xlsx` vào thư mục `data/` của repo).")
+    st.stop()
+
+try:
+    raw = load_raw(source)
+    frames = build_frames(raw)
+except Exception as e:
+    st.error(f"Lỗi khi đọc hoặc xử lý dữ liệu: {e}")
+    st.stop()
+
+df = frames["D"]
+latest_date = df["Ngày"].max()
+n_sessions = int(df.groupby("Mã").size().min())
+latest_df = df[df["Ngày"] == latest_date]
+DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}"
+
+# ------------------------------------------------------------------ BẢNG THEO DÕI
+vol_month = E.month_vol_change(frames["M"])
+rows = []
+for _, r_ in latest_df.iterrows():
+    sig, sc, reas, entry, sl, tp, rr = E.analyze_signal(r_)
+    pos, chg = r_["Position_%"], r_["Chg_%"]
+    zone = E.zone_of(pos)
+    chg = 0.0 if pd.isna(chg) else chg
+    vm = vol_month.get(r_["Mã"], np.nan)
+    pv_code = r_["PV_code"]
+    rows.append({
+        "Mã": r_["Mã"], "Giá": r_["Giá đóng cửa"], "% Biên độ": r_["Range_%"], "Position %": pos,
+        "Zone": zone,
+        "Lực mua/bán": {"High": "Lực mua mạnh", "Low": "Bị bán mạnh", "Mid-Sell": "Giằng co"}.get(zone, "-"),
+        "Giá tăng/giảm": "Giá Không đổi" if abs(chg) < 1e-9 else "Giá Tăng" if chg > 0 else "Giá Giảm",
+        "Vol vs tháng trước": "-" if pd.isna(vm) else "Vol Tăng" if vm > 1 else "Vol Giảm",
+        "Vol/Avg10": r_["Vol_vs_MA10"], "Nhận xét": E.comment_of(zone, chg),
+        "Cảnh báo": "MUA" if r_["PV_signal"] > 0 else "BÁN" if r_["PV_signal"] < 0 else "-",
+        "Lý do cảnh báo": E.PV_LABEL.get(pv_code, "-"),
+        "Tín hiệu": sig, "Điểm số": sc, "Entry": entry, "Stoploss": sl, "TakeProfit": tp, "R:R": rr, "reasons": reas,
     })
-    return r.reset_index(drop=True)
+res_df = pd.DataFrame(rows)
+TABLE_COLS = ["ST", "Mã", "Giá", "% Biên độ", "Position %", "Zone", "Lực mua/bán", "Giá tăng/giảm",
+              "Vol vs tháng trước", "Vol/Avg10", "Nhận xét", "Cảnh báo", "Lý do cảnh báo"]
 
 
-def add_indicators(g: pd.DataFrame) -> pd.DataFrame:
-    g = g.copy()
-    c, h, l, v = g["Giá đóng cửa"], g["Giá cao nhất"], g["Giá thấp nhất"], g[VOL]
-    g["Chg_%"] = c.pct_change() * 100
-    for n in (9, 20, 50, 200):
-        g[f"MA{n}"] = c.rolling(n).mean()
-    g["EMA50"] = c.ewm(span=50, adjust=False, min_periods=50).mean()
-    g["EMA200"] = c.ewm(span=200, adjust=False, min_periods=200).mean()
-    g["Vol_MA10"] = v.shift(1).rolling(10).mean()
-    g["Vol_vs_MA10"] = v / g["Vol_MA10"]
-    rng = h - l
-    g["Position_%"] = np.where(rng > 0, (c - l) / rng.replace(0, np.nan) * 100, 50.0)
-    g["Range_%"] = np.where(l > 0, rng / l * 100, np.nan)
-
-    # Ichimoku (mây tại ngày i được tính từ 26 nến trước)
-    g["Tenkan"] = (h.rolling(9).max() + l.rolling(9).min()) / 2
-    g["Kijun"] = (h.rolling(26).max() + l.rolling(26).min()) / 2
-    g["SpanA"] = ((g["Tenkan"] + g["Kijun"]) / 2).shift(26)
-    g["SpanB"] = ((h.rolling(52).max() + l.rolling(52).min()) / 2).shift(26)
-    g["Chikou_ref"] = c.shift(26)
-    g["Resistance_20"] = h.shift(1).rolling(20).max()
-    g["Support_20"] = l.shift(1).rolling(20).min()
-
-    # Bollinger 20, 2
-    sd = c.rolling(20).std(ddof=0)
-    g["BB_mid"], g["BB_up"], g["BB_lo"] = g["MA20"], g["MA20"] + 2 * sd, g["MA20"] - 2 * sd
-
-    # MACD 12-26-9
-    macd = c.ewm(span=12, adjust=False).mean() - c.ewm(span=26, adjust=False, min_periods=26).mean()
-    g["MACD"] = macd
-    g["MACD_sig"] = macd.ewm(span=9, adjust=False, min_periods=9).mean()
-    g["MACD_hist"] = g["MACD"] - g["MACD_sig"]
-
-    # KDJ 9-3-3
-    rsv = (c - l.rolling(9).min()) / (h.rolling(9).max() - l.rolling(9).min()).replace(0, np.nan) * 100
-    k = rsv.ewm(alpha=1 / 3, adjust=False).mean()
-    d = k.ewm(alpha=1 / 3, adjust=False).mean()
-    g["KDJ_K"], g["KDJ_D"], g["KDJ_J"] = k, d, 3 * k - 2 * d
-
-    # StochRSI 14-3-3-3
-    delta = c.diff()
-    ag = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
-    al = (-delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
-    rsi = (100 - 100 / (1 + ag / al.replace(0, np.nan))).where(al != 0, 100.0).where(ag.notna())
-    st = (rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min()).replace(0, np.nan) * 100
-    g["SRSI_K"] = st.rolling(3).mean()
-    g["SRSI_D"] = g["SRSI_K"].rolling(3).mean()
-
-    # ATR 14
-    pc = c.shift(1)
-    tr = pd.concat([h - l, (h - pc).abs(), (l - pc).abs()], axis=1).max(axis=1)
-    g["ATR"] = tr.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
-    return add_pv_signals(g)
+def header():
+    st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · "
+               f"tối thiểu {n_sessions} phiên/mã")
+    if n_sessions < 60:
+        st.warning("Dữ liệu dưới 60 phiên/mã: Ichimoku, MA50/MA200, khung Tuần/Tháng và backtest sẽ thiếu hoặc không đáng tin.")
 
 
-# ------------------------------------------------------------------ CẢNH BÁO MUA / BÁN THEO GIÁ + KHỐI LƯỢNG
-PV_LABEL = {"BREAKOUT": "Phá kháng cự + vol lớn", "SPRING": "Quét đáy rồi rút chân (Spring)",
-            "BREAKDOWN": "Phá hỗ trợ + vol lớn", "UPTHRUST": "Vượt đỉnh thất bại (bẫy tăng)",
-            "CLIMAX": "Vol đột biến, đóng xa đỉnh (phân phối)", "SELLOFF": "Xả mạnh + vol lớn"}
-PV_SIDE = {"BREAKOUT": 1, "SPRING": 1, "BREAKDOWN": -1, "UPTHRUST": -1, "CLIMAX": -1, "SELLOFF": -1}
+def style_table(f: pd.DataFrame):
+    zone = {"High": "background-color:#FF3B30;color:#fff;font-weight:600",
+            "Low": "background-color:#DDF1EB;color:#0A6B54", "Mid-Sell": "background-color:#FADADD;color:#8A2B3A"}
+    good, bad = "color:#0E8A6D;font-weight:600", "color:#C93A52;font-weight:600"
+    colors = {"Lực mua mạnh": good, "Bị bán mạnh": bad, "Giá Tăng": good, "Giá Giảm": bad,
+              "Vol Tăng": good, "Vol Giảm": bad,
+              "Tăng khỏe / Tiền vào": "background-color:#DDF1EB;color:#0A6B54;font-weight:600",
+              "Còn tăng": "background-color:#B7F5A0;color:#14532D;font-weight:600",
+              "Giảm mạnh / Áp lực xả": "background-color:#FFB3B3;color:#9B1C1C;font-weight:600",
+              "Cầu đỡ / Rút chân": "background-color:#FADADD;color:#8A2B3A",
+              "Giảm lành tính": "background-color:#FDECEC;color:#8A2B3A"}
+    sty = f.style.format({"Giá": "{:,.2f}", "% Biên độ": "{:.1f}%", "Position %": "{:.1f}%",
+                          "Vol/Avg10": "{:.2f}"}, na_rep="-")
+    ap = lambda s: s.map if hasattr(s, "map") else s.applymap
+    sty = ap(sty)(lambda v: zone.get(v, ""), subset=["Zone"])
+    sty = ap(sty)(lambda v: colors.get(v, ""),
+                  subset=["Lực mua/bán", "Giá tăng/giảm", "Vol vs tháng trước", "Nhận xét"])
+    alert = {"MUA": "background-color:#0E8A6D;color:#fff;font-weight:700",
+             "BÁN": "background-color:#C93A52;color:#fff;font-weight:700"}
+    return ap(sty)(lambda v: alert.get(v, ""), subset=["Cảnh báo"])
 
 
-def add_pv_signals(g: pd.DataFrame) -> pd.DataFrame:
-    """Mua/Bán thuần theo giá + khối lượng (Wyckoff/VSA), tính được cho mọi khung D/W/M.
-    Vol_vs_MA10 = khối lượng nến / TB 10 nến trước. Position = vị trí giá đóng trong biên độ nến."""
-    c, h, l = g["Giá đóng cửa"], g["Giá cao nhất"], g["Giá thấp nhất"]
-    pos, vr, chg = g["Position_%"], g["Vol_vs_MA10"], g["Chg_%"]
-    res, sup, ma20 = g["Resistance_20"], g["Support_20"], g["MA20"]
-    conds = [
-        (c > res) & (pos >= 70) & (vr >= 1.5),                 # MUA: phá kháng cự, đóng sát đỉnh, vol lớn
-        (l < sup) & (c >= sup) & (pos >= 50) & (vr >= 1.2),    # MUA: quét thủng hỗ trợ rồi đóng trên hỗ trợ
-        (c < sup) & (pos <= 30) & (vr >= 1.5),                 # BÁN: phá hỗ trợ, đóng sát đáy, vol lớn
-        (h > res) & (c < res) & (pos <= 50) & (vr >= 1.2),     # BÁN: vượt đỉnh nhưng đóng dưới kháng cự
-        (chg > 0) & (vr >= 2.0) & (pos <= 40),                 # BÁN: vol đột biến, đóng xa đỉnh
-        (chg < 0) & (vr >= 1.5) & (pos <= 30) & (c < ma20),    # BÁN: giảm mạnh + vol lớn, dưới MA20
-    ]
-    codes = ["BREAKOUT", "SPRING", "BREAKDOWN", "UPTHRUST", "CLIMAX", "SELLOFF"]
-    g["PV_code"] = np.select(conds, codes, "")
-    g["PV_signal"] = g["PV_code"].map(PV_SIDE).fillna(0).astype(int)
-    return g
+# ------------------------------------------------------------------ TRANG 1: BỘ LỌC
+def page_filter():
+    st.title("🔍 Bộ Lọc Cổ Phiếu")
+    header()
+    st.caption("**Cảnh báo MUA/BÁN** (nến mới nhất) dựa trên giá + khối lượng: MUA khi phá kháng cự 20 phiên với vol ≥ 1.5× MA10 "
+               "(đóng sát đỉnh) hoặc quét thủng hỗ trợ rồi rút chân; BÁN khi phá hỗ trợ với vol lớn, vượt đỉnh thất bại, "
+               "vol đột biến mà đóng xa đỉnh, hoặc giảm mạnh kèm vol lớn dưới MA20.")
+    st.caption("Zone: Position ≥ 70% = **High** (giá đóng gần đỉnh → mai dễ kéo tiếp) · ≤ 30% = **Low** "
+               "(giá đóng gần đáy → mai dễ đạp tiếp) · còn lại = Mid-Sell. "
+               "Vol vs tháng trước: KL trung bình/phiên của tháng hiện tại so với tháng trước (tính từ biểu đồ Tháng).")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        filter_sig = st.multiselect("Cảnh báo", ["MUA", "BÁN", "-"], default=["MUA", "BÁN", "-"],
+                                    format_func=lambda v: "Không có" if v == "-" else v)
+    with c2:
+        zones = st.multiselect("Zone", ["High", "Mid-Sell", "Low"], default=["High", "Mid-Sell", "Low"])
+    with c3:
+        min_vol = st.slider("Vol/Avg10 tối thiểu", 0.0, 3.0, 0.0, 0.1)
+    with c4:
+        search = st.text_input("Tìm mã", "").upper()
+
+    f = res_df[res_df["Cảnh báo"].isin(filter_sig) & res_df["Zone"].isin(zones) & (res_df["Vol/Avg10"].fillna(0) >= min_vol)]
+    if search:
+        f = f[f["Mã"].str.contains(search)]
+    f = (f.assign(_o=f["Cảnh báo"].map({"MUA": 0, "BÁN": 1, "-": 2}))
+          .sort_values(["_o", "Vol/Avg10"], ascending=[True, False]).drop(columns="_o").reset_index(drop=True))
+    f.insert(0, "ST", np.arange(1, len(f) + 1))
+
+    st.caption(f"{len(f)} mã phù hợp · bấm vào một dòng để chọn, rồi bấm nút bên dưới để xem chi tiết.")
+    event = st.dataframe(style_table(f[TABLE_COLS]), hide_index=True, **_STRETCH_DF,
+                         on_select="rerun", selection_mode="single-row", height=620)
+    sel = event.selection.rows if event and event.selection else []
+    if sel:
+        code = f.iloc[sel[0]]["Mã"]
+        if st.button(f"📊 Xem cổ phiếu {code}", type="primary"):
+            st.session_state["selected_code"] = code
+            st.switch_page(stock_page)
 
 
-def pv_text(r) -> str:
-    code, vr, pos = r["PV_code"], r["Vol_vs_MA10"], r["Position_%"]
-    if code == "BREAKOUT":
-        return f"Phá kháng cự 20 nến ({r['Resistance_20']:.2f}), đóng cửa sát đỉnh (Position {pos:.0f}%), khối lượng gấp {vr:.1f} lần MA10"
-    if code == "SPRING":
-        return f"Quét thủng hỗ trợ ({r['Support_20']:.2f}) rồi đóng cửa trên hỗ trợ, khối lượng gấp {vr:.1f} lần MA10: lực cầu bắt đáy"
-    if code == "BREAKDOWN":
-        return f"Phá hỗ trợ 20 nến ({r['Support_20']:.2f}), đóng cửa sát đáy (Position {pos:.0f}%), khối lượng gấp {vr:.1f} lần MA10"
-    if code == "UPTHRUST":
-        return f"Vượt kháng cự ({r['Resistance_20']:.2f}) nhưng đóng cửa dưới kháng cự, khối lượng gấp {vr:.1f} lần: bẫy tăng giá"
-    if code == "CLIMAX":
-        return f"Giá tăng, khối lượng đột biến gấp {vr:.1f} lần nhưng đóng cửa xa đỉnh (Position {pos:.0f}%): dấu hiệu phân phối"
-    if code == "SELLOFF":
-        return f"Giá giảm {abs(r['Chg_%']):.1f}% kèm khối lượng gấp {vr:.1f} lần, đóng dưới MA20: áp lực xả mạnh"
-    return ""
+# ------------------------------------------------------------------ HTML CARDS
+def fp(x):
+    return f"{x:,.2f}"
 
 
-def latest_pv(g: pd.DataFrame):
-    """Cảnh báo ở nến mới nhất + cảnh báo gần nhất trước đó."""
-    s = g["PV_signal"].values
-    now = None
-    if len(g) and s[-1] != 0:
-        now = {"side": int(s[-1]), "code": g["PV_code"].iat[-1], "text": pv_text(g.iloc[-1])}
-    idx = np.where(s != 0)[0]
-    prev = None
-    if len(idx):
-        i = int(idx[-1])
-        prev = {"side": int(s[i]), "code": g["PV_code"].iat[i], "text": pv_text(g.iloc[i]),
-                "date": g["Ngày"].iat[i], "ago": len(g) - 1 - i}
-    return now, prev
+def card(title, inner):
+    return f'<div class="card"><div class="ct">{title}</div>{inner}</div>'
 
 
-# ------------------------------------------------------------------ TÍN HIỆU WYCKOFF (bộ lọc)
-def analyze_signal(row, stop_buffer=0.03, target_r=2.0):
-    c, l = row["Giá đóng cửa"], row["Giá thấp nhất"]
-    v_ratio, pos = row["Vol_vs_MA10"], row["Position_%"]
-    res, sup = row["Resistance_20"], row["Support_20"]
-    score, reasons = 0.0, []
-
-    if pd.notna(res) and pd.notna(pos) and c > res and pos >= 70:
-        score += 2.0
-        reasons.append(("Wyckoff", 2.0, f"Phá kháng cự 20 phiên ({res:.2f}), đóng cửa sát đỉnh (Position {pos:.0f}%)"))
-    elif pd.notna(sup) and pd.notna(pos) and l < sup and c >= sup and pos >= 50:
-        score += 1.5
-        reasons.append(("Wyckoff", 1.5, f"Quét thủng hỗ trợ ({sup:.2f}) rồi đóng cửa trên hỗ trợ (Spring/Test)"))
-
-    if pd.notna(v_ratio):
-        if v_ratio >= 1.5:
-            score += 1.5
-            reasons.append(("Volume", 1.5, f"Khối lượng gấp {v_ratio:.1f} lần MA10 Vol"))
-        elif v_ratio >= 1.2:
-            score += 1.0
-            reasons.append(("Volume", 1.0, f"Khối lượng gấp {v_ratio:.1f} lần MA10 Vol"))
-
-    sa, sb = row["SpanA"], row["SpanB"]
-    if pd.notna(sa) and pd.notna(sb) and c > max(sa, sb):
-        score += 1.5
-        reasons.append(("Ichimoku", 1.5, f"Giá nằm trên mây Kumo ({max(sa, sb):.2f})"))
-
-    if pd.notna(row["MA9"]) and c > row["MA9"]:
-        score += 0.5
-        reasons.append(("MA Trend", 0.5, "Giá trên MA9"))
-
-    if score >= 3.5:
-        signal = "MUA MỚI (BREAKOUT)" if (pd.notna(pos) and pos >= 70) else "MUA GOM (SPRING)"
-    else:
-        signal = "WAIT"
-
-    entry = c
-    stoploss = l * (1 - stop_buffer)
-    risk = entry - stoploss
-    takeprofit = entry + target_r * risk if risk > 0 else entry
-    rr = round((takeprofit - entry) / risk, 2) if risk > 0 else 0
-    return signal, score, reasons, entry, stoploss, takeprofit, rr
+def row(label, value):
+    return f'<div class="row"><span>{label}</span><b>{value}</b></div>'
 
 
-# ------------------------------------------------------------------ BẢNG THEO DÕI (kiểu Google Sheet)
-def zone_of(pos):
-    if pd.isna(pos):
-        return "-"
-    return "High" if pos >= 70 else "Low" if pos <= 30 else "Mid-Sell"
+def tag(text, kind):
+    return f'<span class="tag tag-{kind}">{text}</span>'
 
 
-def comment_of(zone, chg):
-    if zone == "High":
-        return "Tăng khỏe / Tiền vào" if chg > 0 else "Cầu đỡ / Rút chân" if chg < 0 else "Giữ giá cao / Chờ bứt phá"
-    if zone == "Low":
-        return "Rụt đầu / Tăng yếu" if chg > 0 else "Giảm mạnh / Áp lực xả" if chg < 0 else "Lình xình tích lũy"
-    if zone == "Mid-Sell":
-        return "Còn tăng" if chg > 0 else "Giảm lành tính" if chg < 0 else "Lình xình tích lũy"
-    return "-"
+def dir_kind(d):
+    return "green" if d > 0 else "red" if d < 0 else "gray"
 
 
-def month_vol_change(monthly: pd.DataFrame) -> dict:
-    """Vol tháng hiện tại so với tháng trước (so theo KL trung bình/phiên để công bằng khi tháng chưa đủ)."""
-    out = {}
-    for code, g in monthly.groupby("Mã"):
-        if len(g) < 2:
-            continue
-        cur, prev = g.iloc[-1], g.iloc[-2]
-        a, b = cur[VOL] / max(cur["Số phiên"], 1), prev[VOL] / max(prev["Số phiên"], 1)
-        out[code] = a / b if b > 0 else np.nan
-    return out
-
-
-# ------------------------------------------------------------------ SÓNG / PIVOT
-def swing_state(h: np.ndarray, l: np.ndarray, k: int):
-    """Zigzag không nhìn trước: pivot tại j chỉ được xác nhận sau k nến.
-    Trả về (last[i], prev[i], stack_cuối) với phần tử (idx, 'H'|'L', giá)."""
-    n = len(h)
-    stack, last, prev = [], [None] * n, [None] * n
-    for i in range(n):
-        j = i - k
-        if j >= k:
-            ish = h[j] >= h[j - k:i + 1].max()
-            isl = l[j] <= l[j - k:i + 1].min()
-            cand = ("H", h[j]) if (ish and not isl) else ("L", l[j]) if (isl and not ish) else None
-            if cand:
-                t, p = cand
-                if stack and stack[-1][1] == t:
-                    if (t == "H" and p >= stack[-1][2]) or (t == "L" and p <= stack[-1][2]):
-                        stack[-1] = (j, t, p)
-                else:
-                    stack.append((j, t, p))
-        last[i] = stack[-1] if stack else None
-        prev[i] = stack[-2] if len(stack) > 1 else None
-    return last, prev, stack
-
-
-def fib_eval(prev, last, price):
-    if prev is None or last is None or prev[2] == last[2]:
-        return 0.0, "Chưa đủ nhịp sóng để áp dụng Fibonacci"
-    p0, p1, leg = prev[2], last[2], abs(last[2] - prev[2])
-    if last[1] == "H":                      # nhịp tăng p0 -> p1
-        ret = (p1 - price) / leg
-        if price > p1:
-            return 1.0, f"Giá vượt đỉnh nhịp tăng gần nhất ({p1:.2f}): xu hướng tăng tiếp diễn"
-        if ret < 0.382:
-            return 1.0, f"Giá hồi nông (<38,2%) sau nhịp tăng {p0:.2f}-{p1:.2f}: cấu trúc tăng còn mạnh"
-        if ret < 0.618:
-            return 0.5, f"Giá hồi {ret:.0%} sau nhịp tăng {p0:.2f}-{p1:.2f}: nhịp hồi bình thường"
-        if ret <= 1:
-            return 0.0, f"Giá hồi sâu {ret:.0%} nhịp tăng {p0:.2f}-{p1:.2f}: cấu trúc tăng yếu đi"
-        return -1.0, f"Giá đã đi ngược và phá hết nhịp tăng gần nhất ({p0:.2f}-{p1:.2f}): cấu trúc tăng bị vô hiệu"
-    ret = (price - p1) / leg                # nhịp giảm p0 -> p1
-    if price < p1:
-        return -1.0, f"Giá phá đáy nhịp giảm gần nhất ({p1:.2f}): xu hướng giảm tiếp diễn"
-    if ret < 0.382:
-        return -0.5, f"Giá hồi yếu (<38,2%) sau nhịp giảm {p0:.2f}-{p1:.2f}: phe bán còn áp đảo"
-    if ret < 0.618:
-        return 0.0, f"Giá hồi {ret:.0%} sau nhịp giảm {p0:.2f}-{p1:.2f}: chưa rõ hướng"
-    if ret <= 1:
-        return 0.5, f"Giá hồi mạnh {ret:.0%} nhịp giảm {p0:.2f}-{p1:.2f}: lực cầu đang tốt dần"
-    return 1.0, f"Giá vượt hết nhịp giảm gần nhất ({p0:.2f}-{p1:.2f}): cấu trúc giảm bị vô hiệu"
-
-
-def elliott(stack):
-    note = ("Nhận diện bằng quy tắc cứng (sóng 2 không thủng đáy sóng 1, sóng 3 không ngắn nhất, "
-            "sóng 4 không chồng sóng 1). Elliott mang tính chủ quan cao nên chỉ để tham khảo, không cộng vào điểm.")
-    res = {"title": "Chưa nhận diện được cấu trúc sóng", "tag": "gray", "points": [],
-           "text": "Chưa thấy cấu trúc 5 sóng rõ ràng theo quy tắc cứng. " + note}
-
-    def valid(pts):
-        up = pts[0][1] == "L"
-        p = [x[2] if up else -x[2] for x in pts]
-        if not (p[1] > p[0] and p[0] < p[2] < p[1] and p[3] > p[1] and p[1] < p[4] < p[3]):
-            return None
-        w1, w3 = p[1] - p[0], p[3] - p[2]
-        if len(p) == 6:
-            if p[5] <= p[3]:
-                return None
-            if w3 < w1 and w3 < p[5] - p[4]:
-                return None
-        return up
-
-    for size in (6, 5):
-        if len(stack) < size:
-            continue
-        pts = stack[-size:]
-        up = valid(pts)
-        if up is None:
-            continue
-        res["points"] = [(x[0], x[2], str(i)) for i, x in enumerate(pts)]
-        if size == 6 and up:
-            res.update(title="Sóng 5 có thể đã hoàn tất", tag="red",
-                       text="Elliott: 5 sóng tăng có vẻ đã hoàn tất. Sau đó thường có nhịp điều chỉnh A-B-C "
-                            "ngược chiều, nên chốt lời hoặc hạn chế mua đuổi. " + note)
-        elif size == 6:
-            res.update(title="Sóng 5 giảm có thể đã xong", tag="green",
-                       text="Elliott: 5 sóng giảm có vẻ đã hoàn tất. Sau đó thường có nhịp hồi A-B-C, "
-                            "có thể canh nhịp hồi kỹ thuật. " + note)
-        elif up:
-            res.update(title="Có thể đang ở sóng 5 (tăng)", tag="green",
-                       text="Elliott: đã xong sóng 4, nhiều khả năng còn một nhịp đẩy sóng 5 nhưng gần cuối chu kỳ. " + note)
+def mtf_card(conc, A):
+    if conc is None:
+        return card("Kết luận đa khung", '<div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>')
+    k = conc["kind"]
+    html = [f'<div class="big c-{k}">{conc["verdict"]}</div>',
+            f'<div class="muted">{conc["text"]}</div>',
+            f'<div class="box">Nếu nến đóng ngay lúc này: <b class="c-{k}">{conc["verdict"]}</b></div>',
+            row("Điểm đa khung (-100 đến +100)", f'{conc["score"]:+.0f}'), "<hr style='margin:8px 0'>"]
+    for t in ("M", "W", "D"):
+        a = A[t]
+        head = f'<span><b>{E.TF_NAME[t]}</b> · <span class="muted">{E.TF_ROLE[t]}</span></span>'
+        if a["enough"]:
+            lab = "Tăng" if a["dir"] > 0 else "Giảm" if a["dir"] < 0 else "Ngang"
+            right = f'{abs(a["bias"]):.0f}/100' + (" ⚠" if a["partial"] else " ✓")
+            html.append(f'<div class="row">{head}<span>{tag(lab, dir_kind(a["dir"]))} &nbsp;<b>{right}</b></span></div>')
         else:
-            res.update(title="Có thể đang ở sóng 5 (giảm)", tag="red",
-                       text="Elliott: đã xong sóng 4 giảm, có thể còn một nhịp giảm sóng 5 cuối chu kỳ. " + note)
-        return res
-    return res
+            html.append(f'<div class="row">{head}<span class="muted">thiếu dữ liệu ({a["n"]} nến)</span></div>')
+    html.append('<div class="muted" style="margin-top:8px">Quy tắc: khung lớn (Tháng, Tuần) quyết định hướng đi, khung Ngày '
+                'chọn điểm vào. Hai khung lớn cùng giảm thì không mua; khung lớn ngược nhau thì CHỜ. ⚠ = chưa đủ nến '
+                'cho Ichimoku/EMA200 nên các chỉ báo đó chưa được tính điểm. Đây là xác suất, không phải chắc chắn: '
+                'luôn đặt cắt lỗ.</div>')
+    return card("Kết luận đa khung", "".join(html))
 
 
-def price_zones(g: pd.DataFrame, k: int = 3, lookback: int = 250):
-    """Gom đỉnh/đáy thành vùng hỗ trợ - kháng cự, đếm số lần chạm."""
-    t = g.tail(lookback).reset_index(drop=True)
-    h, l = t["Giá cao nhất"].values, t["Giá thấp nhất"].values
-    pts = []
-    for j in range(k, len(t) - k):
-        if h[j] >= h[j - k:j + k + 1].max():
-            pts.append(h[j])
-        if l[j] <= l[j - k:j + k + 1].min():
-            pts.append(l[j])
-    if not pts:
-        return []
-    c = float(t["Giá đóng cửa"].iloc[-1])
-    atr = t["ATR"].iloc[-1]
-    width = max(1.2 * (atr if pd.notna(atr) else 0), 0.008 * c)
-    pts.sort()
-    clusters, cur = [], [pts[0]]
-    for p in pts[1:]:
-        if p - cur[0] <= width:
-            cur.append(p)
-        else:
-            clusters.append(cur)
-            cur = [p]
-    clusters.append(cur)
-    zones = []
-    for cl in clusters:
-        if len(cl) < 2:
-            continue
-        lo, hi = min(cl), max(cl)
-        kind = "Hỗ trợ" if hi < c else "Kháng cự" if lo > c else ("Kháng cự" if c < (lo + hi) / 2 else "Hỗ trợ")
-        zones.append({"lo": lo, "hi": hi, "n": len(cl), "kind": kind})
-    res = sorted([z for z in zones if z["kind"] == "Kháng cự"], key=lambda z: z["lo"])[:4]
-    sup = sorted([z for z in zones if z["kind"] == "Hỗ trợ"], key=lambda z: -z["hi"])[:3]
-    return sorted(res + sup, key=lambda z: -z["lo"])
-
-
-# ------------------------------------------------------------------ CHẤM ĐIỂM
-def score_frame(g: pd.DataFrame, tf: str):
-    c = g["Giá đóng cửa"]
-    top, bot = np.maximum(g["SpanA"], g["SpanB"]), np.minimum(g["SpanA"], g["SpanB"])
-    g["S_Ichimoku"] = (np.select([c > top, c < bot], [0.75, -0.75], 0.0)
-                       + np.select([g["Tenkan"] > g["Kijun"], g["Tenkan"] < g["Kijun"]], [0.4, -0.4], 0.0)
-                       + np.select([c > g["Chikou_ref"], c < g["Chikou_ref"]], [0.35, -0.35], 0.0))
-    hist = g["MACD_hist"]
-    rising = hist > hist.shift(1)
-    g["S_MACD"] = np.select([(hist > 0) & rising, (hist > 0) & ~rising, (hist < 0) & rising, (hist < 0) & ~rising],
-                            [1.0, 0.5, 0.0, -1.0], 0.0)
-    for name, a, b in (("KDJ", "KDJ_K", "KDJ_D"), ("StochRSI", "SRSI_K", "SRSI_D")):
-        k, d = g[a], g[b]
-        g[f"S_{name}"] = np.select([(k > d) & (k < 80), (k > d), (k < d) & (k > 20), (k < d)],
-                                   [0.5, 0.0, -0.5, 0.0], 0.0)
-    width = (g["BB_up"] - g["BB_mid"]).replace(0, np.nan)
-    g["S_Bollinger"] = (((c - g["BB_mid"]) / width).clip(-1, 1) * 0.5).fillna(0.0)
-    diff = (g["EMA50"] - g["EMA200"]) / g["EMA200"]
-    g["S_Xu hướng"] = np.select([(diff > 0.01) & (c > g["EMA50"]), diff > 0.01,
-                                 (diff < -0.01) & (c < g["EMA50"]), diff < -0.01],
-                                [1.5, 0.5, -1.5, -0.5], 0.0)
-    last, prev, stack = swing_state(g["Giá cao nhất"].values, g["Giá thấp nhất"].values, PIVOT_K[tf])
-    fib = [fib_eval(prev[i], last[i], c.iat[i]) for i in range(len(g))]
-    g["S_Fibonacci"] = [x[0] for x in fib]
-    cols = [f"S_{k}" for k in MAX_PTS]
-    g["Total"] = g[cols].sum(axis=1)
-    g["Bias"] = g["Total"] / MAX_SCORE * 100
-    return g, stack, fib[-1][1], (prev[-1], last[-1])
-
-
-def describe_items(g, fib_text):
-    r = g.iloc[-1]
-    c = r["Giá đóng cửa"]
-    f = lambda x: f"{x:.2f}"
-
-    parts = []
-    if pd.notna(r["SpanA"]) and pd.notna(r["SpanB"]):
-        hi, lo = max(r["SpanA"], r["SpanB"]), min(r["SpanA"], r["SpanB"])
-        pos = "trên" if c > hi else "dưới" if c < lo else "trong"
-        parts.append(f"Giá nằm {pos} mây ({f(lo)}-{f(hi)})")
-    if pd.notna(r["Tenkan"]) and pd.notna(r["Kijun"]):
-        parts.append("Tenkan trên Kijun" if r["Tenkan"] > r["Kijun"] else "Tenkan dưới Kijun")
-    if pd.notna(r["Chikou_ref"]):
-        parts.append("Chikou trên giá 26 nến trước" if c > r["Chikou_ref"] else "Chikou dưới giá 26 nến trước")
-    t_ichi = ", ".join(parts) or "Chưa đủ nến để tính Ichimoku (cần ≥ 78 nến)"
-
-    hist = r["MACD_hist"]
-    if pd.isna(hist):
-        t_macd = "Chưa đủ nến để tính MACD"
+def forecast_card(a, tf):
+    d, bias, total, fc = a["dir"], a["bias"], a["total"], a["fc"]
+    last_ts = a["g"]["Ngày"].iat[-1]
+    word = "nghiêng tăng" if d > 0 else "nghiêng giảm" if d < 0 else "đi ngang / chưa rõ"
+    k = dir_kind(d)
+    html = [f'<div class="row"><div class="big c-{k}">Dự báo: {word}</div>'
+            f'<span class="muted">sau {E.TF_UNIT[tf]} {last_ts:%d/%m/%Y}</span></div>',
+            f'<div class="bar"><div class="bg-{k}" style="width:{min(abs(bias), 100):.0f}%"></div></div>',
+            f'<div class="muted">{abs(bias):.0f}/100 độ nghiêng của chỉ báo</div>']
+    if fc:
+        lbl = "Mục tiêu" if d > 0 else "Mục tiêu (kịch bản giảm)"
+        html.append('<div class="box">'
+                    + row("Vùng vào dự kiến", f'{fp(min(fc["lo"], fc["hi"]))}-{fp(max(fc["lo"], fc["hi"]))}')
+                    + row(f"{lbl} 1", f'<span class="c-green">{fp(fc["t1"])}</span> <span class="muted">R:R 1:2</span>')
+                    + row(f"{lbl} 2", f'<span class="c-green">{fp(fc["t2"])}</span> <span class="muted">R:R 1:3</span>')
+                    + row("Cắt lỗ nếu sai", f'<span class="c-red">{fp(fc["sl"])}</span> <span class="muted">{fc["sl_pct"]:.2f}%</span>')
+                    + "</div>")
+        html.append(f'<div class="muted">Kịch bản cho khoảng {E.HORIZON} {E.TF_UNIT[tf]} tới. Đây là ước tính từ trạng thái hiện tại '
+                    'của các chỉ báo (cắt lỗ = 1,5 ATR), chưa phải kết quả đã xảy ra; giá có thể đi ngược dự báo nên luôn cần cắt lỗ.</div>')
     else:
-        up = hist > g["MACD_hist"].iloc[-2] if len(g) > 1 else False
-        t_macd = ("Histogram MACD dương và đang tăng dần: động lượng tăng mạnh lên" if hist > 0 and up else
-                  "Histogram MACD dương nhưng đang giảm dần: đà tăng suy yếu" if hist > 0 else
-                  "Histogram MACD âm và đang tăng dần: động lượng giảm đang suy yếu" if up else
-                  "Histogram MACD âm và đang giảm dần: động lượng giảm mạnh thêm")
+        html.append('<div class="box">Độ nghiêng dưới ngưỡng ±1.0: chưa có lợi thế rõ ràng, nên đứng ngoài và chờ.</div>')
+    html.append('<div class="ct" style="margin-top:12px">Các chỉ báo đang nghiêng thế nào</div>')
+    for name, s, mx, txt in a["items"]:
+        ck = "green" if s > 0.04 else "red" if s < -0.04 else "gray"
+        val = f"{s:+.1f}" if abs(s) > 0.04 else "0.0"
+        html.append(f'<div class="item"><span class="chip chip-{ck}">{val}</span><b>{name}</b>'
+                    f'<div class="muted" style="margin-left:50px">{txt}</div></div>')
+    html.append(row("Tổng độ nghiêng", f'<span class="c-{k}">{total:+.1f} / {E.MAX_SCORE}</span>'))
+    return card("Dự báo", "".join(html))
 
-    def osc(name, k, d):
-        if pd.isna(k) or pd.isna(d):
-            return f"Chưa đủ nến để tính {name}"
-        s = f"{name}: K {k:.0f} {'trên' if k > d else 'dưới'} D {d:.0f}"
-        return s + (", vùng quá bán, dễ hồi" if k < 20 else ", vùng quá mua, dễ điều chỉnh" if k >= 80 else "")
 
-    if pd.isna(r["BB_mid"]):
-        t_bb = "Chưa đủ nến để tính Bollinger"
+def backtest_card(a, tf, code, include_short):
+    s = E.backtest_stats(a["trades"], a["n"], include_short)
+    title = f"Backtest {code} khung {E.TF_NAME[tf]}"
+    if s is None:
+        return card(title, '<div class="muted">Chưa có lệnh mô phỏng nào đã đóng ở khung này.</div>')
+    enough = s["n"] >= 20
+    rec_ok = pd.notna(s["rec_exp"]) and s["rec_exp"] > 0
+    if not enough:
+        badge = tag("Chưa đủ lệnh để kết luận (cần ≥ 20)", "gray")
+    elif s["exp"] > 0 and rec_ok:
+        badge = tag("Kỳ vọng dương, đáng để theo dõi", "green")
+    elif s["exp"] > 0:
+        badge = tag("Kỳ vọng dương nhưng phần mới nhất chưa xác nhận", "amber")
     else:
-        t_bb = f"Giá {'trên' if c >= r['BB_mid'] else 'dưới'} đường giữa Bollinger ({f(r['BB_mid'])})"
-        t_bb += ", chạm dải trên" if c >= r["BB_up"] else ", chạm dải dưới" if c <= r["BB_lo"] else ""
-
-    if pd.isna(r["EMA200"]):
-        t_tr = "EMA50/EMA200 chưa cho xu hướng chính rõ ràng (chưa đủ nến cho EMA200)"
-    else:
-        d = (r["EMA50"] - r["EMA200"]) / r["EMA200"]
-        t_tr = ("EMA50/EMA200 chưa cho xu hướng chính rõ ràng" if abs(d) <= 0.01 else
-                f"EMA50 {'trên' if d > 0 else 'dưới'} EMA200 và giá {'trên' if c > r['EMA50'] else 'dưới'} EMA50: "
-                f"xu hướng {'tăng' if d > 0 else 'giảm'}")
-    texts = {"Ichimoku": t_ichi, "MACD": t_macd, "KDJ": osc("KDJ", r["KDJ_K"], r["KDJ_D"]),
-             "StochRSI": osc("StochRSI", r["SRSI_K"], r["SRSI_D"]), "Bollinger": t_bb,
-             "Fibonacci": fib_text, "Xu hướng": t_tr}
-    return [(k, float(r[f"S_{k}"]), MAX_PTS[k], texts[k]) for k in MAX_PTS]
+        badge = tag("Kỳ vọng âm, không nên theo", "red")
+    pf = "∞" if s["pf"] == float("inf") else f'{s["pf"]:.2f}'
+    cnt = f'{s["n"]} (mua {s["buy"]}' + (f', bán {s["sell"]})' if include_short else ")")
+    rec = f'{s["rec_n"]} lệnh, {s["rec_exp"]:+.2f}R' if s["rec_n"] else "chưa có lệnh"
+    html = [badge, '<div style="height:6px"></div>', row("Số lệnh", cnt), row("Tỷ lệ thắng", f'{s["win"]:.0f}%'),
+            row("Kỳ vọng mỗi lệnh", f'{s["exp"]:+.2f}R'), row("Profit factor", pf),
+            row("Sụt giảm tối đa", f'{s["mdd"]:.1f}R'), row("30% dữ liệu mới nhất", rec),
+            '<div class="muted" style="margin-top:6px">Kỳ vọng = tỷ lệ thắng × lãi trung bình − tỷ lệ thua × lỗ trung bình, '
+            'tính theo R (1R = mức rủi ro mỗi lệnh). Thắng nhiều chưa chắc có lời. Cần từ 20 lệnh trở lên và kỳ vọng '
+            'dương ở cả phần dữ liệu mới nhất mới đáng tin. Tín hiệu Mua theo giá + khối lượng; vào tại giá đóng cửa, cắt lỗ 1,5 ATR, chốt 2R, giữ tối đa '
+            '20 nến.' + ('' if include_short else ' Chỉ tính lệnh Mua (thị trường VN không bán khống).') + '</div>']
+    return card(title, "".join(html))
 
 
-# ------------------------------------------------------------------ BACKTEST
-def run_backtest(g: pd.DataFrame, max_hold=20, sl_atr=1.5, rr=2.0) -> pd.DataFrame:
-    """Tín hiệu = cảnh báo Mua/Bán theo giá + khối lượng. Vào tại giá đóng cửa, SL = 1.5 ATR, TP = 2R."""
-    sig, sell = g["PV_signal"] == 1, g["PV_signal"] == -1
-    c, hi, lo, atr = (g["Giá đóng cửa"].values, g["Giá cao nhất"].values,
-                      g["Giá thấp nhất"].values, g["ATR"].values)
-    n, rows = len(g), []
-    for i in np.where(sig | sell)[0]:
-        d = 1 if sig.iat[i] else -1
-        if not (atr[i] > 0):
-            continue
-        risk = sl_atr * atr[i]
-        sl, tp = c[i] - d * risk, c[i] + d * rr * risk
-        end = min(n, i + 1 + max_hold)
-        r, is_open = None, False
-        if i + 1 >= n:
-            r, is_open = np.nan, True
-        else:
-            for j in range(i + 1, end):
-                if (lo[j] <= sl) if d == 1 else (hi[j] >= sl):
-                    r = -1.0
-                    break
-                if (hi[j] >= tp) if d == 1 else (lo[j] <= tp):
-                    r = rr
-                    break
-            if r is None:
-                r = d * (c[end - 1] - c[i]) / risk
-                is_open = (end == n and end - i - 1 < max_hold)
-        rows.append({"idx": i, "Ngày": g["Ngày"].iat[i], "dir": d, "R": r, "open": is_open, "code": g["PV_code"].iat[i]})
-    return pd.DataFrame(rows, columns=["idx", "Ngày", "dir", "R", "open", "code"])
+def elliott_card(a):
+    e = a["elliott"]
+    return card("Sóng Elliott", tag(e["title"], e["tag"]) + f'<div class="muted" style="margin-top:8px">{e["text"]}</div>')
 
 
-def backtest_stats(t: pd.DataFrame, n_bars: int, include_short: bool):
+def zones_card(a):
+    if not a["zones"]:
+        return card("Vùng giá gần nhất", '<div class="muted">Chưa xác định được vùng hỗ trợ/kháng cự.</div>')
+    html = []
+    for z in a["zones"]:
+        cls = "c-red" if z["kind"] == "Kháng cự" else "c-green"
+        html.append(f'<div class="row"><span class="{cls}">{z["kind"]} ({z["n"]} lần chạm)</span>'
+                    f'<b>{fp(z["lo"])}-{fp(z["hi"])}</b></div>')
+    return card("Vùng giá gần nhất", "".join(html))
+
+
+def signals_card(a, include_short):
+    t = a["trades"]
     if t.empty:
-        return None
-    t = t[~t["open"].astype(bool)]
-    if not include_short:
-        t = t[t["dir"] == 1]
-    if t.empty:
-        return None
-    r = t["R"]
-    wins, losses = r[r > 0], r[r <= 0]
-    pf = wins.sum() / abs(losses.sum()) if losses.sum() != 0 else float("inf")
-    eq = r.cumsum().values
-    peak = np.maximum.accumulate(np.r_[0.0, eq])[1:]
-    rec = t[t["idx"] >= 0.7 * n_bars]
-    return {"n": len(t), "buy": int((t["dir"] == 1).sum()), "sell": int((t["dir"] == -1).sum()),
-            "win": len(wins) / len(t) * 100, "exp": r.mean(), "pf": pf,
-            "mdd": float(abs((eq - peak).min())), "rec_n": len(rec),
-            "rec_exp": rec["R"].mean() if len(rec) else np.nan}
+        return card("Tín hiệu gần đây", '<div class="muted">Chưa có cảnh báo Mua/Bán nào ở khung này.</div>')
+    html = []
+    for _, r in t.tail(8).iloc[::-1].iterrows():
+        buy = r["dir"] == 1
+        ref = "" if (buy or include_short) else ' <span class="muted">(tham khảo)</span>'
+        val = '<span class="muted">đang mở</span>' if r["open"] else (
+            f'<span class="{"c-green" if r["R"] > 0 else "c-red"}">{r["R"]:+.2f}R</span>')
+        html.append(f'<div class="row"><span class="{"c-green" if buy else "c-red"}"><b>{"Mua" if buy else "Bán"}</b> '
+                    f'{r["Ngày"]:%d/%m/%Y}{ref}<br><span class="muted">{E.PV_LABEL.get(r["code"], "")}</span></span>'
+                    f'<b>{val}</b></div>')
+    html.append('<div class="muted" style="margin-top:6px">Mua/Bán theo giá + khối lượng. "Bán" là tín hiệu thoát/tránh mua; '
+                'kết quả R của lệnh Bán chỉ là mô phỏng bán khống.</div>')
+    return card("Tín hiệu gần đây", "".join(html))
 
 
-# ------------------------------------------------------------------ PHÂN TÍCH 1 KHUNG
-def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
-    g = g.reset_index(drop=True).copy()
-    n = len(g)
-    out = {"tf": tf, "g": g, "n": n, "enough": n >= MIN_BARS, "partial": n < FULL_BARS,
-           "total": 0.0, "bias": 0.0, "dir": 0, "items": [], "fc": None,
-           "trades": pd.DataFrame(columns=["idx", "Ngày", "dir", "R", "open", "code"]),
-           "zones": [], "fib": None,
-           "elliott": {"title": "", "tag": "gray", "points": [], "text": ""}}
-    out["trades"] = run_backtest(g)
-    out["pv_now"], out["pv_prev"] = latest_pv(g)
-    if not out["enough"]:
-        return out
-    g, stack, fib_text, (fprev, flast) = score_frame(g, tf)
-    out["g"] = g
-    out["total"], out["bias"] = float(g["Total"].iat[-1]), float(g["Bias"].iat[-1])
-    out["dir"] = 1 if out["total"] >= 1.0 else -1 if out["total"] <= -1.0 else 0
-    out["items"] = describe_items(g, fib_text)
-    out["zones"] = price_zones(g, k=3)
-    out["elliott"] = elliott(stack)
-    out["stack"] = stack
-    if fprev and flast:
-        out["fib"] = {"A": fprev, "B": flast}
-
-    c, atr = g["Giá đóng cửa"].iat[-1], g["ATR"].iat[-1]
-    atr = atr if pd.notna(atr) and atr > 0 else c * 0.02
-    d, risk = out["dir"], 1.5 * atr
-    if d != 0:
-        out["fc"] = {"dir": d, "lo": c - 0.25 * atr, "hi": c + 0.25 * atr, "entry": c,
-                     "sl": c - d * risk, "sl_pct": risk / c * 100,
-                     "t1": c + d * 2 * risk, "t2": c + d * 3 * risk}
-    return out
-
-
-# ------------------------------------------------------------------ KẾT LUẬN ĐA KHUNG
-def vn_join(xs):
-    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " và " + xs[-1]
-
-
-def mtf_conclusion(A: dict):
-    avail = [t for t in ("M", "W", "D") if A[t]["enough"]]
-    if not avail:
-        return None
-    wsum = sum(TF_WEIGHT[t] for t in avail)
-    score = sum(TF_WEIGHT[t] * A[t]["bias"] for t in avail) / wsum
-    big = [A[t]["dir"] for t in ("M", "W") if t in avail]
-    if score >= 40 and not any(x < 0 for x in big):
-        verdict, kind = "ƯU TIÊN MUA", "green"
-    elif score >= 15 and not any(x < 0 for x in big):
-        verdict, kind = "CÓ THỂ MUA (VÀO NHỎ)", "green"
-    elif score <= -15 or (big and all(x < 0 for x in big)):
-        verdict, kind = "TRÁNH MUA", "red"
+def alert_banner(a, tf):
+    now, prev = a["pv_now"], a["pv_prev"]
+    unit = E.TF_UNIT[tf]
+    if now:
+        msg = f'**{"🟢 CẢNH BÁO MUA" if now["side"] > 0 else "🔴 CẢNH BÁO BÁN"}** ({E.PV_LABEL[now["code"]]}) · {now["text"]}'
+        (st.success if now["side"] > 0 else st.error)(msg)
     else:
-        verdict, kind = "CHỜ", "amber"
-    ups = [TF_NAME[t] for t in avail if A[t]["dir"] > 0]
-    downs = [TF_NAME[t] for t in avail if A[t]["dir"] < 0]
-    flats = [TF_NAME[t] for t in avail if A[t]["dir"] == 0]
-    if downs and not ups and not flats:
-        text = f"{vn_join(downs)} cùng nghiêng giảm. Không bắt đáy lúc này."
-    elif ups and not downs and not flats:
-        text = f"{vn_join(ups)} cùng nghiêng tăng. Ưu tiên canh mua theo xu hướng và đặt cắt lỗ."
-    elif ups and downs:
-        text = f"{vn_join(ups)} nghiêng tăng nhưng {vn_join(downs)} nghiêng giảm: các khung chưa đồng thuận, nên chờ."
-    elif downs:
-        text = f"{vn_join(downs)} nghiêng giảm, các khung còn lại đi ngang: chưa có lý do để mua."
-    elif ups:
-        text = f"{vn_join(ups)} nghiêng tăng, các khung còn lại đi ngang: có thể theo dõi điểm vào."
-    else:
-        text = "Các khung đều đi ngang, chưa có lợi thế rõ ràng."
-    return {"score": score, "verdict": verdict, "kind": kind, "text": text, "avail": avail}
+        extra = ""
+        if prev:
+            extra = (f' Cảnh báo gần nhất: **{"Mua" if prev["side"] > 0 else "Bán"}** ngày {prev["date"]:%d/%m/%Y} '
+                     f'({prev["ago"]} {unit} trước): {E.PV_LABEL[prev["code"]]}.')
+        st.info(f"Chưa có cảnh báo Mua/Bán ở {unit} mới nhất.{extra}")
+
+
+# ------------------------------------------------------------------ BIỂU ĐỒ
+def future_date(last, tf, k):
+    if tf == "D":
+        return last + pd.offsets.BDay(k)
+    return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
+
+
+def make_chart(a, code, tf, layers):
+    g = a["g"]
+    t = g.tail(BARS_SHOWN[tf])
+    x = t["Ngày"]
+    subs = [s for s in ("MACD", "KDJ", "StochRSI") if s in layers]
+    heights = [0.56] + [0.44 / len(subs)] * len(subs) if subs else [1.0]
+    fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=0.025, row_heights=heights)
+    fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
+                                 close=t["Giá đóng cửa"], name=code, increasing_line_color="#0E8A6D",
+                                 decreasing_line_color="#C93A52"), row=1, col=1)
+
+    def line(col, name, color, w=1.2, dash=None):
+        return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
+
+    if "EMA 50/200" in layers:
+        fig.add_trace(line("EMA50", "EMA50", "#8B5CF6"), row=1, col=1)
+        fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
+    if "Ichimoku" in layers:
+        fig.add_trace(line("Tenkan", "Tenkan", "#E4572E", 1), row=1, col=1)
+        fig.add_trace(line("Kijun", "Kijun", "#1D4ED8", 1), row=1, col=1)
+        fig.add_trace(go.Scatter(x=x, y=t["SpanA"], line=dict(width=0.6, color="rgba(14,138,109,.5)"),
+                                 showlegend=False, hoverinfo="skip"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=x, y=t["SpanB"], line=dict(width=0.6, color="rgba(201,58,82,.5)"), fill="tonexty",
+                                 fillcolor="rgba(100,150,200,0.18)", name="Mây Kumo", hoverinfo="skip"), row=1, col=1)
+    if "Bollinger" in layers:
+        fig.add_trace(go.Scatter(x=x, y=t["BB_up"], line=dict(width=0.8, color="rgba(59,130,246,.7)"),
+                                 name="Bollinger", legendgroup="bb"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=x, y=t["BB_lo"], line=dict(width=0.8, color="rgba(59,130,246,.7)"), fill="tonexty",
+                                 fillcolor="rgba(59,130,246,0.06)", showlegend=False, legendgroup="bb"), row=1, col=1)
+        fig.add_trace(line("BB_mid", "BB giữa", "rgba(59,130,246,.6)", 0.8, "dot"), row=1, col=1)
+
+    enough = a["enough"]
+    fc = a["fc"] if enough and "Dự báo" in layers else None
+    fx = future_date(x.iloc[-1], tf, E.HORIZON)
+    ys = [t["Giá thấp nhất"].min(), t["Giá cao nhất"].max()]
+
+    if enough and "Fibonacci" in layers and a["fib"]:
+        (ia, _, pa), (ib, _, pb) = a["fib"]["A"], a["fib"]["B"]
+        x0 = max(g["Ngày"].iat[ia], x.iloc[0])
+        lv = [(f"{r * 100:.1f}%", pb - (pb - pa) * r) for r in (0, 0.236, 0.382, 0.5, 0.618, 0.786, 1)]
+        lv += [("Fib 127.2%", pa + (pb - pa) * 1.272), ("Fib 161.8%", pa + (pb - pa) * 1.618)]
+        for name, y in lv:
+            fig.add_trace(go.Scatter(x=[x0, x.iloc[-1]], y=[y, y], mode="lines+text", text=["", name],
+                                     textposition="middle right", textfont=dict(size=9, color="#B7791F"),
+                                     line=dict(width=0.8, dash="dot", color="rgba(183,121,31,.7)"),
+                                     showlegend=False, hoverinfo="skip"), row=1, col=1)
+        ys += [pa, pb]
+    if enough and "Vùng giá" in layers:
+        for z in a["zones"]:
+            red = z["kind"] == "Kháng cự"
+            fig.add_hrect(y0=z["lo"], y1=z["hi"], row=1, col=1, line_width=0,
+                          fillcolor="rgba(201,58,82,.10)" if red else "rgba(14,138,109,.12)",
+                          annotation_text=f'{z["kind"]} {z["n"]}x', annotation_position="top left",
+                          annotation_font=dict(size=9, color="#C93A52" if red else "#0E8A6D"))
+    if enough and "Elliott" in layers and a["elliott"]["points"]:
+        pts = a["elliott"]["points"]
+        fig.add_trace(go.Scatter(x=[g["Ngày"].iat[i] for i, _, _ in pts], y=[p for _, p, _ in pts],
+                                 mode="lines+markers+text", text=[w for _, _, w in pts], textposition="top center",
+                                 line=dict(width=1.5, color="#7C3AED"), name="Elliott"), row=1, col=1)
+    if "Tín hiệu quá khứ" in layers:
+        for d, sym, color, col, off, nm in ((1, "triangle-up", "#0E8A6D", "Giá thấp nhất", 0.985, "Mua"),
+                                            (-1, "triangle-down", "#C93A52", "Giá cao nhất", 1.015, "Bán")):
+            s_ = t[t["PV_signal"] == d]
+            if not s_.empty:
+                fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers", name=nm,
+                                         marker=dict(symbol=sym, size=11, color=color),
+                                         hovertext=[f"{nm}: {E.PV_LABEL[c]}<br>Vol {v:.1f}x MA10"
+                                                    for c, v in zip(s_["PV_code"], s_["Vol_vs_MA10"])],
+                                         hoverinfo="text+x"), row=1, col=1)
+    if fc:
+        lx, col_ = x.iloc[-1], ("#C93A52" if fc["dir"] < 0 else "#0E8A6D")
+        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#C93A52", "dash"),
+                                     ("Mục tiêu 1", fc["t1"], "#0E8A6D", "dash"), ("Mục tiêu 2", fc["t2"], "#0E8A6D", "dot")):
+            fig.add_trace(go.Scatter(x=[lx, fx], y=[y, y], mode="lines+text", text=["", f"{name} {y:,.2f}"],
+                                     textposition="top left", textfont=dict(size=9, color=color),
+                                     line=dict(width=1, dash=dash, color=color), showlegend=False, hoverinfo="skip"),
+                          row=1, col=1)
+            ys.append(y)
+        fig.add_annotation(x=fx, y=fc["t1"], ax=lx, ay=fc["entry"], axref="x", ayref="y", xref="x", yref="y",
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=col_,
+                           text="Dự báo " + ("tăng" if fc["dir"] > 0 else "giảm"), font=dict(size=11, color="#fff"),
+                           bgcolor=col_)
+
+    r = 2
+    if "MACD" in subs:
+        fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
+                             marker_color=np.where(t["MACD_hist"] >= 0, "#0E8A6D", "#C93A52")), row=r, col=1)
+        fig.add_trace(line("MACD", "MACD", "#3B82F6", 1), row=r, col=1)
+        fig.add_trace(line("MACD_sig", "Tín hiệu", "#F59E0B", 1), row=r, col=1)
+        fig.update_yaxes(title_text="MACD 12-26-9", title_font_size=10, row=r, col=1)
+        r += 1
+    if "KDJ" in subs:
+        for col, nm, cl in (("KDJ_K", "K", "#F59E0B"), ("KDJ_D", "D", "#3B82F6"), ("KDJ_J", "J", "#8B5CF6")):
+            fig.add_trace(line(col, nm, cl, 1), row=r, col=1)
+        for y in (20, 80):
+            fig.add_hline(y=y, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
+        fig.update_yaxes(title_text="KDJ 9-3-3", title_font_size=10, row=r, col=1)
+        r += 1
+    if "StochRSI" in subs:
+        fig.add_trace(line("SRSI_K", "%K", "#F59E0B", 1), row=r, col=1)
+        fig.add_trace(line("SRSI_D", "%D", "#3B82F6", 1), row=r, col=1)
+        for y in (20, 80):
+            fig.add_hline(y=y, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
+        fig.update_yaxes(title_text="StochRSI", title_font_size=10, row=r, col=1)
+
+    pad = (max(ys) - min(ys)) * 0.04
+    fig.update_yaxes(range=[min(ys) - pad, max(ys) + pad], row=1, col=1)
+    fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
+    if tf == "D":
+        fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
+    fig.update_layout(height=540 + 180 * len(subs), template="plotly_white", margin=dict(l=10, r=10, t=30, b=10),
+                      legend=dict(orientation="h", y=1.04, font=dict(size=10)))
+    return fig
+
+
+def pick_layers():
+    if hasattr(st, "pills"):
+        sel = st.pills("Lớp hiển thị", LAYER_OPTS, selection_mode="multi", default=LAYER_DEFAULT,
+                       label_visibility="collapsed")
+        return sel or []
+    return st.multiselect("Lớp hiển thị", LAYER_OPTS, default=LAYER_DEFAULT)
+
+
+# ------------------------------------------------------------------ TRANG 2: CỔ PHIẾU
+def page_stock():
+    st.title("📊 Cổ phiếu")
+    header()
+
+    codes = sorted(res_df["Mã"].unique())
+    saved = st.session_state.get("selected_code")
+    c1, c2, c3 = st.columns([1.2, 2, 1.8])
+    code = c1.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0)
+    st.session_state["selected_code"] = code
+    tf = c2.radio("Khung thời gian", ["D", "W", "M"], format_func=TF_LABEL.get, horizontal=True)
+    include_short = c3.toggle("Mô phỏng cả lệnh Bán (short)", value=False,
+                              help="Thị trường VN không bán khống được, mặc định chỉ tính lệnh Mua.")
+    layers = pick_layers()
+
+    A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
+    info = res_df[res_df["Mã"] == code].iloc[0]
+    a = A[tf]
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
+    m1.metric("Giá", f"{info['Giá']:,.2f}", f"{d_chg:+.2f}%" if pd.notna(d_chg) else None)
+    m2.metric("Vol vs MA10", f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-")
+    m3.metric("Position %", f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-")
+    m4.metric("Cảnh báo (phiên mới nhất)", info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có")
+    m5.metric(f"Độ nghiêng {E.TF_NAME[tf]}", f"{a['bias']:+.0f}/100" if a["enough"] else "-")
+
+    alert_banner(a, tf)
+    col_main, col_side = st.columns([2.2, 1])
+    with col_main:
+        if not a["enough"]:
+            st.warning(f"Khung {E.TF_NAME[tf]} chỉ có {a['n']} nến (< {E.MIN_BARS}): chưa đủ để tính điểm, dự báo "
+                       "và backtest. Hãy chọn khung nhỏ hơn hoặc tải dữ liệu lịch sử dài hơn.")
+        st.plotly_chart(make_chart(a, code, tf, layers), **_STRETCH)
+
+    with col_side:
+        st.markdown(mtf_card(E.mtf_conclusion(A), A), unsafe_allow_html=True)
+        if a["enough"]:
+            st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
+        st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
+        if a["enough"]:
+            st.markdown(elliott_card(a), unsafe_allow_html=True)
+            st.markdown(zones_card(a), unsafe_allow_html=True)
+        st.markdown(signals_card(a, include_short), unsafe_allow_html=True)
+
+        with st.expander("📋 Thẻ lý do Wyckoff · Volume (khung Ngày)"):
+            if info["Tín hiệu"] != "WAIT":
+                st.markdown(f'<div class="ticket-buy"><b>{info["Tín hiệu"]}</b> · Điểm {info["Điểm số"]}/6.0<br>'
+                            f'📍 Entry: {info["Entry"]:,.2f} · 🛑 Stoploss: {info["Stoploss"]:,.2f} · '
+                            f'🎯 TakeProfit: {info["TakeProfit"]:,.2f}</div>', unsafe_allow_html=True)
+            else:
+                st.warning("ĐỨNG NGOÀI (WAIT) – chưa đủ điểm đồng thuận")
+            for cat, pts, txt in info["reasons"] or []:
+                st.write(f"• **{cat} (+{pts}đ):** {txt}")
+            if not info["reasons"]:
+                st.write("Chưa có chỉ báo nào đóng góp điểm.")
+
+    st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+
+
+# ------------------------------------------------------------------ ĐIỀU HƯỚNG
+filter_page = st.Page(page_filter, title="Bộ lọc", icon="🔍", url_path="bo-loc", default=True)
+stock_page = st.Page(page_stock, title="Cổ phiếu", icon="📊", url_path="co-phieu")
+st.navigation([filter_page, stock_page]).run()
