@@ -1,4 +1,31 @@
-#!/usr/bin/env python3
+import os
+import requests
+
+def send_telegram_alert(message):
+    """Hàm gửi tin nhắn tóm tắt về Telegram"""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    if not token or not chat_id:
+        print("⚠️ Chưa cấu hình Secrets Telegram trên GitHub.")
+        return
+        
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            print("✅ Đã gửi thông báo Telegram thành công!")
+        else:
+            print(f"❌ Lỗi gửi Telegram: {response.text}")
+    except Exception as e:
+        print(f"❌ Lỗi kết nối Telegram: {e}")
+      #!/usr/bin/env python3
 """Lấy dữ liệu OHLCV ngày CUỐI PHIÊN cho cả rổ mã, ghi vào data/eod_prices.csv (cập nhật tăng dần).
 
 Chạy một lần mỗi ngày sau khi thị trường đóng cửa (GitHub Actions: .github/workflows/eod.yml),
@@ -254,7 +281,26 @@ def main(argv=None) -> int:
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(f"### Dữ liệu cuối phiên\n\n{line}\n\n" + ("\n".join(f"- {x}" for x in failed[:20]) if failed else "") + "\n")
-    return 0 if (not fatal and len(updated) >= 0.7 * len(symbols)) else 1
+# --- ĐOẠN TÍCH HỢP GỬI TELEGRAM BOT ---
+    try:
+        # Lọc danh sách các mã có tín hiệu MUA hoặc Tăng khỏe
+        # (Thay 'Cảnh báo' hoặc 'Nhận xét' đúng theo tên cột trong DataFrame của bạn)
+        df_mua = df[df['Cảnh báo'] == 'MUA']  
+        
+        if not df_mua.empty:
+            msg = f"📊 *TRẠM TÍN HIỆU CK - BÁO CÁO CỦI PHIÊN*\n"
+            msg += f"🗓 Ngày: {pd.Timestamp.now().strftime('%d/%m/%Y')}\n"
+            msg += f"🔥 Tìm thấy *{len(df_mua)}* mã đạt tín hiệu MUA:\n\n"
+            
+            for _, row in df_mua.iterrows():
+                msg += f"• *{row['Mã']}* | Giá: `{row['Giá']}` | Vol/Avg10: `{row['Vol/Avg10']}` | Wyckoff: `{row['Wyckoff']}`\n"
+            
+            send_telegram_alert(msg)
+        else:
+            send_telegram_alert("ℹ️ Hôm nay không có mã nào đạt tiêu chuẩn MUA.")
+    except Exception as err:
+        print(f"Lỗi khi xử lý dữ liệu gửi Telegram: {err}")
+      return 0 if (not fatal and len(updated) >= 0.7 * len(symbols)) else 1
 
 
 if __name__ == "__main__":
