@@ -8,6 +8,8 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import watchlist as WL
+import wyckoff as WYK
 
 st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
 
@@ -39,8 +41,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
-              "Elliott", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
+              "Elliott", "Wyckoff", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -66,24 +68,94 @@ def analyze_cached(_frames: dict, code: str, tf: str, key: str) -> dict:
 
 
 # ------------------------------------------------------------------ NGUỒN DỮ LIỆU
+import realtime_data as RD
+
+@st.cache_data(ttl=3600, show_spinner="Đang tải lịch sử OHLCV từ Vnstock...")
+def load_vnstock_history(symbols_tuple: tuple[str, ...], start_date: str) -> pd.DataFrame:
+    return RD.fetch_history(list(symbols_tuple), start=start_date)
+
+@st.cache_data(ttl=10, show_spinner=False)
+def load_vnstock_quotes(symbols_tuple: tuple[str, ...]):
+    return RD.fetch_quote_board(list(symbols_tuple))
+
+@st.cache_data(ttl=43200, show_spinner=False)
+def load_vn30():
+    return WL.fetch_vn30()
+
+@st.cache_data(show_spinner="Đang nhận diện cấu trúc Wyckoff cho cả rổ...")
+def wyckoff_table(_df: pd.DataFrame, key: str) -> dict:
+    out = {}
+    for code, g in _df.groupby("Mã"):
+        try:
+            w = WYK.analyze(g.reset_index(drop=True))
+        except Exception:
+            w = None
+        out[code] = None if w is None else {k: w[k] for k in ("kind", "re", "phase", "lean", "score", "title")}
+    return out
+
+VN30_LIST, VN30_SRC = load_vn30()
+MEMBER = WL.membership(VN30_LIST)
+
 with st.sidebar:
     st.header("📂 Dữ liệu")
+    data_mode = st.radio("Nguồn dữ liệu", ["Excel CafeF", "Vnstock tự động"], index=0,
+                         help="Vnstock tự động cần internet; dữ liệu được lấy từ nguồn bên thứ ba, không đảm bảo độ trễ cố định.")
     uploaded = st.file_uploader("Tải file Excel CafeF (.xlsx)", type=["xlsx"])
     repo_files = sorted(glob.glob("data/*.xlsx"))
     source = uploaded
     if source is None and repo_files:
         source = st.selectbox("Hoặc dùng file trong repo", repo_files, index=len(repo_files) - 1)
+    if data_mode == "Vnstock tự động":
+        picked = st.multiselect("Rổ mã", WL.group_names(), default=WL.DEFAULT_PICK,
+                                help="VN30 lấy từ nguồn dữ liệu; các nhóm ngành sửa trong watchlist.py. Một mã có thể thuộc nhiều nhóm.")
+        extra_text = st.text_input("Mã thêm tay (phân cách bằng dấu phẩy)", "",
+                                   help="Thêm các mã ngoài rổ đã chọn, ví dụ NTP,BVH.")
+        extras = [x.strip().upper() for x in extra_text.split(",") if x.strip()]
+        live_symbols = tuple(dict.fromkeys(WL.symbols_for(picked, VN30_LIST) + extras))
+        st.caption(f"VN30: {len(VN30_LIST)} mã · nguồn: {VN30_SRC}")
+        live_start = st.date_input("Lấy lịch sử từ ngày", value=pd.Timestamp("2024-01-01").date())
+        refresh_seconds = st.select_slider("Chu kỳ làm mới bảng giá", options=[5, 10, 15, 30, 60], value=15,
+                                           format_func=lambda x: f"{x} giây")
+        st.caption(f"Đang chọn {len(live_symbols)} mã. Mỗi mã cần một yêu cầu lịch sử (cache 60 phút) nên lần tải đầu với rổ lớn có thể mất vài phút hoặc bị nguồn giới hạn tần suất; có thể chọn bớt nhóm để thử trước.")
+        try:
+            from streamlit_autorefresh import st_autorefresh
+            st_autorefresh(interval=int(refresh_seconds * 1000), key="market_autorefresh")
+        except ImportError:
+            st.warning("Chưa có streamlit-autorefresh. Cài dependencies trong requirements.txt để tự làm mới giao diện.")
 
-if source is None:
-    st.title("📈 Trạm Tín Hiệu Chứng Khoán Việt Nam")
-    st.info("👈 Hãy tải file Excel lên (hoặc đặt file `.xlsx` vào thư mục `data/` của repo).")
-    st.stop()
+if data_mode == "Vnstock tự động":
+    if not live_symbols:
+        st.warning("Nhập ít nhất một mã cổ phiếu.")
+        st.stop()
+    try:
+        raw = load_vnstock_history(live_symbols, live_start.isoformat())
+        quote_df, quote_source = load_vnstock_quotes(live_symbols)
+        raw = RD.apply_live_quotes(raw, quote_df)
+        with st.sidebar:
+            st.caption(f"Nguồn bảng giá: {quote_source} · số mã trả về: {len(quote_df)}")
+        errors = raw.attrs.get("provider_errors", [])
+        if errors:
+            st.warning("Một số mã không lấy được lịch sử: " + " | ".join(errors[:4]))
+    except Exception as e:
+        st.error(f"Không kết nối được Vnstock: {e}")
+        st.info("Kiểm tra internet, phiên bản vnstock và hạn mức/nguồn được cấp quyền. Bạn vẫn có thể chuyển về Excel CafeF.")
+        st.stop()
+else:
+    if source is None:
+        st.title("📈 Trạm Tín Hiệu Chứng Khoán Việt Nam")
+        st.info("👈 Hãy tải file Excel lên, đặt file `.xlsx` trong thư mục `data/`, hoặc chọn **Vnstock tự động** ở thanh bên.")
+        st.stop()
+    try:
+        raw = load_raw(source)
+    except Exception as e:
+        st.error(f"Lỗi khi đọc hoặc xử lý dữ liệu: {e}")
+        st.stop()
 
 try:
-    raw = load_raw(source)
+    raw = E.clean_raw(raw)
     frames = build_frames(raw)
 except Exception as e:
-    st.error(f"Lỗi khi đọc hoặc xử lý dữ liệu: {e}")
+    st.error(f"Lỗi khi xử lý dữ liệu: {e}")
     st.stop()
 
 df = frames["D"]
@@ -91,6 +163,10 @@ latest_date = df["Ngày"].max()
 n_sessions = int(df.groupby("Mã").size().min())
 latest_df = df[df["Ngày"] == latest_date]
 DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}"
+WY_KEY = f"{DATA_KEY}-{float(latest_df['Giá đóng cửa'].sum()):.2f}"
+WY_TABLE = wyckoff_table(df, WY_KEY)
+if data_mode == "Vnstock tự động":
+    st.caption(f"🟢 Chế độ tự động · lịch sử OHLCV được cache 60 phút · bảng giá polling mỗi {refresh_seconds} giây. Thời điểm chạy: {pd.Timestamp.now(tz='Asia/Ho_Chi_Minh'):%H:%M:%S %d/%m/%Y} (giờ VN). Giá đang chạy có thể chưa đồng bộ đầy đủ với OHLCV.")
 
 # ------------------------------------------------------------------ BẢNG THEO DÕI
 vol_month = E.month_vol_change(frames["M"])
@@ -103,7 +179,9 @@ for _, r_ in latest_df.iterrows():
     vm = vol_month.get(r_["Mã"], np.nan)
     pv_code = r_["PV_code"]
     rows.append({
-        "Mã": r_["Mã"], "Giá": r_["Giá đóng cửa"], "% Biên độ": r_["Range_%"], "Position %": pos,
+        "Mã": r_["Mã"], "Nhóm": ", ".join(MEMBER.get(r_["Mã"], [])) or "Khác",
+        "Wyckoff": WYK.label(WY_TABLE.get(r_["Mã"])), "_wy": WY_TABLE.get(r_["Mã"]),
+        "Giá": r_["Giá đóng cửa"], "% Biên độ": r_["Range_%"], "Position %": pos,
         "Zone": zone,
         "Lực mua/bán": {"High": "Lực mua mạnh", "Low": "Bị bán mạnh", "Mid-Sell": "Giằng co"}.get(zone, "-"),
         "Giá tăng/giảm": "Giá Không đổi" if abs(chg) < 1e-9 else "Giá Tăng" if chg > 0 else "Giá Giảm",
@@ -114,8 +192,8 @@ for _, r_ in latest_df.iterrows():
         "Tín hiệu": sig, "Điểm số": sc, "Entry": entry, "Stoploss": sl, "TakeProfit": tp, "R:R": rr, "reasons": reas,
     })
 res_df = pd.DataFrame(rows)
-TABLE_COLS = ["ST", "Mã", "Giá", "% Biên độ", "Position %", "Zone", "Lực mua/bán", "Giá tăng/giảm",
-              "Vol vs tháng trước", "Vol/Avg10", "Nhận xét", "Cảnh báo", "Lý do cảnh báo"]
+TABLE_COLS = ["ST", "Mã", "Nhóm", "Giá", "% Biên độ", "Position %", "Zone", "Lực mua/bán", "Giá tăng/giảm",
+              "Vol vs tháng trước", "Vol/Avg10", "Nhận xét", "Wyckoff", "Cảnh báo", "Lý do cảnh báo"]
 
 
 def header():
@@ -142,6 +220,9 @@ def style_table(f: pd.DataFrame):
     sty = ap(sty)(lambda v: zone.get(v, ""), subset=["Zone"])
     sty = ap(sty)(lambda v: colors.get(v, ""),
                   subset=["Lực mua/bán", "Giá tăng/giảm", "Vol vs tháng trước", "Nhận xét"])
+    wyc = lambda v: ("color:#0E8A6D;font-weight:600" if "Tích lũy" in str(v) else
+                     "color:#C93A52;font-weight:600" if "Phân phối" in str(v) else "")
+    sty = ap(sty)(wyc, subset=["Wyckoff"])
     alert = {"MUA": "background-color:#0E8A6D;color:#fff;font-weight:700",
              "BÁN": "background-color:#C93A52;color:#fff;font-weight:700"}
     return ap(sty)(lambda v: alert.get(v, ""), subset=["Cảnh báo"])
@@ -169,7 +250,23 @@ def page_filter():
     with c4:
         search = st.text_input("Tìm mã", "").upper()
 
+    d1, d2 = st.columns([2, 1])
+    all_groups = [g_ for g_ in WL.group_names() if g_ != WL.OLD] + ["Khác"]
+    with d1:
+        sel_groups = st.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
+                                    help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
+    with d2:
+        wy_opt = st.selectbox("Wyckoff", ["Tất cả", "Tích lũy", "Phân phối", "Đã có Spring/UT hoặc SOS/SOW (pha C–E)"])
+
     f = res_df[res_df["Cảnh báo"].isin(filter_sig) & res_df["Zone"].isin(zones) & (res_df["Vol/Avg10"].fillna(0) >= min_vol)]
+    if sel_groups:
+        f = f[f["Nhóm"].apply(lambda t_: any(g_ in [x.strip() for x in t_.split(",")] for g_ in sel_groups))]
+    if wy_opt == "Tích lũy":
+        f = f[f["_wy"].apply(lambda w: bool(w) and w["kind"] == "acc")]
+    elif wy_opt == "Phân phối":
+        f = f[f["_wy"].apply(lambda w: bool(w) and w["kind"] == "dist")]
+    elif wy_opt.startswith("Đã có"):
+        f = f[f["_wy"].apply(lambda w: bool(w) and w["phase"] in ("C", "D", "E"))]
     if search:
         f = f[f["Mã"].str.contains(search)]
     f = (f.assign(_o=f["Cảnh báo"].map({"MUA": 0, "BÁN": 1, "-": 2}))
@@ -296,6 +393,29 @@ def elliott_card(a):
     return card("Sóng Elliott", tag(e["title"], e["tag"]) + f'<div class="muted" style="margin-top:8px">{e["text"]}</div>')
 
 
+def wyckoff_card(a):
+    w = a.get("wy")
+    if not w:
+        return card("Phân tích Wyckoff", '<div class="muted">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần). '
+                                         'Giá đang ở trạng thái xu hướng hoặc biên quá rộng.</div>')
+    k = {"buy": "green", "sell": "red"}.get(w["lean"], "gray")
+    head = tag(WYK.label(w), k) + f' <span class="muted">khớp mẫu {w["score"]}%</span>'
+    html = [head, f'<div class="muted" style="margin-top:8px">{w["summary"]}</div>']
+    if w["kind"] != "unk" or w["trigger"]:
+        html.append('<div class="box">' + row("Biên trên / dưới", f'{fp(w["tr"]["top"])} / {fp(w["tr"]["bot"])}')
+                    + row(w["trigger"]["txt"], f'<b>{fp(w["trigger"]["p"])}</b>')
+                    + row(w["inval"]["txt"], f'<b>{fp(w["inval"]["p"])}</b>') + "</div>")
+    for e in sorted(w["events"], key=lambda x: -x["i"]):
+        html.append(f'<div class="item"><span class="chip chip-{k}">{e["label"]}</span><b>{e["date"]:%d/%m/%Y}</b> · {fp(e["p"])}'
+                    f'<div class="muted" style="margin-left:50px">{e["txt"]}</div></div>')
+    if w["notes"]:
+        html.append(f'<div class="muted" style="margin-top:6px">{" ".join(w["notes"])}</div>')
+    html.append('<div class="muted" style="margin-top:6px">Wyckoff đọc cấu trúc giá và volume nên mang tính chủ quan. Vùng đi ngang được tìm bằng quy tắc '
+                '(biên chạm nhiều lần, giá cắt đường giữa nhiều lần), sự kiện dò theo volume và biên độ nến. Máy có thể gắn nhãn khác cách bạn đọc, '
+                'và vẫn có thể thấy "cấu trúc" ngay trên dữ liệu ngẫu nhiên, nên chỉ dùng để quan sát cùng các chỉ báo khác, không tính vào điểm tín hiệu và backtest.</div>')
+    return card("Phân tích Wyckoff", "".join(html))
+
+
 def zones_card(a):
     if not a["zones"]:
         return card("Vùng giá gần nhất", '<div class="muted">Chưa xác định được vùng hỗ trợ/kháng cự.</div>')
@@ -405,6 +525,26 @@ def make_chart(a, code, tf, layers):
         fig.add_trace(go.Scatter(x=[g["Ngày"].iat[i] for i, _, _ in pts], y=[p for _, p, _ in pts],
                                  mode="lines+markers+text", text=[w for _, _, w in pts], textposition="top center",
                                  line=dict(width=1.5, color="#7C3AED"), name="Elliott"), row=1, col=1)
+    wy = a.get("wy") if enough and "Wyckoff" in layers else None
+    if wy and wy["tr"]["e_date"] >= x.iloc[0]:
+        tr_ = wy["tr"]
+        wc = {"acc": "14,138,109", "dist": "201,58,82"}.get(wy["kind"], "107,114,128")
+        xs0 = max(tr_["s_date"], x.iloc[0])
+        fig.add_shape(type="rect", x0=xs0, x1=tr_["e_date"], y0=tr_["bot"], y1=tr_["top"], row=1, col=1,
+                      line=dict(width=1.3, color=f"rgb({wc})"), fillcolor=f"rgba({wc},0.07)", layer="below")
+        for y_, dash_ in ((tr_["top"], "dash"), (tr_["bot"], "dash"), (tr_["mid"], "dot")):
+            fig.add_trace(go.Scatter(x=[tr_["e_date"], fx], y=[y_, y_], mode="lines", showlegend=False, hoverinfo="skip",
+                                     line=dict(width=1, dash=dash_, color=f"rgba({wc},0.7)")), row=1, col=1)
+        fig.add_annotation(x=xs0, y=tr_["top"], text=f"Wyckoff · {WYK.label(wy)}", showarrow=False, xanchor="left",
+                           yanchor="bottom", font=dict(size=11, color=f"rgb({wc})"), row=1, col=1)
+        evs = [e for e in wy["events"] if e["date"] >= x.iloc[0]]
+        if evs:
+            fig.add_trace(go.Scatter(x=[e["date"] for e in evs], y=[e["p"] for e in evs], mode="markers+text", name="Wyckoff",
+                                     text=[e["label"] for e in evs],
+                                     textposition=["bottom center" if e["pos"] == "lo" else "top center" for e in evs],
+                                     textfont=dict(size=10, color=f"rgb({wc})"),
+                                     marker=dict(symbol="diamond", size=8, color=f"rgb({wc})"),
+                                     hovertext=[f'{e["label"]}: {e["txt"]}' for e in evs], hoverinfo="text+x"), row=1, col=1)
     if "Tín hiệu quá khứ" in layers:
         for d, sym, color, col, off, nm in ((1, "triangle-up", "#0E8A6D", "Giá thấp nhất", 0.985, "Mua"),
                                             (-1, "triangle-down", "#C93A52", "Giá cao nhất", 1.015, "Bán")):
@@ -511,6 +651,7 @@ def page_stock():
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
         if a["enough"]:
             st.markdown(elliott_card(a), unsafe_allow_html=True)
+            st.markdown(wyckoff_card(a), unsafe_allow_html=True)
             st.markdown(zones_card(a), unsafe_allow_html=True)
         st.markdown(signals_card(a, include_short), unsafe_allow_html=True)
 

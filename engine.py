@@ -9,6 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+import wyckoff as WYCK
+
 NUMERIC_COLS = ["Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh"]
 VOL = "Khối lượng khớp lệnh"
 
@@ -33,7 +35,7 @@ def clean_raw(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [str(c).strip() for c in df.columns]
     for col in NUMERIC_COLS:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    df["Ngày"] = pd.to_datetime(df["Ngày"], format="%d/%m/%Y", errors="coerce")
+    df["Ngày"] = pd.to_datetime(df["Ngày"], errors="coerce", format="mixed", dayfirst=True)
     return df.dropna(subset=["Mã", "Ngày", "Giá đóng cửa"]).sort_values(["Mã", "Ngày"]).reset_index(drop=True)
 
 
@@ -513,7 +515,7 @@ def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
     out = {"tf": tf, "g": g, "n": n, "enough": n >= MIN_BARS, "partial": n < FULL_BARS,
            "total": 0.0, "bias": 0.0, "dir": 0, "items": [], "fc": None,
            "trades": pd.DataFrame(columns=["idx", "Ngày", "dir", "R", "open", "code"]),
-           "zones": [], "fib": None,
+           "zones": [], "fib": None, "wy": None,
            "elliott": {"title": "", "tag": "gray", "points": [], "text": ""}}
     out["trades"] = run_backtest(g)
     out["pv_now"], out["pv_prev"] = latest_pv(g)
@@ -526,6 +528,10 @@ def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
     out["items"] = describe_items(g, fib_text)
     out["zones"] = price_zones(g, k=3)
     out["elliott"] = elliott(stack)
+    try:
+        out["wy"] = WYCK.analyze(g)
+    except Exception:   # Wyckoff chỉ để quan sát, không được làm hỏng phần phân tích còn lại
+        out["wy"] = None
     out["stack"] = stack
     if fprev and flast:
         out["fib"] = {"A": fprev, "B": flast}
