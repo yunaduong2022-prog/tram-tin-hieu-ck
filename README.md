@@ -33,7 +33,26 @@ Thẻ **Phân tích Wyckoff** ở cột bên phải cho biết pha A–E, mức 
 
 Lưu ý: đây là quy tắc máy tính nên mang tính chủ quan, có thể gắn nhãn khác cách bạn đọc, và vẫn có thể cho ra "cấu trúc" trên dữ liệu ngẫu nhiên (thử trên 40 chuỗi giá ngẫu nhiên có khoảng 9 chuỗi hiện pha C–E). Chỉ dùng để quan sát cùng các chỉ báo khác, không tính vào điểm tín hiệu và backtest. Nến ngày đang chạy trong phiên có thể chưa đóng nên nhãn có thể đổi.
 
-## Hai chế độ dữ liệu
+## Dữ liệu cuối phiên tự động (khuyến nghị)
+
+Thay vì gọi nguồn dữ liệu liên tục mỗi khi mở app (dễ bị giới hạn tần suất), một lịch tự động chạy **1 lần mỗi ngày giao dịch lúc 15:45 giờ VN**, lấy OHLCV ngày của cả rổ mã rồi lưu vào `data/eod_prices.csv`. App chỉ đọc file này nên mở nhanh và không tốn hạn mức.
+
+**Thiết lập (làm một lần):**
+1. Đưa toàn bộ thư mục lên GitHub, gồm cả `.github/workflows/eod.yml`. Thư mục `.github` bị ẩn nên kéo thả web thường bỏ sót; hãy vào repo → **Add file → Create new file**, gõ tên `.github/workflows/eod.yml` và dán nội dung file.
+2. (Khuyến nghị) Tạo khóa API Cộng đồng miễn phí tại https://vnstocks.com/account#api-key, rồi vào repo → **Settings → Secrets and variables → Actions → New repository secret**, tên `VNSTOCK_API_KEY`. Không có khóa thì chạy ở cấp Khách với hạn mức chặt nhất.
+3. Vào tab **Actions → Cập nhật dữ liệu cuối phiên → Run workflow**, tick **Tải lại toàn bộ lịch sử**, bấm chạy. Lần đầu mất vài phút đến vài chục phút (mỗi mã một yêu cầu).
+4. Từ đó lịch tự chạy; mỗi lần có dữ liệu mới, bot commit `data/eod_prices.csv` và Streamlit Cloud tự cập nhật app. Ở thanh bên của app chọn **Cuối phiên (tự cập nhật)**.
+
+**Cách hoạt động** (`eod_fetch.py`):
+- Rổ mã = VN30 + các nhóm ngành + danh mục cũ trong `watchlist.py` + mã thêm tay trong `data/extra_symbols.txt` (≈190 mã). Thêm `--no-old` để bỏ danh mục cũ.
+- Thử lần lượt các nguồn vnstock **vci → kbs → vnd** (đổi bằng `--sources`); `data/eod_meta.json` ghi nguồn đã dùng, mã lỗi và thời điểm cập nhật, app hiển thị ở thanh bên.
+- Cập nhật tăng dần: mỗi ngày lấy lại ~14 ngày gần nhất. Nếu giá cũ lệch giá nguồn (cổ phiếu vừa điều chỉnh cổ tức/chia tách) thì tự tải lại toàn bộ lịch sử mã đó để chuỗi giá không đứt đoạn.
+- Chạy khi phiên chưa đóng (trước 15:10) thì bỏ nến hôm nay, chỉ giữ dữ liệu đã chốt. Ngày lễ không có nến mới thì không có gì thay đổi.
+- Nếu hết hạn mức hoặc quá nhiều mã lỗi, workflow báo đỏ (kèm email của GitHub) nhưng phần đã lấy được vẫn được lưu.
+
+**Phương án dự phòng nếu GitHub bị nguồn chặn:** nguồn dữ liệu có thể từ chối IP của máy chủ GitHub. Khi đó chạy trên máy bạn: `pip install -r requirements-eod.txt`, rồi `python eod_fetch.py` (lần đầu thêm `--full`), sau đó đẩy `data/eod_prices.csv` và `data/eod_meta.json` lên repo. Trên Windows có sẵn `update_eod.bat` làm cả hai bước; đặt trong Task Scheduler chạy 15:45 các ngày thứ Hai đến thứ Sáu.
+
+## Các chế độ dữ liệu khác
 
 ### 1. Excel CafeF
 - Chọn **Excel CafeF** ở thanh bên và tải file `.xlsx`, hoặc đặt file trong `data/`.
@@ -60,6 +79,7 @@ Lưu ý: đây là quy tắc máy tính nên mang tính chủ quan, có thể g�
 
 - `app.py`: giao diện Streamlit, bộ lọc, biểu đồ và điều hướng.
 - `engine.py`: làm sạch dữ liệu, gộp nến, tính chỉ báo, điểm số, backtest.
+- `eod_fetch.py`: lấy dữ liệu cuối phiên mỗi ngày (chạy bởi `.github/workflows/eod.yml`), ghi `data/eod_prices.csv`.
 - `realtime_data.py`: adapter dữ liệu Vnstock, chuẩn hóa OHLCV và bảng giá (tự chờ và thử lại khi nguồn báo giới hạn tần suất).
 - `watchlist.py`: VN30 và các nhóm ngành.
 - `wyckoff.py`: nhận diện vùng, sự kiện và pha Wyckoff.

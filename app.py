@@ -1,5 +1,7 @@
 import glob
 import inspect
+import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -51,6 +53,23 @@ def load_raw(source) -> pd.DataFrame:
     return E.clean_raw(pd.read_excel(source, sheet_name=0))
 
 
+EOD_CSV, EOD_META = "data/eod_prices.csv", "data/eod_meta.json"
+MODE_EOD, MODE_XLS, MODE_LIVE = "Cuối phiên (tự cập nhật)", "Excel CafeF", "Vnstock tự động"
+
+
+@st.cache_data(show_spinner="Đang đọc dữ liệu cuối phiên...")
+def load_eod(path: str, mtime: float) -> pd.DataFrame:
+    return E.clean_raw(pd.read_csv(path, dtype={"Mã": str}))
+
+
+def read_eod_meta() -> dict:
+    try:
+        with open(EOD_META, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 @st.cache_data(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...")
 def build_frames(raw: pd.DataFrame) -> dict:
     parts = {"D": [], "W": [], "M": []}
@@ -96,16 +115,34 @@ def wyckoff_table(_df: pd.DataFrame, key: str) -> dict:
 VN30_LIST, VN30_SRC = load_vn30()
 MEMBER = WL.membership(VN30_LIST)
 
+HAS_EOD = os.path.exists(EOD_CSV)
+
 with st.sidebar:
     st.header("📂 Dữ liệu")
-    data_mode = st.radio("Nguồn dữ liệu", ["Excel CafeF", "Vnstock tự động"], index=0,
-                         help="Vnstock tự động cần internet; dữ liệu được lấy từ nguồn bên thứ ba, không đảm bảo độ trễ cố định.")
-    uploaded = st.file_uploader("Tải file Excel CafeF (.xlsx)", type=["xlsx"])
-    repo_files = sorted(glob.glob("data/*.xlsx"))
-    source = uploaded
-    if source is None and repo_files:
-        source = st.selectbox("Hoặc dùng file trong repo", repo_files, index=len(repo_files) - 1)
-    if data_mode == "Vnstock tự động":
+    data_mode = st.radio("Nguồn dữ liệu", [MODE_EOD, MODE_XLS, MODE_LIVE], index=0 if HAS_EOD else 1,
+                         help="Cuối phiên: file data/eod_prices.csv do lịch tự động cập nhật sau giờ đóng cửa (khuyến nghị). "
+                              "Vnstock tự động: gọi nguồn liên tục khi mở app, dễ bị giới hạn tần suất.")
+    source = None
+    if data_mode == MODE_EOD:
+        _meta = read_eod_meta()
+        if HAS_EOD:
+            st.caption("Dữ liệu cuối phiên, tự cập nhật sau 15:45 mỗi ngày giao dịch (GitHub Actions)."
+                       + (f" Cập nhật lần cuối: {_meta['updated_at']}." if _meta.get("updated_at") else "")
+                       + (f" Nguồn: {', '.join(_meta['sources'])}." if _meta.get("sources") else ""))
+            if _meta.get("failed") or _meta.get("stopped"):
+                st.warning(f"Lần chạy gần nhất chưa lấy đủ: {len(_meta.get('failed', []))} mã lỗi"
+                           + (f"; dừng vì: {_meta['stopped']}" if _meta.get("stopped") else "") + ".")
+            if _meta.get("adjusted"):
+                st.caption("Đã tải lại lịch sử do điều chỉnh giá: " + ", ".join(_meta["adjusted"][:12]))
+        else:
+            st.info("Chưa có file data/eod_prices.csv. Chạy workflow ở tab Actions trên GitHub (xem README).")
+    if data_mode == MODE_XLS:
+        uploaded = st.file_uploader("Tải file Excel CafeF (.xlsx)", type=["xlsx"])
+        repo_files = sorted(glob.glob("data/*.xlsx"))
+        source = uploaded
+        if source is None and repo_files:
+            source = st.selectbox("Hoặc dùng file trong repo", repo_files, index=len(repo_files) - 1)
+    if data_mode == MODE_LIVE:
         picked = st.multiselect("Rổ mã", WL.group_names(), default=WL.DEFAULT_PICK,
                                 help="VN30 lấy từ nguồn dữ liệu; các nhóm ngành sửa trong watchlist.py. Một mã có thể thuộc nhiều nhóm.")
         extra_text = st.text_input("Mã thêm tay (phân cách bằng dấu phẩy)", "",
@@ -123,7 +160,19 @@ with st.sidebar:
         except ImportError:
             st.warning("Chưa có streamlit-autorefresh. Cài dependencies trong requirements.txt để tự làm mới giao diện.")
 
-if data_mode == "Vnstock tự động":
+if data_mode == MODE_EOD:
+    if not HAS_EOD:
+        st.title("📈 Trạm Tín Hiệu Chứng Khoán Việt Nam")
+        st.info("Chưa có dữ liệu cuối phiên. Vào GitHub → tab **Actions** → **Cập nhật dữ liệu cuối phiên** → "
+                "**Run workflow** (chọn *Tải lại toàn bộ lịch sử*) để tạo file `data/eod_prices.csv`. "
+                "Hoặc chọn **Excel CafeF** ở thanh bên.")
+        st.stop()
+    try:
+        raw = load_eod(EOD_CSV, os.path.getmtime(EOD_CSV))
+    except Exception as e:
+        st.error(f"Không đọc được data/eod_prices.csv: {e}")
+        st.stop()
+elif data_mode == MODE_LIVE:
     if not live_symbols:
         st.warning("Nhập ít nhất một mã cổ phiếu.")
         st.stop()
@@ -167,6 +216,10 @@ WY_KEY = f"{DATA_KEY}-{float(latest_df['Giá đóng cửa'].sum()):.2f}"
 WY_TABLE = wyckoff_table(df, WY_KEY)
 if data_mode == "Vnstock tự động":
     st.caption(f"🟢 Chế độ tự động · lịch sử OHLCV được cache 60 phút · bảng giá polling mỗi {refresh_seconds} giây. Thời điểm chạy: {pd.Timestamp.now(tz='Asia/Ho_Chi_Minh'):%H:%M:%S %d/%m/%Y} (giờ VN). Giá đang chạy có thể chưa đồng bộ đầy đủ với OHLCV.")
+elif data_mode == MODE_EOD:
+    _stale = (pd.Timestamp.now(tz="Asia/Ho_Chi_Minh").tz_localize(None).normalize() - latest_date).days
+    st.caption(f"🗓️ Dữ liệu cuối phiên đến ngày {latest_date:%d/%m/%Y}"
+               + (" · ⚠ có vẻ chưa cập nhật phiên gần nhất, kiểm tra tab Actions trên GitHub" if _stale > 4 else ""))
 
 # ------------------------------------------------------------------ BẢNG THEO DÕI
 vol_month = E.month_vol_change(frames["M"])
