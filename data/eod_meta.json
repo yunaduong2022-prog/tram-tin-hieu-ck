@@ -1,0 +1,16 @@
+{
+ "updated_at": "18/10/2026 16:03 (giờ VN)",
+ "latest_date": "2026-10-16",
+ "symbols": 188,
+ "symbols_on_latest_date": 185,
+ "rows": 262442,
+ "sources": {
+  "vci": 188
+ },
+ "failed": [
+  "PSS: EntitlementError: Nguồn 'vnd' không thuộc quyền của cấp Cộng đồng.\n(English: vnstock settings language en)"
+ ],
+ "skipped": 0,
+ "adjusted": [],
+ "stopped": null
+}
