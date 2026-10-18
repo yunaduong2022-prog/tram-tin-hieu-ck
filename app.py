@@ -1,4 +1,5 @@
 import glob
+import html as htmllib
 import inspect
 import json
 import os
@@ -507,6 +508,21 @@ def page_filter():
             meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
             if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
         except Exception: pass
+    # Tên công ty, P/B, ROE: data/fundamentals.csv do update_fundamentals.py tự cập nhật; tên sửa tay ở data/ten_cong_ty_tay.csv
+    fund_map = {}
+    if os.path.exists("data/fundamentals.csv"):
+        try:
+            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
+            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
+            fund_map = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
+        except Exception: pass
+    if os.path.exists("data/ten_cong_ty_tay.csv"):
+        try:
+            _nt = pd.read_csv("data/ten_cong_ty_tay.csv", dtype=str)
+            for _c, _n in zip(_nt["Mã"].str.upper().str.strip(), _nt["Tên công ty"]):
+                if isinstance(_n, str) and _n.strip():
+                    fund_map.setdefault(_c, {})["Tên công ty"] = _n.strip()
+        except Exception: pass
     if f.empty:
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
@@ -518,18 +534,29 @@ def page_filter():
             up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
             bg, fg = ("#DDF1EB", "#08785E") if up else (("#FCE4E8", "#C02645") if down else ("#EEF1F5", "#626B78"))
             groups = MEMBER.get(code, [])
-            industry = ", ".join(groups) if groups else "Khác / chưa phân loại"
+            sectors = [g for g in groups if g != WL.VN30]          # hàng 2: ngành; hàng 3: thuộc rổ VN30
+            industry = ", ".join(sectors) if sectors else "Khác / chưa phân loại"
+            vn30_text = "VN30" if WL.VN30 in groups else ""
             cap = cap_map.get(code.upper())
             try: cap_text = f"{float(cap):,.0f} tỷ đồng" if pd.notna(cap) else "Chưa có dữ liệu"
             except (TypeError, ValueError): cap_text = str(cap) if cap is not None else "Chưa có dữ liệu"
+            fd = fund_map.get(code.upper(), {})
+            cname = fd.get("Tên công ty")
+            name_text = htmllib.escape(cname.strip()) if isinstance(cname, str) and cname.strip() else "Chưa có tên công ty"
+            def _fmt(v, f_):
+                try: return f_.format(float(v)) if pd.notna(v) else "Chưa có dữ liệu"
+                except (TypeError, ValueError): return "Chưa có dữ liệu"
+            pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
             chg = r.get("Chg_%", np.nan)
             price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
-            html = f'<div style="border:1px solid #D9E1EA;border-radius:14px;padding:15px;margin:4px 0 8px;background:#fff"><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;align-items:start">'
-            html += f'<div><div style="font-size:11px;color:#687386">Mã chứng khoán</div><div style="font-size:21px;font-weight:800;color:#172033">{code}</div></div>'
-            html += f'<div><div style="font-size:11px;color:#687386">Giá</div><div style="font-size:18px;font-weight:750;color:{price_color}">{r["Giá"]:,.2f}</div><div style="font-size:11px;color:{price_color}">{chg:+.2f}%</div></div>'
-            html += f'<div><div style="font-size:11px;color:#687386">Ngành</div><div style="font-size:12px;font-weight:650;color:#172033">{industry}</div></div>'
-            html += f'<div><div style="font-size:11px;color:#687386">Vốn hóa TT</div><div style="font-size:12px;font-weight:650;color:#172033">{cap_text}</div></div>'
-            html += f'<div><div style="font-size:11px;color:#687386">Dự báo</div><span style="display:inline-block;background:{bg};color:{fg};padding:5px 7px;border-radius:8px;font-size:11px;font-weight:750">{forecast}</span></div></div><div style="border-top:1px solid #EDF0F4;margin-top:12px;padding-top:8px">'
+            html = f'<div style="border:1px solid #D9E1EA;border-radius:14px;padding:15px;margin:4px 0 8px;background:#fff"><div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.1fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,1.3fr);gap:8px;align-items:start">'
+            html += f'<div><div style="font-size:11px;color:#687386">Mã chứng khoán</div><div style="height:28px;line-height:28px;font-size:21px;font-weight:800;color:#172033">{code}</div><div title="{name_text}" style="font-size:11px;color:#687386;line-height:1.3;margin-top:2px">{name_text}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Giá</div><div style="height:28px;line-height:28px;font-size:18px;font-weight:750;color:{price_color}">{r["Giá"]:,.2f}</div><div style="font-size:11px;color:{price_color}">{chg:+.2f}%</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Ngành</div><div style="min-height:28px;display:flex;align-items:center;line-height:1.25;font-size:12px;font-weight:650;color:#172033">{industry}</div><div style="font-size:11px;color:#687386;line-height:1.3;margin-top:2px">{vn30_text}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Vốn hóa TT</div><div style="min-height:28px;display:flex;align-items:center;line-height:1.25;font-size:12px;font-weight:650;color:#172033">{cap_text}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">P/B</div><div style="min-height:28px;display:flex;align-items:center;line-height:1.25;font-size:12px;font-weight:650;color:#172033">{pb_text}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">ROE</div><div style="min-height:28px;display:flex;align-items:center;line-height:1.25;font-size:12px;font-weight:650;color:#172033">{roe_text}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Dự báo</div><div style="min-height:28px;display:flex;align-items:center"><span style="display:inline-block;background:{bg};color:{fg};padding:5px 7px;border-radius:8px;font-size:11px;font-weight:750">{forecast}</span></div></div></div><div style="border-top:1px solid #EDF0F4;margin-top:12px;padding-top:8px">'
             html += "".join(_status_chip(label, val) for label, val in states.items()) + "</div></div>"
             st.markdown(html, unsafe_allow_html=True)
             if st.button(f"📊 Xem biểu đồ {code}", key=f"chart_{code}", use_container_width=True):
