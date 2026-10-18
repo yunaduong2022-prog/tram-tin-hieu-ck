@@ -13,6 +13,8 @@ from plotly.subplots import make_subplots
 import engine as E
 import watchlist as WL
 import wyckoff as WYK
+import nav as NAV
+import stock_tabs as ST
 
 st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
 
@@ -550,7 +552,7 @@ def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap
         name = row.get("Tên công ty")
         if isinstance(name, str) and name.strip():
             fund_map.setdefault(code, {})["Tên công ty"] = name.strip()
-        for col in ("P/B", "ROE"):
+        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N"):
             v = num(row.get(col))
             if v is not None:
                 fund_map.setdefault(code, {})[col] = v
@@ -644,7 +646,7 @@ def page_filter():
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
                         st.session_state["selected_code"] = code
-                        st.switch_page(stock_page)
+                        NAV.goto("Cổ phiếu", "Tổng quát")
 
 # ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
 
@@ -1069,8 +1071,42 @@ def page_stock():
     st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
 
-# ------------------------------------------------------------------ ĐIỀU HƯỚNG
-filter_page = st.Page(page_filter, title="Bộ lọc", icon="🔍", url_path="bo-loc", default=True)
-stock_page = st.Page(page_stock, title="Cổ phiếu", icon="📊", url_path="co-phieu")
-ma_page = st.Page(page_ma, title="Khung cấu trúc MA", icon="🧱", url_path="khung-ma")
-st.navigation([filter_page, stock_page, ma_page]).run()
+def page_stock_tab(sub):
+    st.title(f"📊 Cổ phiếu · {sub}")
+    header()
+    fm = {}
+    if os.path.exists("data/fundamentals.csv"):
+        try:
+            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
+            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
+            fm = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
+        except Exception: pass
+    cap = {}
+    if os.path.exists("data/stock_metadata.csv"):
+        try:
+            _m = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
+            if {"Mã", "Vốn hóa TT"}.issubset(_m.columns): cap = dict(zip(_m["Mã"].str.upper(), _m["Vốn hóa TT"]))
+        except Exception: pass
+    apply_manual_overrides(fm, cap)
+    for _c, _v in cap.items():
+        if pd.notna(_v): fm.setdefault(_c, {})["Vốn hóa TT"] = _v
+    ST.render(sub, df, sorted(res_df["Mã"].unique()), fm, WL.GROUPS)
+
+
+# ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
+def route():
+    main, sub = NAV.render_nav()
+    if main == "Bộ lọc & Backtest":
+        if sub == "Bộ lọc Realtime": return page_filter()
+        if sub == "Khung cấu trúc MA": return page_ma()
+        return NAV.placeholder("🧪 Backtest chiến lược",
+                               ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",
+                                "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])
+    if main in ("Biểu đồ", "Cổ phiếu") and (main == "Biểu đồ" or sub in ("Tổng quát", "Chỉ báo kỹ thuật")):
+        return page_stock()
+    if main == "Cổ phiếu" and sub in ST.TABS:
+        return page_stock_tab(sub)
+    NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""))
+
+
+route()

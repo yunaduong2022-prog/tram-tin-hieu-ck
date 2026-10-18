@@ -65,6 +65,27 @@ Thay vì gọi nguồn dữ liệu liên tục mỗi khi mở app (dễ bị gi�
 - Lần đầu tải lịch sử theo từng mã; lịch sử được cache 60 phút. Bảng giá được polling lại theo TTL 10 giây và giao diện tự rerun theo chu kỳ đã chọn.
 - Nguồn bảng giá thử KBS trước, sau đó VCI. Nếu nguồn từ chối truy cập, ứng dụng sẽ báo lỗi thay vì giả lập dữ liệu.
 
+## Tên công ty, P/B, ROE trong thẻ Kết quả lọc (mới)
+
+Thẻ mỗi mã ở trang **Bộ lọc** hiện: Mã (kèm tên công ty bên dưới) · Giá · Ngành · Vốn hóa TT · **P/B** · **ROE** · Dự báo.
+
+- Dữ liệu nằm ở `data/fundamentals.csv` (cột Mã, Tên công ty, P/B, ROE, Cập nhật), do `update_fundamentals.py` tự cập nhật trong workflow cuối phiên.
+- **Tên công ty**: lấy hàng loạt từ danh sách mã của vnstock (1 yêu cầu). Muốn đặt tên theo ý bạn, tạo `data/ten_cong_ty_tay.csv` với cột `Mã,Tên công ty`; tên tay luôn được ưu tiên.
+- **P/B, ROE**: lấy từ `Fundamental().equity(mã).ratio()` (kỳ báo cáo mới nhất nguồn trả về), mỗi mã một yêu cầu và chỉ hỏi lại sau 7 ngày vì số liệu đổi theo quý. Chức năng này **cần khóa API vnstock cấp Cộng đồng** (secret `VNSTOCK_API_KEY`); cấp Khách không được cấp quyền. ROE nếu nguồn trả dạng tỷ lệ (0,15) sẽ tự đổi thành phần trăm.
+- Điền tay P/B, ROE: sửa `data/fundamentals.csv`, đặt cột Cập nhật = `tay` thì không bị ghi đè.
+- Không có số thì thẻ hiện "Chưa có dữ liệu". Cột P/B âm hoặc lớn hơn 200 bị bỏ qua.
+- **Chẩn đoán**: vnstock đổi tên cột theo phiên bản nên việc đọc P/B, ROE là tự dò. Nếu thẻ vẫn trống, vào tab Actions → Run workflow → điền mã (ví dụ `HPG`) vào ô **probe** để xem nguồn trả về những cột nào (hoặc chạy `python update_fundamentals.py --probe HPG` trên máy).
+
+## Nhập tay tên công ty, vốn hóa, P/B, ROE (mới)
+
+Mở `data/nhap_tay.csv` (đã liệt kê sẵn ~190 mã, 4 cột để trống), điền vào ô nào thì thẻ Kết quả lọc hiện số đó. **Số nhập tay luôn ưu tiên hơn dữ liệu tự động**, ô để trống thì dùng dữ liệu tự động, và workflow không bao giờ ghi đè file này.
+
+- Cột: `Mã, Tên công ty, Vốn hóa TT, P/B, ROE`.
+- Vốn hóa TT: đơn vị **tỷ đồng** (ví dụ `150000`). P/B: số lần (ví dụ `1.45`). ROE: phần trăm (ví dụ `14.2`, gõ `14.2%` cũng được).
+- Số thập phân dùng dấu chấm; không dùng dấu phân cách hàng nghìn.
+- Có thể thêm dòng cho mã mới. Lưu file ở dạng CSV UTF-8 để không lỗi tiếng Việt.
+- Sửa ngay trên GitHub: mở file → bút chì → sửa → Commit changes.
+
 ## Giới hạn quan trọng
 
 - **Đây là polling qua REST/API, không phải kết nối WebSocket trực tiếp tới sở giao dịch.** Chu kỳ làm mới 5 giây chỉ là nhịp hỏi lại ứng dụng; nguồn dữ liệu có thể trễ hơn, giới hạn lượt gọi hoặc không trả dữ liệu.
@@ -79,6 +100,7 @@ Thay vì gọi nguồn dữ liệu liên tục mỗi khi mở app (dễ bị gi�
 
 - `app.py`: giao diện Streamlit, bộ lọc, biểu đồ và điều hướng.
 - `engine.py`: làm sạch dữ liệu, gộp nến, tính chỉ báo, điểm số, backtest.
+- `update_fundamentals.py`: tên công ty, P/B, ROE (ghi `data/fundamentals.csv`).
 - `eod_fetch.py`: lấy dữ liệu cuối phiên mỗi ngày (chạy bởi `.github/workflows/eod.yml`), ghi `data/eod_prices.csv`.
 - `realtime_data.py`: adapter dữ liệu Vnstock, chuẩn hóa OHLCV và bảng giá (tự chờ và thử lại khi nguồn báo giới hạn tần suất).
 - `watchlist.py`: VN30 và các nhóm ngành.

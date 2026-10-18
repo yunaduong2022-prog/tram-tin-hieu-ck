@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tự động cập nhật data/fundamentals.csv: Tên công ty, P/B, ROE cho cả rổ mã (nguồn vnstock).
+"""Tự động cập nhật data/fundamentals.csv: Tên công ty, P/B, ROE, P/E cho cả rổ mã (nguồn vnstock).
 
 - Tên công ty: lấy hàng loạt từ danh sách mã của vnstock (1 yêu cầu). Muốn sửa tay, ghi vào
   data/ten_cong_ty_tay.csv (cột: Mã, Tên công ty); dòng tay luôn được ưu tiên.
@@ -27,9 +27,10 @@ import eod_fetch as EF
 FUND = "data/fundamentals.csv"
 MANUAL_NAMES = "data/ten_cong_ty_tay.csv"
 DATE_FMT = "%d/%m/%Y"
-COLS = ["Mã", "Tên công ty", "P/B", "ROE", "Cập nhật"]
+COLS = ["Mã", "Tên công ty", "P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N", "Cập nhật"]
 
 PB_RE = re.compile(r"^(pb|ptb|pricetobook(value)?)(ratio|x|ttm|value|quarter|year|4q|lan)?$")
+PE_RE = re.compile(r"^(pe|priceearning|pricetoearning|pricetoearnings|ptoe)(ratio|x|ttm|value|quarter|year|4q|lan)?$")
 ROE_RE = re.compile(r"^(roe|returnonequity)(ratio|x|ttm|pct|percent|quarter|year|4q|a|avg|average)?$")
 NAME_ORDER = ("organname", "companyname", "tencongty", "companynamevi", "organnamevi", "namevi", "fullname", "name",
               "organshortname", "shortname")
@@ -57,6 +58,8 @@ def _flat(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _is_metric(key: str, kind: str) -> bool:
+    if kind == "pe":
+        return bool(PE_RE.match(key))
     if kind == "pb":
         return bool(PB_RE.match(key)) or (key.endswith("pb") and len(key) > 2 and not key.endswith("bpb"))
     return bool(ROE_RE.match(key)) or key.endswith("roe")
@@ -189,6 +192,56 @@ def fetch_names(verbose: bool = False) -> dict[str, str]:
     return {}
 
 
+def _history(raw, kind: str) -> list:
+    """Chuỗi giá trị của chỉ tiêu trong ~3 năm gần nhất, xếp từ cũ đến mới (rỗng nếu không đọc được)."""
+    df = _flat(raw)
+    if df.empty:
+        return []
+    for c in df.columns:  # Dạng 1: mỗi cột là một chỉ tiêu, mỗi hàng là một kỳ
+        if not _is_metric(_norm(c), kind):
+            continue
+        s = pd.to_numeric(df[c], errors="coerce")
+        for tc in df.columns:
+            if _norm(tc) in ("date", "reportdate", "time", "tradingdate", "period", "ngay", "kybaocao"):
+                t = pd.to_datetime(df[tc], errors="coerce")
+                if t.notna().mean() > 0.5:
+                    ok = t.notna() & s.notna()
+                    t, s2 = t[ok], s[ok]
+                    s2 = s2.loc[t.sort_values().index]
+                    t = t.sort_values()
+                    return [float(v) for v in s2[t >= t.max() - pd.DateOffset(years=3)]]
+        ycol = next((tc for tc in df.columns if _norm(tc) in ("year", "yearreport", "nam")), None)
+        qcol = next((tc for tc in df.columns if _norm(tc) in ("quarter", "lengthreport", "quy")), None)
+        if ycol is not None:
+            y = pd.to_numeric(df[ycol], errors="coerce")
+            q = pd.to_numeric(df[qcol], errors="coerce").fillna(5) if qcol is not None else pd.Series(5, index=df.index)
+            order = (y * 10 + q)
+            ok = order.notna() & s.notna()
+            vals = [float(v) for v in s[ok].loc[order[ok].sort_values().index]]
+            return vals[-(12 if (q[ok] != 5).any() else 3):]
+        vals = [float(v) for v in s.dropna()]      # không rõ thứ tự: giả định dòng đầu là kỳ mới nhất
+        return vals[:12][::-1]
+    label_cols = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
+    for c in label_cols:  # Dạng 2: mỗi hàng là một chỉ tiêu, mỗi cột số là một kỳ
+        hit = df[df[c].map(lambda x: _is_metric(_norm(x), kind) if isinstance(x, str) else False)]
+        if hit.empty:
+            continue
+        row = hit.iloc[0]
+        cands = [(col, _num(row[col])) for col in df.columns if col not in label_cols]
+        cands = [(col, v) for col, v in cands if v is not None]
+        keyed = sorted((k, v) for col, v in cands if (k := _period_key(col)) is not None)
+        if keyed:
+            return [v for _, v in keyed][-(12 if any(k[1] != 5 for k, _ in keyed) else 3):]
+        return [v for _, v in cands][:12][::-1]
+    return []
+
+
+def avg3(raw, kind: str, lo: float, hi: float):
+    """Trung bình 3 năm của P/B hoặc P/E (bỏ giá trị âm/ngoại lai); cần tối thiểu 3 điểm, ngược lại trả None."""
+    vals = [v for v in _history(raw, kind) if lo < v < hi]
+    return float(sum(vals) / len(vals)) if len(vals) >= 3 else None
+
+
 def _ratio_calls(sym: str):
     def v5():
         from vnstock import Fundamental
@@ -210,27 +263,32 @@ def _ratio_calls(sym: str):
 
 
 def fetch_ratios(sym: str, verbose: bool = False):
-    """Trả về (P/B, ROE); thử lần lượt các cách gọi cho đến khi đủ cả hai."""
-    pb = roe = None
+    """Trả về (P/B, ROE, P/E, P/B TB 3 năm, P/E TB 3 năm); thử lần lượt các cách gọi cho đến khi đủ."""
+    pb = roe = pe = pb3 = pe3 = None
     for fn in _ratio_calls(sym):
         try:
             raw = _call_safely(fn)
-            b, r = extract_metric(raw, "pb"), extract_metric(raw, "roe")
+            b, r, e_ = extract_metric(raw, "pb"), extract_metric(raw, "roe"), extract_metric(raw, "pe")
             if verbose:
                 df = _flat(raw)
                 print(f"  [{fn.__name__}] kích thước {df.shape} · cột: {list(df.columns)[:14]}")
                 print(df.head(3).to_string()[:900])
-                print(f"    -> P/B={b} · ROE={r}")
+                print(f"    -> P/B={b} · ROE={r} · P/E={e_}")
             pb = pb if pb is not None else b
             roe = roe if roe is not None else r
-            if pb is not None and roe is not None:
+            pe = pe if pe is not None else e_
+            pb3 = pb3 if pb3 is not None else avg3(raw, "pb", 0, 200)
+            pe3 = pe3 if pe3 is not None else avg3(raw, "pe", 0, 1000)
+            if verbose:
+                print(f"    -> P/B TB 3N={pb3} · P/E TB 3N={pe3}")
+            if None not in (pb, roe, pe, pb3, pe3):
                 break
         except EF.Fatal:
             raise
         except Exception as e:  # noqa: BLE001
             if verbose:
                 print(f"  [{fn.__name__}] lỗi: {type(e).__name__}: {e}")
-    return pb, roe
+    return pb, roe, pe, pb3, pe3
 
 
 # ------------------------------------------------------------------ ĐỌC / GHI
@@ -242,7 +300,7 @@ def read_cache() -> pd.DataFrame:
         if c not in df:
             df[c] = None
     df["Mã"] = df["Mã"].str.upper().str.strip()
-    for c in ("P/B", "ROE"):
+    for c in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
     return df[COLS].drop_duplicates("Mã", keep="last")
 
@@ -260,7 +318,7 @@ def read_manual_names() -> dict[str, str]:
 def needs_refresh(row, today: pd.Timestamp, days: int) -> bool:
     if str(row["Cập nhật"]).strip().lower() == "tay":
         return False
-    if pd.isna(row["P/B"]) and pd.isna(row["ROE"]):
+    if pd.isna(row["P/B"]) and pd.isna(row["ROE"]) and pd.isna(row["P/E"]):
         return True
     d = pd.to_datetime(row["Cập nhật"], format=DATE_FMT, errors="coerce")
     return pd.isna(d) or (today - d).days >= days
@@ -282,7 +340,7 @@ def main(argv=None) -> int:
         names = fetch_names(verbose=True)
         print(f"Tên {sym}: {names.get(sym)}")
         print(f"== P/B, ROE của {sym} ==")
-        print("Kết quả (P/B, ROE):", fetch_ratios(sym, verbose=True))
+        print("Kết quả (P/B, ROE, P/E, P/B TB 3N, P/E TB 3N):", fetch_ratios(sym, verbose=True))
         return 0
 
     try:
@@ -316,34 +374,38 @@ def main(argv=None) -> int:
             print("Quá thời gian, dừng; phần còn lại sẽ làm ở lần chạy sau.")
             break
         try:
-            pb, roe = fetch_ratios(s)
+            pb, roe, pe, pb3, pe3 = fetch_ratios(s)
         except EF.Fatal as e:
             fatal = str(e)
             print(f"Dừng: {e}")
             break
-        if pb is None and roe is None:
+        if pb is None and roe is None and pe is None:
             failed.append(s)
             print(f"  ✗ {s}: nguồn không trả P/B, ROE", flush=True)
         else:
-            fresh[s] = (pb, roe)
+            fresh[s] = (pb, roe, pe, pb3, pe3)
         if i % 20 == 0:
             print(f"  ... {i}/{len(todo)}", flush=True)
         time.sleep(args.sleep)
 
     # ROE có nguồn trả dạng tỷ lệ (0,15) thay vì phần trăm (15): đổi về phần trăm
-    roes = [abs(r) for _, r in fresh.values() if r is not None]
+    roes = [abs(v[1]) for v in fresh.values() if v[1] is not None]
     scale = 100.0 if roes and float(pd.Series(roes).median()) < 1.5 else 1.0
-    for s, (pb, roe) in fresh.items():
+    for s, (pb, roe, pe, pb3, pe3) in fresh.items():
         cache.loc[s, "P/B"] = pb if pb is not None and 0 < pb < 200 else float("nan")
         cache.loc[s, "ROE"] = roe * scale if roe is not None else float("nan")
+        cache.loc[s, "P/B TB 3N"] = pb3 if pb3 is not None else float("nan")
+        cache.loc[s, "P/E TB 3N"] = pe3 if pe3 is not None else float("nan")
+        cache.loc[s, "P/E"] = pe if pe is not None and 0 < pe < 1000 else float("nan")
         cache.loc[s, "Cập nhật"] = today.strftime(DATE_FMT)
 
     out = cache.reset_index().rename(columns={"index": "Mã"})[COLS]
     out = out[out["Mã"].isin(symbols) | out["Tên công ty"].notna()].sort_values("Mã")
     os.makedirs("data", exist_ok=True)
-    out.round({"P/B": 2, "ROE": 1}).to_csv(FUND, index=False)
+    out.round({"P/B": 2, "ROE": 1, "P/E": 1, "P/B TB 3N": 2, "P/E TB 3N": 1}).to_csv(FUND, index=False)
     n_pb, n_roe, n_nm = int(out["P/B"].notna().sum()), int(out["ROE"].notna().sum()), int(out["Tên công ty"].notna().sum())
-    print(f"Xong: tên {n_nm} · P/B {n_pb} · ROE {n_roe} / {len(symbols)} mã · lỗi {len(failed)}"
+    n_pe = int(out["P/E"].notna().sum())
+    print(f"Xong: tên {n_nm} · P/B {n_pb} · ROE {n_roe} · P/E {n_pe} / {len(symbols)} mã · lỗi {len(failed)}"
           + (f" ({', '.join(failed[:15])}{'...' if len(failed) > 15 else ''})" if failed else "")
           + (f" · DỪNG: {fatal}" if fatal else ""))
     return 0 if (n_pb or n_roe or n_nm) else 1
