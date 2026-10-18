@@ -88,3 +88,12 @@ Thay vì gọi nguồn dữ liệu liên tục mỗi khi mở app (dễ bị gi�
 ## Deploy
 
 Có thể deploy Streamlit Community Cloud nếu môi trường deploy cho phép truy cập nguồn dữ liệu. Lưu ý máy chủ cloud cũng phải tuân thủ giới hạn truy cập và giấy phép dữ liệu. Với nhu cầu polling liên tục trong phiên, nên chạy trên máy/VPS ổn định và giám sát lỗi nguồn.
+
+
+## Bộ lọc nâng cao, Score, RS và popup chi tiết (v5)
+- **Trang Bộ lọc** có thêm: Cảnh báo (MUA/BÁN/Crossover/Đáy KT), Score 0-10, RS vs VNI, Vol/Avg10, MA Alignment, cấu trúc MA ngắn/trung/dài, đỉnh/đáy 52 tuần, trên MA200, dòng tiền sớm (Vol tăng 3 phiên, gom ngầm, cạn cung, NR4/NR7), cùng bộ lọc Nhóm ngành và Wyckoff (Tích lũy, Phân phối, Pha C/D/E) có sẵn.
+- **Bảng** có thêm cột Score, RS vs VNI, MACD và Fisher (Ngày/Tuần), MA align, Nhận xét.
+- **Popup chi tiết**: chọn một dòng rồi bấm "Chi tiết": cảnh báo sớm kèm lời khuyên có số, MACD/Fisher đa khung, trạng thái nhóm ngành, dòng tiền nội tại.
+- **Trang "Khung cấu trúc MA"**: thẻ giá so với MA10/20/50/100/200 và xu hướng ngắn/trung/dài.
+- **RS vs VNI**: nếu dữ liệu có mã `VNINDEX` thì dùng nó; nếu không (mặc định với rổ cổ phiếu) thì dùng trung bình cộng các mã trong dữ liệu làm "thị trường". Dòng chú thích đầu trang ghi rõ đang dùng loại nào.
+- Phần tính toán mới nằm trong `engine.py` (`build_screener`, các cột MACD/Fisher/WaveTrend/MFI trong `add_indicators`).

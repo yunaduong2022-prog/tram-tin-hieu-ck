@@ -60,7 +60,7 @@ def add_indicators(g: pd.DataFrame) -> pd.DataFrame:
     g = g.copy()
     c, h, l, v = g["Giá đóng cửa"], g["Giá cao nhất"], g["Giá thấp nhất"], g[VOL]
     g["Chg_%"] = c.pct_change() * 100
-    for n in (9, 20, 50, 200):
+    for n in (9, 10, 20, 50, 100, 200):
         g[f"MA{n}"] = c.rolling(n).mean()
     g["EMA50"] = c.ewm(span=50, adjust=False, min_periods=50).mean()
     g["EMA200"] = c.ewm(span=200, adjust=False, min_periods=200).mean()
@@ -108,6 +108,41 @@ def add_indicators(g: pd.DataFrame) -> pd.DataFrame:
     pc = c.shift(1)
     tr = pd.concat([h - l, (h - pc).abs(), (l - pc).abs()], axis=1).max(axis=1)
     g["ATR"] = tr.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
+    # --- dòng tiền, nén biến động, cạn cung
+    o = g["Giá mở cửa"]
+    g["Vol_MA5"], g["Vol_MA20"] = v.rolling(5).mean(), v.rolling(20).mean()
+    g["VolStep"] = (v > v.shift(1)) & (v.shift(1) > v.shift(2))
+    g["NR4"] = (rng > 0) & (rng <= rng.rolling(4).min())
+    g["NR7"] = (rng > 0) & (rng <= rng.rolling(7).min())
+    g["EarlyFlow"] = ((v > g["Vol_MA5"]) & (v < 2.5 * g["Vol_MA20"]) & (c > o)
+                      & (g["Position_%"] >= 50) & g["Chg_%"].between(0.3, 3))
+    g["DryUp"] = (v < 0.7 * g["Vol_MA20"]) & (c >= g["MA20"]) & (g["Chg_%"].abs() < 2)
+    tp = (h + l + c) / 3
+    mf = tp * v
+    posf = mf.where(tp > tp.shift(1), 0).rolling(14).sum()
+    negf = mf.where(tp < tp.shift(1), 0).rolling(14).sum()
+    g["MFI14"] = 100 - 100 / (1 + posf / negf.replace(0, np.nan))
+    clv = (((c - l) - (h - c)) / rng.replace(0, np.nan)).fillna(0)
+    g["AD"] = (clv * v).cumsum()
+    g["AD_up"] = g["AD"] > g["AD"].shift(5)
+
+    # --- WaveTrend (LazyBear 10/21) và Fisher Transform 9
+    esa = tp.ewm(span=10, adjust=False).mean()
+    dd = (tp - esa).abs().ewm(span=10, adjust=False).mean()
+    ci = (tp - esa) / (0.015 * dd.replace(0, np.nan))
+    g["WT1"] = ci.ewm(span=21, adjust=False).mean()
+    g["WT2"] = g["WT1"].rolling(4).mean()
+    hl2 = (h + l) / 2
+    x = ((hl2 - hl2.rolling(9).min()) / (hl2.rolling(9).max() - hl2.rolling(9).min()).replace(0, np.nan)).values
+    fish, pv_, pf_ = np.full(len(g), np.nan), 0.0, 0.0
+    for i, xi in enumerate(x):
+        if np.isnan(xi):
+            continue
+        val = min(max(0.66 * (xi - 0.5) + 0.67 * pv_, -0.999), 0.999)
+        pf_ = 0.5 * np.log((1 + val) / (1 - val)) + 0.5 * pf_
+        pv_, fish[i] = val, pf_
+    g["FISH"] = fish
+    g["FISH_T"] = g["FISH"].shift(1)
     return add_pv_signals(g)
 
 
@@ -582,3 +617,117 @@ def mtf_conclusion(A: dict):
     else:
         text = "Các khung đều đi ngang, chưa có lợi thế rõ ràng."
     return {"score": score, "verdict": verdict, "kind": kind, "text": text, "avail": avail}
+
+
+# ================================================================== BỘ LỌC NÂNG CAO
+INDEX_CODES = {"VNINDEX", "VN-INDEX", "VNI", "VN INDEX", "^VNINDEX"}
+RS_STABLE, WT_OVERSOLD = 0.98, -60
+
+
+def market_series(raw: pd.DataFrame):
+    """Chuỗi thị trường để tính RS: dùng VN-Index nếu file có, không thì trung bình cộng các mã (proxy)."""
+    up = raw["Mã"].astype(str).str.upper()
+    idx = raw[up.isin(INDEX_CODES)]
+    if len(idx):
+        return idx.groupby("Ngày")["Giá đóng cửa"].last().sort_index(), "VN-Index trong file"
+    r = raw.assign(r=raw.groupby("Mã")["Giá đóng cửa"].pct_change()).groupby("Ngày")["r"].mean().fillna(0).sort_index()
+    return (1 + r).cumprod(), "trung bình cộng các mã trong file (proxy, vì file không có VN-Index)"
+
+
+def _rs(g, mkt, n):
+    if len(g) <= n:
+        return np.nan
+    m0, m1 = mkt.get(g["Ngày"].iat[-1 - n], np.nan), mkt.get(g["Ngày"].iat[-1], np.nan)
+    c0, c1 = g["Giá đóng cửa"].iat[-1 - n], g["Giá đóng cửa"].iat[-1]
+    return (c1 / c0) / (m1 / m0) if m0 and m1 and c0 else np.nan
+
+
+def osc_state(a, b):
+    a, b = np.asarray(a, float)[-4:], np.asarray(b, float)[-4:]
+    if len(a) < 2 or np.isnan(a[-1]) or np.isnan(b[-1]):
+        return "-"
+    up, ok = a > b, ~(np.isnan(a) | np.isnan(b))
+    xu = any(ok[i] and ok[i - 1] and up[i] and not up[i - 1] for i in range(1, len(a)))
+    xd = any(ok[i] and ok[i - 1] and (not up[i]) and up[i - 1] for i in range(1, len(a)))
+    return ("Cắt lên" if xu else "Tăng") if up[-1] else ("Cắt xuống" if xd else "Giảm")
+
+
+def _cmp3(a, b, c):
+    if pd.isna(a) or pd.isna(b) or pd.isna(c):
+        return "-"
+    return "TĂNG" if a > b > c else "GIẢM" if a < b < c else "LẪN LỘN"
+
+
+def internal_score(d):
+    s = (1.0 * (d["Trend_NganHan"] == "TĂNG") + 1.5 * (d["Trend_TrungHan"] == "TĂNG")
+         + 1.5 * (d["Trend_DaiHan"] == "TĂNG"))
+    s += 1.5 * (pd.notna(d["RS20"]) and d["RS20"] > 1) + 0.5 * (pd.notna(d["RS50"]) and d["RS50"] > 1)
+    s += 1.0 * (pd.notna(d["Vol/Avg10"]) and d["Vol/Avg10"] >= 1.2) + 0.5 * d["VolStep"] + 0.5 * d["EarlyFlow"]
+    s += 1.0 * (d["Giá"] > d["MA20"] and d["MACD D"] in ("Tăng", "Cắt lên"))
+    s += 1.0 * (pd.notna(d["Dist_High_52W"]) and d["Dist_High_52W"] <= 10)
+    return round(float(s), 1)
+
+
+def build_screener(frames: dict, mkt: pd.Series) -> pd.DataFrame:
+    D, W, M = frames["D"], frames["W"], frames["M"]
+    latest = D["Ngày"].max()
+    vol_m = month_vol_change(M)
+    wg = {code: g for code, g in W.groupby("Mã")}
+    rows = []
+    for code, g in D.groupby("Mã"):
+        if str(code).upper() in INDEX_CODES or g["Ngày"].iat[-1] != latest:
+            continue
+        r = g.iloc[-1]
+        sig, sc, reas, entry, sl, tp, rr = analyze_signal(r)
+        pos, chg = r["Position_%"], r["Chg_%"]
+        chg = 0.0 if pd.isna(chg) else chg
+        zone = zone_of(pos)
+        vm = vol_m.get(code, np.nan)
+        t52 = g.tail(250)
+        hi, lo = t52["Giá cao nhất"].max(), t52["Giá thấp nhất"].min()
+        c = r["Giá đóng cửa"]
+        dh, dl = (hi - c) / hi * 100, (c - lo) / lo * 100
+        w = wg.get(code)
+        ws = (lambda a, b: osc_state(w[a].values, w[b].values)) if w is not None else (lambda a, b: "-")
+        ma = {n: r[f"MA{n}"] for n in (10, 20, 50, 100, 200)}
+        chain = [x for x in ma.values() if pd.notna(x)]
+        align = "-" if len(chain) < 3 else ("Đã align" if all(chain[i] > chain[i + 1] for i in range(len(chain) - 1)) else "Chưa align")
+        macd_d, fish_d = osc_state(g["MACD"].values, g["MACD_sig"].values), osc_state(g["FISH"].values, g["FISH_T"].values)
+        rs20, rs50 = _rs(g, mkt, 20), _rs(g, mkt, 50)
+        wt_min = g["WT1"].tail(3).min()
+        bottom = bool(pd.notna(wt_min) and wt_min <= WT_OVERSOLD and pd.notna(rs20) and rs20 >= RS_STABLE)
+        cross = "Cắt lên" in (macd_d, fish_d)
+        alerts, why = [], []
+        if r["PV_signal"] > 0:
+            alerts.append("MUA"); why.append(PV_LABEL[r["PV_code"]])
+        if r["PV_signal"] < 0:
+            alerts.append("BÁN"); why.append(PV_LABEL[r["PV_code"]])
+        if bottom:
+            alerts.append("Đáy KT"); why.append(f"WaveTrend {wt_min:.0f} (quá bán), RS20 {rs20:.2f}")
+        if cross:
+            alerts.append("Crossover")
+            why.append(" + ".join(n for n, st_ in (("MACD", macd_d), ("Fisher", fish_d)) if st_ == "Cắt lên") + " cắt lên (D)")
+        d = {
+            "Mã": code, "Giá": c, "% Biên độ": r["Range_%"],
+            "Position %": pos, "Zone": zone,
+            "Lực mua/bán": {"High": "Lực mua mạnh", "Low": "Bị bán mạnh", "Mid-Sell": "Giằng co"}.get(zone, "-"),
+            "Giá tăng/giảm": "Giá Không đổi" if abs(chg) < 1e-9 else "Giá Tăng" if chg > 0 else "Giá Giảm",
+            "Vol vs tháng trước": "-" if pd.isna(vm) else "Vol Tăng" if vm > 1 else "Vol Giảm",
+            "Vol/Avg10": r["Vol_vs_MA10"], "Nhận xét": comment_of(zone, chg), "Chg_%": chg,
+            "RS20": rs20, "RS50": rs50, "RS vs VNI": rs20,
+            "MACD D": macd_d, "MACD W": ws("MACD", "MACD_sig"), "Fisher D": fish_d, "Fisher W": ws("FISH", "FISH_T"),
+            "Dist_High_52W": dh, "Dist_Low_52W": dl, "Bars52": len(t52),
+            "Trend_NganHan": "-" if pd.isna(ma[10]) or pd.isna(ma[20]) else "TĂNG" if ma[10] > ma[20] else "GIẢM",
+            "Trend_TrungHan": _cmp3(ma[20], ma[50], ma[100]), "Trend_DaiHan": _cmp3(ma[50], ma[100], ma[200]),
+            "MA align": align, **{f"MA{n}": v for n, v in ma.items()},
+            "VolStep": bool(r["VolStep"]), "EarlyFlow": bool(r["EarlyFlow"]), "DryUp": bool(r["DryUp"]),
+            "NR4": bool(r["NR4"]), "NR7": bool(r["NR7"]), "MFI14": r["MFI14"], "AD_up": bool(r["AD_up"]),
+            "WT1": r["WT1"], "ATR": r["ATR"], "Support_20": r["Support_20"], "Resistance_20": r["Resistance_20"],
+            "Cảnh báo": " · ".join(alerts) if alerts else "-", "alerts": alerts,
+            "Lý do cảnh báo": "; ".join(why) if why else "-", "PV_signal": int(r["PV_signal"]),
+            "Tín hiệu": sig, "Điểm Wyckoff": sc, "Điểm số": sc, "Entry": entry, "Stoploss": sl, "TakeProfit": tp,
+            "R:R": rr, "reasons": reas,
+        }
+        d["Score"] = internal_score(d)
+        rows.append(d)
+    return pd.DataFrame(rows)

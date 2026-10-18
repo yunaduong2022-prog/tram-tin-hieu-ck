@@ -222,38 +222,108 @@ elif data_mode == MODE_EOD:
                + (" · ⚠ có vẻ chưa cập nhật phiên gần nhất, kiểm tra tab Actions trên GitHub" if _stale > 4 else ""))
 
 # ------------------------------------------------------------------ BẢNG THEO DÕI
-vol_month = E.month_vol_change(frames["M"])
-rows = []
-for _, r_ in latest_df.iterrows():
-    sig, sc, reas, entry, sl, tp, rr = E.analyze_signal(r_)
-    pos, chg = r_["Position_%"], r_["Chg_%"]
-    zone = E.zone_of(pos)
-    chg = 0.0 if pd.isna(chg) else chg
-    vm = vol_month.get(r_["Mã"], np.nan)
-    pv_code = r_["PV_code"]
-    rows.append({
-        "Mã": r_["Mã"], "Nhóm": ", ".join(MEMBER.get(r_["Mã"], [])) or "Khác",
-        "Wyckoff": WYK.label(WY_TABLE.get(r_["Mã"])), "_wy": WY_TABLE.get(r_["Mã"]),
-        "Giá": r_["Giá đóng cửa"], "% Biên độ": r_["Range_%"], "Position %": pos,
-        "Zone": zone,
-        "Lực mua/bán": {"High": "Lực mua mạnh", "Low": "Bị bán mạnh", "Mid-Sell": "Giằng co"}.get(zone, "-"),
-        "Giá tăng/giảm": "Giá Không đổi" if abs(chg) < 1e-9 else "Giá Tăng" if chg > 0 else "Giá Giảm",
-        "Vol vs tháng trước": "-" if pd.isna(vm) else "Vol Tăng" if vm > 1 else "Vol Giảm",
-        "Vol/Avg10": r_["Vol_vs_MA10"], "Nhận xét": E.comment_of(zone, chg),
-        "Cảnh báo": "MUA" if r_["PV_signal"] > 0 else "BÁN" if r_["PV_signal"] < 0 else "-",
-        "Lý do cảnh báo": E.PV_LABEL.get(pv_code, "-"),
-        "Tín hiệu": sig, "Điểm số": sc, "Entry": entry, "Stoploss": sl, "TakeProfit": tp, "R:R": rr, "reasons": reas,
-    })
-res_df = pd.DataFrame(rows)
-TABLE_COLS = ["ST", "Mã", "Nhóm", "Giá", "% Biên độ", "Position %", "Zone", "Lực mua/bán", "Giá tăng/giảm",
-              "Vol vs tháng trước", "Vol/Avg10", "Nhận xét", "Wyckoff", "Cảnh báo", "Lý do cảnh báo"]
+@st.cache_data(show_spinner=False)
+def market_cached(_raw: pd.DataFrame, key: str):
+    return E.market_series(_raw)
+
+
+@st.cache_data(show_spinner="Đang tính Score, RS, MACD/Fisher, MA...")
+def screener_cached(_frames: dict, mkt: pd.Series, key: str) -> pd.DataFrame:
+    return E.build_screener(_frames, mkt)
+
+
+mkt, mkt_src = market_cached(raw, WY_KEY)
+res_df = screener_cached(frames, mkt, WY_KEY).copy()
+res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
+res_df["_wy"] = res_df["Mã"].map(WY_TABLE.get)
+res_df["Wyckoff"] = res_df["_wy"].map(WYK.label)
+
+TABLE_COLS = ["ST", "Mã", "Nhóm", "Giá", "Score", "RS vs VNI", "% Biên độ", "Position %", "Zone", "Lực mua/bán",
+              "Giá tăng/giảm", "Vol vs tháng trước", "Vol/Avg10", "Nhận xét", "MACD D", "MACD W", "Fisher D",
+              "Fisher W", "MA align", "Wyckoff", "Cảnh báo", "Lý do cảnh báo"]
+ALERT_OPTS = ["MUA", "BÁN", "Crossover", "Đáy KT", "Không có"]
+FLOW_OPTS = {"Vol tăng 3 phiên liên tiếp": "VolStep", "Dòng tiền sớm (gom ngầm)": "EarlyFlow",
+             "Cạn cung": "DryUp", "NR4 (biên độ hẹp nhất 4 phiên)": "NR4", "NR7 (biên độ hẹp nhất 7 phiên)": "NR7"}
+MA_OPTS = ["Tất cả", "Ngắn hạn - TĂNG (MA10 > MA20)", "Trung hạn - TĂNG (MA20 > MA50 > MA100)",
+           "Dài hạn - TĂNG (MA50 > MA100 > MA200)"]
+MA_COL = {MA_OPTS[1]: "Trend_NganHan", MA_OPTS[2]: "Trend_TrungHan", MA_OPTS[3]: "Trend_DaiHan"}
+WY_OPTS = ["Tích lũy", "Phân phối", "Pha C", "Pha D", "Pha E"]
 
 
 def header():
     st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · "
-               f"tối thiểu {n_sessions} phiên/mã")
+               f"tối thiểu {n_sessions} phiên/mã · RS so với {mkt_src}")
     if n_sessions < 60:
         st.warning("Dữ liệu dưới 60 phiên/mã: Ichimoku, MA50/MA200, khung Tuần/Tháng và backtest sẽ thiếu hoặc không đáng tin.")
+    elif n_sessions < 250:
+        st.caption("ℹ️ Dưới 250 phiên/mã: 'đỉnh/đáy 52 tuần', MA200 và cấu trúc dài hạn chỉ tính trên phần dữ liệu có sẵn.")
+
+
+def wy_match(w, sel):
+    if not w:
+        return False
+    return any((s == "Tích lũy" and w["kind"] == "acc") or (s == "Phân phối" and w["kind"] == "dist")
+               or (s.startswith("Pha ") and w["phase"] == s[-1]) for s in sel)
+
+
+def filter_panel():
+    with st.expander("🔍 Bộ lọc nâng cao", expanded=True):
+        a1, a2, a3, a4 = st.columns(4)
+        alerts = a1.multiselect("Cảnh báo / Tín hiệu", ALERT_OPTS, default=ALERT_OPTS,
+                                help="MUA/BÁN: giá + khối lượng · Crossover: MACD/Fisher vừa cắt lên (3 phiên) · "
+                                     "Đáy KT: WaveTrend quá bán + RS ổn định")
+        zones = a2.multiselect("Zone", ["High", "Mid-Sell", "Low"], default=["High", "Mid-Sell", "Low"])
+        min_score = a3.slider("Score tối thiểu (0-10)", 0.0, 10.0, 0.0, 0.5, help="≥ 5 = trung bình khá trở lên")
+        min_rs = a4.slider("RS vs VNI tối thiểu", 0.80, 1.50, 0.80, 0.01,
+                           help="RS = hiệu suất 20 phiên của mã / của thị trường. Đặt 1.00 để chỉ lấy mã mạnh hơn thị trường")
+        b1, b2, b3, b4 = st.columns(4)
+        min_vol = b1.slider("Vol/Avg10 tối thiểu", 0.0, 5.0, 0.0, 0.1, help="Ví dụ 1.2 = bắt đầu có dòng tiền tăng")
+        align = b2.selectbox("MA Alignment (MA10>20>50>100>200)", ["Tất cả", "Đã align", "Chưa align"])
+        ma_trend = b3.selectbox("Khung cấu trúc - MA", MA_OPTS)
+        pos52 = b4.selectbox("Vị trí giá so với 52 tuần", ["Tất cả", "Gần Đỉnh 52 tuần (≤ 5%)", "Gần Đáy 52 tuần (≤ 10%)"])
+        c1, c2, c3, c4 = st.columns(4)
+        all_groups = [g_ for g_ in WL.group_names() if g_ != WL.OLD] + ["Khác"]
+        groups = c1.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
+                                help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
+        wy = c2.multiselect("Wyckoff (pha / cấu trúc)", WY_OPTS, default=[], placeholder="Tất cả",
+                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
+        flow = c3.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), default=[],
+                              help="Chọn nhiều mục = phải thoả tất cả")
+        search = c4.text_input("Tìm mã", "").upper()
+        above200 = c4.checkbox("Chỉ lấy mã nằm trên MA200")
+    return dict(alerts=alerts, zones=zones, min_score=min_score, min_rs=min_rs, min_vol=min_vol, align=align,
+                ma_trend=ma_trend, pos52=pos52, groups=groups, wy=wy, flow=flow, search=search, above200=above200)
+
+
+def apply_filters(d: pd.DataFrame, p: dict) -> pd.DataFrame:
+    f = d[d["Zone"].isin(p["zones"])]
+    sel = set(p["alerts"])
+    f = f[f["alerts"].apply(lambda a: bool(sel & set(a)) if a else "Không có" in sel).astype(bool)]
+    if p["groups"]:
+        f = f[f["Nhóm"].apply(lambda t_: any(g_ in [x.strip() for x in t_.split(",")] for g_ in p["groups"])).astype(bool)]
+    if p["wy"]:
+        f = f[f["_wy"].apply(lambda w: wy_match(w, p["wy"])).astype(bool)]
+    if p["min_score"] > 0:
+        f = f[f["Score"] >= p["min_score"]]
+    if p["min_rs"] > 0.80:
+        f = f[f["RS20"] >= p["min_rs"]]
+    if p["min_vol"] > 0:
+        f = f[f["Vol/Avg10"].fillna(0) >= p["min_vol"]]
+    if p["align"] != "Tất cả":
+        f = f[f["MA align"] == p["align"]]
+    if p["ma_trend"] != "Tất cả":
+        f = f[f[MA_COL[p["ma_trend"]]] == "TĂNG"]
+    if p["pos52"].startswith("Gần Đỉnh"):
+        f = f[f["Dist_High_52W"] <= 5.0]
+    elif p["pos52"].startswith("Gần Đáy"):
+        f = f[f["Dist_Low_52W"] <= 10.0]
+    if p["above200"]:
+        f = f[f["Giá"] > f["MA200"]]
+    for k in p["flow"]:
+        f = f[f[FLOW_OPTS[k]]]
+    if p["search"]:
+        f = f[f["Mã"].str.contains(p["search"], regex=False)]
+    return f
 
 
 def style_table(f: pd.DataFrame):
@@ -261,80 +331,178 @@ def style_table(f: pd.DataFrame):
             "Low": "background-color:#DDF1EB;color:#0A6B54", "Mid-Sell": "background-color:#FADADD;color:#8A2B3A"}
     good, bad = "color:#0E8A6D;font-weight:600", "color:#C93A52;font-weight:600"
     colors = {"Lực mua mạnh": good, "Bị bán mạnh": bad, "Giá Tăng": good, "Giá Giảm": bad,
-              "Vol Tăng": good, "Vol Giảm": bad,
+              "Vol Tăng": good, "Vol Giảm": bad, "Tăng": good, "Giảm": bad, "Đã align": good,
+              "Cắt lên": "background-color:#DDF1EB;color:#0A6B54;font-weight:700",
+              "Cắt xuống": "background-color:#FCE4E8;color:#C93A52;font-weight:700",
               "Tăng khỏe / Tiền vào": "background-color:#DDF1EB;color:#0A6B54;font-weight:600",
               "Còn tăng": "background-color:#B7F5A0;color:#14532D;font-weight:600",
               "Giảm mạnh / Áp lực xả": "background-color:#FFB3B3;color:#9B1C1C;font-weight:600",
               "Cầu đỡ / Rút chân": "background-color:#FADADD;color:#8A2B3A",
               "Giảm lành tính": "background-color:#FDECEC;color:#8A2B3A"}
-    sty = f.style.format({"Giá": "{:,.2f}", "% Biên độ": "{:.1f}%", "Position %": "{:.1f}%",
-                          "Vol/Avg10": "{:.2f}"}, na_rep="-")
-    ap = lambda s: s.map if hasattr(s, "map") else s.applymap
+    sty = f.style.format({"Giá": "{:,.2f}", "% Biên độ": "{:.1f}%", "Position %": "{:.1f}%", "Vol/Avg10": "{:.2f}",
+                          "Score": "{:.1f}", "RS vs VNI": "{:.2f}"}, na_rep="-")
+    ap = lambda x: x.map if hasattr(x, "map") else x.applymap
     sty = ap(sty)(lambda v: zone.get(v, ""), subset=["Zone"])
     sty = ap(sty)(lambda v: colors.get(v, ""),
-                  subset=["Lực mua/bán", "Giá tăng/giảm", "Vol vs tháng trước", "Nhận xét"])
+                  subset=["Lực mua/bán", "Giá tăng/giảm", "Vol vs tháng trước", "Nhận xét", "MACD D", "MACD W",
+                          "Fisher D", "Fisher W", "MA align"])
     wyc = lambda v: ("color:#0E8A6D;font-weight:600" if "Tích lũy" in str(v) else
                      "color:#C93A52;font-weight:600" if "Phân phối" in str(v) else "")
     sty = ap(sty)(wyc, subset=["Wyckoff"])
-    alert = {"MUA": "background-color:#0E8A6D;color:#fff;font-weight:700",
-             "BÁN": "background-color:#C93A52;color:#fff;font-weight:700"}
-    return ap(sty)(lambda v: alert.get(v, ""), subset=["Cảnh báo"])
+
+    def alert(v):
+        v = str(v)
+        return ("background-color:#0E8A6D;color:#fff;font-weight:700" if v.startswith("MUA") else
+                "background-color:#C93A52;color:#fff;font-weight:700" if v.startswith("BÁN") else
+                "background-color:#FDF1D6;color:#8A5A00;font-weight:700" if v != "-" else "")
+    sty = ap(sty)(alert, subset=["Cảnh báo"])
+    return ap(sty)(lambda v: "color:#0E8A6D;font-weight:700" if pd.notna(v) and v >= 1 else
+                   "color:#C93A52" if pd.notna(v) else "", subset=["RS vs VNI"])
+
+
+# ------------------------------------------------------------------ POPUP CHI TIẾT
+def advice(r):
+    """Danh sách (tiêu đề, màu, lời khuyên) từ góc nhìn định lượng."""
+    c, atr = r["Giá"], r["ATR"] if pd.notna(r["ATR"]) else r["Giá"] * 0.02
+    risk = 1.5 * atr
+    sl, t1, t2 = c - risk, c + 2 * risk, c + 3 * risk
+    vr = r["Vol/Avg10"] if pd.notna(r["Vol/Avg10"]) else 0
+    out = []
+    if r["PV_signal"] > 0:
+        out.append(("MUA — giá + khối lượng", "green",
+                    f"Vùng vào {fp(c - 0.25 * atr)}-{fp(c + 0.25 * atr)} · cắt lỗ {fp(sl)} ({risk / c * 100:.1f}%) · "
+                    f"chốt 1: {fp(t1)} (R:R 1:2), chốt 2: {fp(t2)} (1:3). Nếu hôm sau mất {fp(c - 0.5 * atr)} với khối lượng "
+                    "lớn thì nên thoát sớm."))
+    if r["PV_signal"] < 0:
+        out.append(("BÁN — giá + khối lượng", "red",
+                    f"Nếu đang nắm giữ: cân nhắc giảm tỷ trọng hoặc dời cắt lỗ lên sát {fp(c - 0.5 * atr)}. Chưa mua mới cho đến "
+                    f"khi giá đóng cửa lại trên MA20 ({fp(r['MA20'])}) kèm khối lượng ≥ 1.2×."))
+    if "Đáy KT" in r["alerts"]:
+        out.append(("Đáy KT — Cảnh báo sớm", "amber",
+                    f"WaveTrend {r['WT1']:.0f} ở vùng quá bán, RS vẫn ổn định nên áp lực bán chưa phải kiểu xả cả thị trường. "
+                    f"Đây mới là cảnh báo sớm, chưa phải điểm mua: chờ nến đóng cửa trên MA10 ({fp(r['MA10'])}) với Vol/Avg10 ≥ 1.2 "
+                    f"(hiện {vr:.2f}). Nếu thăm dò thì tỷ trọng nhỏ, cắt lỗ {fp(sl)}, mục tiêu đầu MA20 ({fp(r['MA20'])})."))
+    if "Crossover" in r["alerts"]:
+        out.append(("Crossover Signal", "green",
+                    f"MACD/Fisher vừa cắt lên: động lượng đang đảo chiều tăng. Ưu tiên khi giá đóng trên MA20 ({fp(r['MA20'])}); "
+                    f"điểm vào khi vượt đỉnh phiên, cắt lỗ {fp(sl)}, mục tiêu {fp(t1)}. Tín hiệu yếu đi nếu Vol/Avg10 < 1.0 (hiện {vr:.2f})."))
+    if not out:
+        out.append(("Chưa có cảnh báo", "gray", "Chưa có điều kiện Mua/Bán/Crossover/Đáy KT: đứng ngoài và theo dõi."))
+    return out
+
+
+@st.dialog("Chi tiết mã", width="large")
+def show_detail(code):
+    r = res_df[res_df["Mã"] == code].iloc[0]
+    st.subheader(f"{code} · {r['Giá']:,.2f} ({r['Chg_%']:+.2f}%)")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Score", f"{r['Score']:.1f}/10")
+    m2.metric("RS vs VNI", f"{r['RS vs VNI']:.2f}" if pd.notna(r["RS vs VNI"]) else "-")
+    m3.metric("MA Alignment", r["MA align"])
+    m4.metric("Wyckoff", r["Wyckoff"])
+
+    st.markdown("##### ⚡ Cảnh báo sớm & hành động")
+    for title, k, txt in advice(r):
+        st.markdown(card(f'{tag(title, k)}', f'<div class="muted" style="font-size:13px">{txt}</div>'),
+                    unsafe_allow_html=True)
+
+    st.markdown("##### 📈 Tín hiệu đa khung (MACD & Fisher)")
+    st.dataframe(pd.DataFrame({"Daily": [r["MACD D"], r["Fisher D"]], "Weekly": [r["MACD W"], r["Fisher W"]]},
+                              index=["MACD (12-26-9)", "Fisher Transform (9)"]), **_STRETCH_DF)
+    st.caption("Cắt lên/xuống = vừa cắt trong 3 nến gần nhất. Khung Tuần cần đủ ~35 tuần dữ liệu, thiếu thì hiện '-'.")
+
+    st.markdown("##### 🏭 Trạng thái ngành & dòng tiền")
+    left, right = st.columns(2)
+    with left:
+        groups = [g_ for g_ in MEMBER.get(code, []) if g_ != WL.OLD]
+        if groups:
+            for g_ in groups[:3]:
+                peers = res_df[res_df["Nhóm"].apply(lambda t_: g_ in [x.strip() for x in t_.split(",")])]
+                up, rs, strong = (peers["Giá tăng/giảm"] == "Giá Tăng").mean() * 100, peers["RS20"].mean(), (peers["Score"] >= 5).mean() * 100
+                verdict = "Mạnh" if rs > 1 and up >= 50 else "Yếu" if rs < 1 and up < 50 else "Phân hóa"
+                st.markdown(card(f'Nhóm: {g_} {tag(verdict, "green" if verdict == "Mạnh" else "red" if verdict == "Yếu" else "amber")}',
+                                 row("Số mã trong dữ liệu", len(peers)) + row("% mã đang tăng", f"{up:.0f}%")
+                                 + row("RS trung bình", f"{rs:.2f}") + row("% mã Score ≥ 5", f"{strong:.0f}%")),
+                            unsafe_allow_html=True)
+        else:
+            st.info("Mã này chưa thuộc nhóm ngành nào trong watchlist.py.")
+        w = r["_wy"]
+        if w:
+            st.markdown(card("Wyckoff", f'{tag(r["Wyckoff"], "green" if w["kind"] == "acc" else "red" if w["kind"] == "dist" else "gray")}'
+                             f' <span class="muted">khớp mẫu {w["score"]}%</span>'), unsafe_allow_html=True)
+    with right:
+        yn = lambda b: "✅" if b else "—"
+        st.markdown(card("Dòng tiền nội tại",
+                         row("Vol/Avg10", f"{r['Vol/Avg10']:.2f}" if pd.notna(r["Vol/Avg10"]) else "-")
+                         + row("Vol tăng 3 phiên liên tiếp", yn(r["VolStep"])) + row("Dòng tiền sớm (gom ngầm)", yn(r["EarlyFlow"]))
+                         + row("Cạn cung (vol thấp, giữ MA20)", yn(r["DryUp"])) + row("NR4 / NR7", f'{yn(r["NR4"])} / {yn(r["NR7"])}')
+                         + row("MFI 14", f"{r['MFI14']:.0f}" if pd.notna(r["MFI14"]) else "-")
+                         + row("A/D 5 phiên", "tăng" if r["AD_up"] else "giảm")), unsafe_allow_html=True)
+    st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
 
 # ------------------------------------------------------------------ TRANG 1: BỘ LỌC
 def page_filter():
     st.title("🔍 Bộ Lọc Cổ Phiếu")
     header()
-    st.caption("**Cảnh báo MUA/BÁN** (nến mới nhất) dựa trên giá + khối lượng: MUA khi phá kháng cự 20 phiên với vol ≥ 1.5× MA10 "
-               "(đóng sát đỉnh) hoặc quét thủng hỗ trợ rồi rút chân; BÁN khi phá hỗ trợ với vol lớn, vượt đỉnh thất bại, "
-               "vol đột biến mà đóng xa đỉnh, hoặc giảm mạnh kèm vol lớn dưới MA20.")
-    st.caption("Zone: Position ≥ 70% = **High** (giá đóng gần đỉnh → mai dễ kéo tiếp) · ≤ 30% = **Low** "
-               "(giá đóng gần đáy → mai dễ đạp tiếp) · còn lại = Mid-Sell. "
-               "Vol vs tháng trước: KL trung bình/phiên của tháng hiện tại so với tháng trước (tính từ biểu đồ Tháng).")
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        filter_sig = st.multiselect("Cảnh báo", ["MUA", "BÁN", "-"], default=["MUA", "BÁN", "-"],
-                                    format_func=lambda v: "Không có" if v == "-" else v)
-    with c2:
-        zones = st.multiselect("Zone", ["High", "Mid-Sell", "Low"], default=["High", "Mid-Sell", "Low"])
-    with c3:
-        min_vol = st.slider("Vol/Avg10 tối thiểu", 0.0, 3.0, 0.0, 0.1)
-    with c4:
-        search = st.text_input("Tìm mã", "").upper()
-
-    d1, d2 = st.columns([2, 1])
-    all_groups = [g_ for g_ in WL.group_names() if g_ != WL.OLD] + ["Khác"]
-    with d1:
-        sel_groups = st.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
-                                    help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
-    with d2:
-        wy_opt = st.selectbox("Wyckoff", ["Tất cả", "Tích lũy", "Phân phối", "Đã có Spring/UT hoặc SOS/SOW (pha C–E)"])
-
-    f = res_df[res_df["Cảnh báo"].isin(filter_sig) & res_df["Zone"].isin(zones) & (res_df["Vol/Avg10"].fillna(0) >= min_vol)]
-    if sel_groups:
-        f = f[f["Nhóm"].apply(lambda t_: any(g_ in [x.strip() for x in t_.split(",")] for g_ in sel_groups))]
-    if wy_opt == "Tích lũy":
-        f = f[f["_wy"].apply(lambda w: bool(w) and w["kind"] == "acc")]
-    elif wy_opt == "Phân phối":
-        f = f[f["_wy"].apply(lambda w: bool(w) and w["kind"] == "dist")]
-    elif wy_opt.startswith("Đã có"):
-        f = f[f["_wy"].apply(lambda w: bool(w) and w["phase"] in ("C", "D", "E"))]
-    if search:
-        f = f[f["Mã"].str.contains(search)]
-    f = (f.assign(_o=f["Cảnh báo"].map({"MUA": 0, "BÁN": 1, "-": 2}))
-          .sort_values(["_o", "Vol/Avg10"], ascending=[True, False]).drop(columns="_o").reset_index(drop=True))
+    st.caption("Zone: Position ≥ 70% = **High** · ≤ 30% = **Low** · còn lại Mid-Sell. "
+               "**Score 0-10** = cấu trúc MA (4) + RS (2) + dòng tiền (2) + giá/MACD (1) + gần đỉnh 52 tuần (1). "
+               "MUA/BÁN theo giá + khối lượng; Crossover = MACD/Fisher vừa cắt lên; Đáy KT = WaveTrend quá bán + RS ổn định.")
+    f = apply_filters(res_df, filter_panel())
+    f = (f.assign(_o=f["Cảnh báo"].map(lambda v: 0 if v.startswith("MUA") else 1 if v.startswith("BÁN") else 2 if v != "-" else 3))
+          .sort_values(["_o", "Score"], ascending=[True, False]).drop(columns="_o").reset_index(drop=True))
     f.insert(0, "ST", np.arange(1, len(f) + 1))
 
-    st.caption(f"{len(f)} mã phù hợp · bấm vào một dòng để chọn, rồi bấm nút bên dưới để xem chi tiết.")
+    st.caption(f"{len(f)} mã phù hợp · bấm vào một dòng để chọn, rồi mở chi tiết hoặc biểu đồ.")
     event = st.dataframe(style_table(f[TABLE_COLS]), hide_index=True, **_STRETCH_DF,
                          on_select="rerun", selection_mode="single-row", height=620)
+    if f.empty:
+        st.info("Không có mã nào thoả bộ lọc hiện tại. Hãy nới lỏng bớt điều kiện.")
     sel = event.selection.rows if event and event.selection else []
-    if sel:
+    if sel and len(f):
         code = f.iloc[sel[0]]["Mã"]
-        if st.button(f"📊 Xem cổ phiếu {code}", type="primary"):
+        b1, b2, _ = st.columns([1, 1, 3])
+        if b1.button(f"🔎 Chi tiết {code}", type="primary"):
+            show_detail(code)
+        if b2.button(f"📊 Xem biểu đồ {code}"):
             st.session_state["selected_code"] = code
             st.switch_page(stock_page)
+
+
+# ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
+def page_ma():
+    st.title("🧱 Khung cấu trúc - MA")
+    header()
+    st.caption("Vị trí giá so với MA10 · MA20 · MA50 · MA100 · MA200 và cấu trúc ngắn, trung, dài hạn.")
+    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("TỔNG SỐ MÃ", f"{len(f)} mã")
+    c2.metric("NGẮN HẠN · TĂNG", int((f["Trend_NganHan"] == "TĂNG").sum()), "MA10 > MA20", delta_color="off")
+    c3.metric("TRUNG HẠN · TĂNG", int((f["Trend_TrungHan"] == "TĂNG").sum()), "MA20 > MA50 > MA100", delta_color="off")
+    c4.metric("DÀI HẠN · TĂNG", int((f["Trend_DaiHan"] == "TĂNG").sum()), "MA50 > MA100 > MA200", delta_color="off")
+    st.divider()
+    if len(f) > 60:
+        st.caption("Hiển thị 60 mã có Score cao nhất; dùng bộ lọc để thu hẹp.")
+    cols = st.columns(3)
+    for i, (_, r) in enumerate(f.head(60).iterrows()):
+        with cols[i % 3], st.container(border=True):
+            h1, h2 = st.columns([2, 1])
+            h1.subheader(r["Mã"])
+            h1.caption(f"Giá: {r['Giá']:,.2f} · Score {r['Score']:.1f}")
+            st_ = r["Trend_NganHan"]
+            h2.markdown(f":{'green' if st_ == 'TĂNG' else 'red' if st_ == 'GIẢM' else 'orange'}[**{st_}**]")
+            t1, t2, t3 = st.columns(3)
+            t1.caption(f"Ngắn hạn: **{r['Trend_NganHan']}**")
+            t2.caption(f"Trung hạn: **{r['Trend_TrungHan']}**")
+            t3.caption(f"Dài hạn: **{r['Trend_DaiHan']}**")
+            st.markdown("**GIÁ SO VỚI MA**")
+            for n in (10, 20, 50, 100, 200):
+                v = r[f"MA{n}"]
+                if pd.isna(v) or not v:
+                    st.text(f"MA{n:<3}: chưa đủ dữ liệu")
+                    continue
+                dp = (r["Giá"] - v) / v * 100
+                st.text(f"MA{n:<3}: {v:>8.2f} ({dp:+6.2f}%) {'🟢' if dp >= 0 else '🔴'}")
 
 
 # ------------------------------------------------------------------ HTML CARDS
@@ -726,4 +894,5 @@ def page_stock():
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG
 filter_page = st.Page(page_filter, title="Bộ lọc", icon="🔍", url_path="bo-loc", default=True)
 stock_page = st.Page(page_stock, title="Cổ phiếu", icon="📊", url_path="co-phieu")
-st.navigation([filter_page, stock_page]).run()
+ma_page = st.Page(page_ma, title="Khung cấu trúc MA", icon="🧱", url_path="khung-ma")
+st.navigation([filter_page, stock_page, ma_page]).run()

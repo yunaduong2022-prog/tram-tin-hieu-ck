@@ -19,7 +19,6 @@ import sys
 import time
 
 import pandas as pd
-import requests
 
 import realtime_data as RD
 import watchlist as WL
@@ -48,34 +47,6 @@ def _is_fatal(e: Exception) -> bool:
 def _is_rate(e: Exception) -> bool:
     code, text = str(getattr(e, "code", "")).upper(), str(e).lower()
     return "RATE_LIMIT" in code or any(k in text for k in ("429", "too many", "rate limit", "ratelimit", "giới hạn tần suất"))
-
-
-# ------------------------------------------------------------------ HÀM GỬI TELEGRAM
-def send_telegram_alert(message):
-    """Hàm gửi tin nhắn tóm tắt về Telegram"""
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    
-    if not token or not chat_id:
-        print("⚠️ Chưa cấu hình Secrets Telegram trên GitHub.")
-        return
-        
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
-    
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code == 200:
-            print("✅ Đã gửi thông báo Telegram thành công!")
-        else:
-            print(f"❌ Lỗi gửi Telegram: {response.text}")
-    except Exception as e:
-        print(f"❌ Lỗi kết nối Telegram: {e}")
 
 
 # ------------------------------------------------------------------ CHUẨN HÓA
@@ -283,20 +254,6 @@ def main(argv=None) -> int:
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(f"### Dữ liệu cuối phiên\n\n{line}\n\n" + ("\n".join(f"- {x}" for x in failed[:20]) if failed else "") + "\n")
-
-    # --- TÍCH HỢP GỬI BÁO CÁO TELEGRAM CUỐI PHIÊN ---
-    try:
-        if not result.empty:
-            # Lọc các mã có tín hiệu dòng tiền chớm vào hoặc bứt phá để gửi thông báo
-            msg = f"📊 *TRẠM TÍN HIỆU CK - BÁO CÁO CUỐI PHIÊN*\n"
-            msg += f"🗓 Ngày: {now.strftime('%d/%m/%Y')}\n"
-            msg += f"📈 Tổng số mã cập nhật thành công: *{len(updated)}/{len(symbols)}*\n\n"
-            msg += f"ℹ️ Hệ thống đã hoàn tất quét dữ liệu EOD và ghi file thành công."
-            
-            send_telegram_alert(msg)
-    except Exception as err:
-        print(f"Lỗi khi xử lý dữ liệu gửi Telegram: {err}")
-
     return 0 if (not fatal and len(updated) >= 0.7 * len(symbols)) else 1
 
 
