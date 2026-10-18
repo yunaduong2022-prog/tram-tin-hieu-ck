@@ -15,16 +15,15 @@ ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ
 
 DARK_CSS = """
 <style>
-:root{--bg:#0D1117;--panel:#161B22;--panel2:#1C222B;--line:#2A313C;--txt:#E6EDF3;--muted:#8B949E;--accent:#2DD4A7}
 /* ===== MEGA NAV BAR ===== */
-.st-key-mega-nav{position:sticky;top:0;z-index:999;margin:0 -1rem 14px;background:var(--panel);
+.st-key-mega-nav{position:sticky;top:0;z-index:999;margin:0 -1rem 14px;background:var(--bg2);
   border-bottom:1px solid var(--line);padding:6px 1rem 0}
 .st-key-mega-nav [data-testid="stVerticalBlock"]{gap:0}
 .st-key-mega-nav [data-testid="stButtonGroup"]{gap:0}
 .st-key-mega-nav button{background:transparent!important;border:none!important;border-radius:0!important;
   box-shadow:none!important;color:var(--muted)!important;font-weight:600;padding:10px 18px;
   border-bottom:2px solid transparent!important;transition:color .15s,background .15s,border-color .15s}
-.st-key-mega-nav button:hover{color:var(--txt)!important;background:rgba(255,255,255,.04)!important}
+.st-key-mega-nav button:hover{color:var(--txt)!important;background:var(--line2)!important}
 .st-key-mega-nav button[aria-checked="true"],.st-key-mega-nav button[aria-pressed="true"],
 .st-key-mega-nav button[data-testid*="Active"]{color:var(--accent)!important;border-bottom-color:var(--accent)!important;background:transparent!important}
 /* hàng sub-menu: trượt xuống mượt */

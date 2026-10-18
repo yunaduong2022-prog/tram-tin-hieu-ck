@@ -14,28 +14,33 @@ import engine as E
 import watchlist as WL
 import wyckoff as WYK
 import nav as NAV
+import theme as TH
 import stock_tabs as ST
 
 st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
 
+with st.sidebar:
+    TH.toggle()
+TH.inject()
+
 st.markdown("""
 <style>
- .ticket-buy{background:#DDF1EB;border-left:5px solid #0E8A6D;padding:12px 15px;border-radius:8px;color:#0A6B54;margin-bottom:12px}
- .card{background:#fff;border:1px solid #E3E8EF;border-radius:12px;padding:14px 16px;margin-bottom:14px}
- .ct{font-weight:700;font-size:14px;margin-bottom:8px;color:#1F2937}
+ .ticket-buy{background:var(--tag-green-bg);border-left:5px solid var(--accent);padding:12px 15px;border-radius:8px;color:var(--tag-green-fg);margin-bottom:12px}
+ .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+ .ct{font-weight:700;font-size:14px;margin-bottom:8px;color:var(--txt)}
  .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;font-size:13px}
- .muted{color:#6B7280;font-size:12px;line-height:1.5}
+ .muted{color:var(--muted);font-size:12px;line-height:1.5}
  .big{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0 6px}
- .c-red{color:#C93A52}.c-green{color:#0E8A6D}.c-amber{color:#B7791F}.c-gray{color:#6B7280}
+ .c-red{color:var(--red)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-gray{color:var(--muted)}
  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
- .tag-red{background:#FCE4E8;color:#C93A52}.tag-green{background:#DDF1EB;color:#0A6B54}
- .tag-amber{background:#FDF1D6;color:#8A5A00}.tag-gray{background:#EEF1F5;color:#4B5563}
- .box{background:#F4F6F9;border-radius:8px;padding:8px 12px;margin:8px 0}
- .bar{height:7px;background:#E5E7EB;border-radius:99px;overflow:hidden;margin:6px 0 4px}
- .bar>div{height:100%;border-radius:99px}.bg-red{background:#C93A52}.bg-green{background:#0E8A6D}.bg-gray{background:#9CA3AF}
+ .tag-red{background:var(--tag-red-bg);color:var(--red)}.tag-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}
+ .tag-amber{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}.tag-gray{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
+ .box{background:var(--bg2);border-radius:8px;padding:8px 12px;margin:8px 0}
+ .bar{height:7px;background:var(--bar);border-radius:99px;overflow:hidden;margin:6px 0 4px}
+ .bar>div{height:100%;border-radius:99px}.bg-red{background:var(--red)}.bg-green{background:var(--green)}.bg-gray{background:#9CA3AF}
  .chip{display:inline-block;min-width:42px;text-align:center;padding:2px 6px;border-radius:6px;font-size:12px;font-weight:700;margin-right:8px}
- .chip-red{background:#FCE4E8;color:#C93A52}.chip-green{background:#DDF1EB;color:#0A6B54}.chip-gray{background:#EEF1F5;color:#4B5563}
- .item{padding:6px 0;border-bottom:1px solid #F0F2F5;font-size:13px}
+ .chip-red{background:var(--tag-red-bg);color:var(--red)}.chip-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}.chip-gray{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
+ .item{padding:6px 0;border-bottom:1px solid var(--line2);font-size:13px}
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,29 +49,29 @@ st.markdown("""
 /* Lưới hiển thị các thẻ cổ phiếu */
 .stock-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:16px}
 /* Thẻ cổ phiếu */
-.stock-card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,.04);
+.stock-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 2px 6px var(--shadow);
  transition:transform .15s ease,box-shadow .15s ease;display:flex;flex-direction:column;justify-content:space-between;height:100%}
-.stock-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.08);border-color:#CBD5E1}
+.stock-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px var(--shadow);border-color:var(--muted)}
 /* Header thẻ */
 .stock-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
-.stock-code{font-size:22px;font-weight:800;color:#0F172A;line-height:1}
-.stock-company{font-size:11px;color:#64748B;margin-top:4px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.stock-code{font-size:22px;font-weight:800;color:var(--txt2);line-height:1}
+.stock-company{font-size:11px;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 /* Giá & biến động */
-.price-box{display:flex;align-items:baseline;gap:10px;margin:10px 0;background:#F8FAFC;padding:8px 12px;border-radius:8px}
+.price-box{display:flex;align-items:baseline;gap:10px;margin:10px 0;background:var(--card2);padding:8px 12px;border-radius:8px}
 .price-val{font-size:20px;font-weight:800}
 .price-chg{font-size:13px;font-weight:700}
 /* Chỉ số cơ bản (lưới 2x2) */
-.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:#475569;margin-bottom:12px}
-.metric-item b{color:#0F172A}
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:var(--muted);margin-bottom:12px}
+.metric-item b{color:var(--txt2)}
 .stock-card.in-box{border:none;box-shadow:none;padding:2px 2px 0;background:transparent;transform:none}
 .stock-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px}
 .stock-card .price-box{margin:8px 0 10px}
-.stock-card .metrics-grid{border-top:1px solid #F1F5F9;padding-top:10px;margin-bottom:10px}
+.stock-card .metrics-grid{border-top:1px solid var(--line2);padding-top:10px;margin-bottom:10px}
 .stock-card .tag-container{margin-bottom:6px}
 /* Nhãn dự báo & chip */
 .badge-forecast{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap}
-.tag-container{display:flex;flex-wrap:wrap;gap:4px;padding-top:10px;border-top:1px solid #F1F5F9}
-.tag-chip{background:#E6F4EA;color:#137333;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:12px}
+.tag-container{display:flex;flex-wrap:wrap;gap:4px;padding-top:10px;border-top:1px solid var(--line2)}
+.tag-chip{background:var(--tag-green-bg);color:var(--tag-green-fg);font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:12px}
 </style>
 """, unsafe_allow_html=True)
 
@@ -441,8 +446,8 @@ def show_detail(code):
                     unsafe_allow_html=True)
 
     st.markdown("##### 📈 Tín hiệu đa khung (MACD & Fisher)")
-    st.dataframe(pd.DataFrame({"Daily": [r["MACD D"], r["Fisher D"]], "Weekly": [r["MACD W"], r["Fisher W"]]},
-                              index=["MACD (12-26-9)", "Fisher Transform (9)"]), **_STRETCH_DF)
+    st.dataframe(TH.style_df(pd.DataFrame({"Daily": [r["MACD D"], r["Fisher D"]], "Weekly": [r["MACD W"], r["Fisher W"]]},
+                              index=["MACD (12-26-9)", "Fisher Transform (9)"])), **_STRETCH_DF)
     st.caption("Cắt lên/xuống = vừa cắt trong 3 nến gần nhất. Khung Tuần cần đủ ~35 tuần dữ liệu, thiếu thì hiện '-'.")
 
     st.markdown("##### 🏭 Trạng thái ngành & dòng tiền")
@@ -997,8 +1002,9 @@ def make_chart(a, code, tf, layers):
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    fig.update_layout(height=540 + 180 * len(subs), template="plotly_white", margin=dict(l=10, r=10, t=30, b=10),
+    fig.update_layout(height=540 + 180 * len(subs), template=TH.plotly_template(), margin=dict(l=10, r=10, t=30, b=10),
                       legend=dict(orientation="h", y=1.04, font=dict(size=10)))
+    TH.style_fig(fig)
     return fig
 
 

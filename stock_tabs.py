@@ -6,6 +6,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import theme as TH
+
 VOL = "Khối lượng khớp lệnh"
 NOTE_PATH = "data/ghi_chu.csv"
 
@@ -27,7 +29,7 @@ def _ret(c, n):
 
 
 def _plot(fig, h=320):
-    fig.update_layout(template="plotly_white", height=h, margin=dict(l=10, r=10, t=30, b=10),
+    fig.update_layout(template=TH.plotly_template(), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=h, margin=dict(l=10, r=10, t=30, b=10),
                       legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -201,7 +203,7 @@ def tab_range(g, code, fund):
         hi, lo = t["Giá cao nhất"].max(), t["Giá thấp nhất"].min()
         rows.append({"Khoảng": lb, "Đáy": lo, "Đỉnh": hi, "Vị trí giá (%)": (c - lo) / (hi - lo) * 100 if hi > lo else np.nan,
                      "Cách đỉnh (%)": (hi / c - 1) * 100, "Cách đáy (%)": (c / lo - 1) * 100})
-    st.dataframe(pd.DataFrame(rows).round(2), hide_index=True, use_container_width=True)
+    st.dataframe(TH.style_df(pd.DataFrame(rows).round(2)), hide_index=True, use_container_width=True)
     t = g.tail(250)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=t["Ngày"], y=t["Giá đóng cửa"], name="Giá", line=dict(color="#0E8A6D")))
@@ -272,7 +274,7 @@ def tab_news(g, code, fund):
         new = seen is not None and it["link"] + it["title"] not in seen
         badge = "🆕 " if new else ""
         title = f"[{it['title']}]({it['link']})" if it["link"] else it["title"]
-        st.markdown(f"{badge}**{title}**  \n<span style='color:#6B7280;font-size:12px'>{d} · {it['source']}</span>", unsafe_allow_html=True)
+        st.markdown(f"{badge}**{title}**  \n<span style='color:var(--muted);font-size:12px'>{d} · {it['source']}</span>", unsafe_allow_html=True)
         st.divider()
     st.session_state[seen_key] = {it["link"] + it["title"] for it in items}
 
@@ -281,11 +283,11 @@ def _article_html(it, codes_hit=None, groups_hit=None):
     import html as H
     d = f"{it['date']:%d/%m/%Y %H:%M}" if it.get("date") is not None else ""
     t = H.escape(it["title"])
-    title = f'<a href="{H.escape(it["link"])}" target="_blank" style="color:#1F2937;font-weight:600;text-decoration:none">{t}</a>' if it.get("link") else f"<b>{t}</b>"
+    title = f'<a href="{H.escape(it["link"])}" target="_blank" style="color:var(--txt);font-weight:600;text-decoration:none">{t}</a>' if it.get("link") else f"<b>{t}</b>"
     chips = "".join(f'<span class="tag tag-green" style="margin-right:4px">{H.escape(c)}</span>' for c in (codes_hit or []))
     chips += "".join(f'<span class="tag tag-gray" style="margin-right:4px">{H.escape(g)}</span>' for g in (groups_hit or []))
-    return (f'<div style="padding:8px 0;border-bottom:1px solid #E5E7EB">{title}<br>'
-            f'<span style="color:#6B7280;font-size:12px">{d} · {H.escape(str(it.get("source","")))}</span> {chips}</div>')
+    return (f'<div style="padding:8px 0;border-bottom:1px solid var(--line)">{title}<br>'
+            f'<span style="color:var(--muted);font-size:12px">{d} · {H.escape(str(it.get("source","")))}</span> {chips}</div>')
 
 
 @st.cache_data(ttl=300, show_spinner="Đang tải tin tức...")
