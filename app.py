@@ -493,6 +493,41 @@ def _forecast(states: dict) -> str:
     return "Chưa rõ xu hướng"
 
 
+def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap_tay.csv") -> None:
+    """Số nhập tay trong data/nhap_tay.csv (Mã, Tên công ty, Vốn hóa TT, P/B, ROE) ưu tiên hơn dữ liệu tự động.
+    Ô để trống thì dùng dữ liệu tự động. Số thập phân dùng dấu chấm (dấu phẩy cũng được chấp nhận)."""
+    if not os.path.exists(path):
+        return
+    try:
+        mt = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+    except Exception:
+        return
+    mt.columns = [str(c).strip() for c in mt.columns]
+
+    def num(v):
+        if not isinstance(v, str) or not v.strip():
+            return None
+        try:
+            return float(v.replace("%", "").replace(" ", "").replace(",", "."))
+        except ValueError:
+            return None
+
+    for _, row in mt.iterrows():
+        code = str(row.get("Mã", "")).strip().upper()
+        if not code or code == "NAN":
+            continue
+        name = row.get("Tên công ty")
+        if isinstance(name, str) and name.strip():
+            fund_map.setdefault(code, {})["Tên công ty"] = name.strip()
+        for col in ("P/B", "ROE"):
+            v = num(row.get(col))
+            if v is not None:
+                fund_map.setdefault(code, {})[col] = v
+        cap = num(row.get("Vốn hóa TT"))
+        if cap is not None:
+            cap_map[code] = cap
+
+
 def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
@@ -523,6 +558,7 @@ def page_filter():
                 if isinstance(_n, str) and _n.strip():
                     fund_map.setdefault(_c, {})["Tên công ty"] = _n.strip()
         except Exception: pass
+    apply_manual_overrides(fund_map, cap_map)
     if f.empty:
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
