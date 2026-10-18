@@ -97,3 +97,10 @@ Có thể deploy Streamlit Community Cloud nếu môi trường deploy cho phép
 - **Trang "Khung cấu trúc MA"**: thẻ giá so với MA10/20/50/100/200 và xu hướng ngắn/trung/dài.
 - **RS vs VNI**: nếu dữ liệu có mã `VNINDEX` thì dùng nó; nếu không (mặc định với rổ cổ phiếu) thì dùng trung bình cộng các mã trong dữ liệu làm "thị trường". Dòng chú thích đầu trang ghi rõ đang dùng loại nào.
 - Phần tính toán mới nằm trong `engine.py` (`build_screener`, các cột MACD/Fisher/WaveTrend/MFI trong `add_indicators`).
+
+## Giao diện thẻ Bộ lọc (bản tùy chỉnh)
+Trang **Bộ lọc** hiển thị từng mã dạng thẻ: mã chứng khoán, giá mới nhất và % thay đổi, nhóm/ngành, vốn hóa thị trường (nếu có metadata), nhãn dự báo và 8 trạng thái kỹ thuật có màu xanh/đỏ/xám. Nút **Xem biểu đồ** mở trang biểu đồ và tự chọn đúng mã.
+
+**Lưu ý vốn hóa:** nguồn OHLCV hiện tại không bảo đảm trả về vốn hóa thị trường cho mọi mã. Để hiển thị con số vốn hóa, điền `data/stock_metadata.csv` theo mẫu gồm hai cột `Mã,Vốn hóa TT`; đơn vị của `Vốn hóa TT` là tỷ đồng. Nếu chưa có dữ liệu, giao diện ghi rõ “Chưa có dữ liệu” thay vì tự ước lượng.
+
+Nhãn dự báo được suy ra từ số lượng trạng thái kỹ thuật tích cực/tiêu cực trên thẻ, là bộ lọc định hướng tham khảo chứ không phải xác suất đã hiệu chuẩn. Trạng thái sóng ngắn/trung/trục chính dựa trên cấu trúc MA; Ichimoku/MACD/Volume/RSI dựa trên dữ liệu nến hiện có. Tín hiệu có thể thay đổi khi nến mới cập nhật.

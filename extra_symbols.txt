@@ -1,0 +1,2 @@
+# Mã thêm tay cho lần cập nhật cuối phiên (cách nhau bằng dấu phẩy hoặc xuống dòng).
+# Ví dụ: NTP, BVH

@@ -442,34 +442,102 @@ def show_detail(code):
 
 
 # ------------------------------------------------------------------ TRANG 1: BỘ LỌC
+def _stock_indicators(code: str) -> dict:
+    """Tóm tắt trạng thái kỹ thuật từ dữ liệu OHLCV đã tải."""
+    g = df[df["Mã"] == code].sort_values("Ngày").reset_index(drop=True)
+    if len(g) < 2:
+        return {}
+    r, prev = g.iloc[-1], g.iloc[-2]
+    close = g["Giá đóng cửa"]
+    delta = close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+    rsi = (100 - 100/(1 + gain/loss.replace(0, np.nan))).where(loss != 0, 100.0)
+    def state(condition, unknown=False):
+        return "Chưa rõ" if unknown else ("Tốt" if condition else "Xấu")
+    sa, sb = r.get("SpanA", np.nan), r.get("SpanB", np.nan)
+    ichi_unknown = pd.isna(sa) or pd.isna(sb) or pd.isna(r.get("Tenkan", np.nan)) or pd.isna(r.get("Kijun", np.nan))
+    ichi_good = not ichi_unknown and r["Giá đóng cửa"] > max(sa, sb) and r["Tenkan"] > r["Kijun"]
+    macd_unknown = pd.isna(r.get("MACD", np.nan)) or pd.isna(r.get("MACD_sig", np.nan))
+    vol_now, vol_prev = r.get(E.VOL, np.nan), prev.get(E.VOL, np.nan)
+    vol_unknown = pd.isna(vol_now) or pd.isna(vol_prev)
+    chg = r.get("Chg_%", np.nan)
+    def trend(cols):
+        vals = [r.get(f"MA{x}", np.nan) for x in cols]
+        if any(pd.isna(v) for v in vals): return "Chưa rõ"
+        return "Tốt" if all(vals[i] > vals[i+1] for i in range(len(vals)-1)) else "Xấu"
+    rnow = rsi.iloc[-1] if len(rsi) else np.nan
+    rprev = rsi.iloc[-2] if len(rsi) > 1 else np.nan
+    return {
+        "Vùng giá": "Tốt" if pd.notna(chg) and chg > 0 else "Xấu" if pd.notna(chg) and chg < 0 else "Chưa rõ",
+        "Ichimoku": state(ichi_good, ichi_unknown),
+        "MACD": state(not macd_unknown and r["MACD"] > r["MACD_sig"], macd_unknown),
+        "Volume": state(not vol_unknown and vol_now > vol_prev, vol_unknown),
+        "RSI": "Tốt" if pd.notna(rnow) and pd.notna(rprev) and rnow > rprev else "Xấu" if pd.notna(rnow) and pd.notna(rprev) else "Chưa rõ",
+        "Sóng ngắn": trend((10, 20)), "Sóng trung": trend((20, 50, 100)), "Trục chính": trend((50, 100, 200)),
+    }
+
+
+def _status_chip(label: str, state: str) -> str:
+    bg, fg = {"Tốt": ("#DDF1EB", "#08785E"), "Xấu": ("#FCE4E8", "#C02645"), "Chưa rõ": ("#EEF1F5", "#626B78")}.get(state, ("#EEF1F5", "#626B78"))
+    return f'<span title="{state}" style="display:inline-block;background:{bg};color:{fg};border-radius:7px;padding:5px 8px;margin:3px 4px 3px 0;font-size:12px;font-weight:650;white-space:nowrap">{label}</span>'
+
+
+def _forecast(states: dict) -> str:
+    good, bad = list(states.values()).count("Tốt"), list(states.values()).count("Xấu")
+    if good >= 6 and good - bad >= 4: return "Dự báo tăng mạnh"
+    if bad >= 6 and bad - good >= 4: return "Dự báo giảm mạnh"
+    if good > bad: return "Dự báo tăng"
+    if bad > good: return "Dự báo giảm"
+    return "Chưa rõ xu hướng"
+
+
 def page_filter():
-    st.title("🔍 Bộ Lọc Cổ Phiếu")
+    st.title("🔍 Bộ lọc cổ phiếu")
     header()
-    st.caption("Zone: Position ≥ 70% = **High** · ≤ 30% = **Low** · còn lại Mid-Sell. "
-               "**Score 0-10** = cấu trúc MA (4) + RS (2) + dòng tiền (2) + giá/MACD (1) + gần đỉnh 52 tuần (1). "
-               "MUA/BÁN theo giá + khối lượng; Crossover = MACD/Fisher vừa cắt lên; Đáy KT = WaveTrend quá bán + RS ổn định.")
-    f = apply_filters(res_df, filter_panel())
-    f = (f.assign(_o=f["Cảnh báo"].map(lambda v: 0 if v.startswith("MUA") else 1 if v.startswith("BÁN") else 2 if v != "-" else 3))
-          .sort_values(["_o", "Score"], ascending=[True, False]).drop(columns="_o").reset_index(drop=True))
-    f.insert(0, "ST", np.arange(1, len(f) + 1))
-
-    st.caption(f"{len(f)} mã phù hợp · bấm vào một dòng để chọn, rồi mở chi tiết hoặc biểu đồ.")
-    event = st.dataframe(style_table(f[TABLE_COLS]), hide_index=True, **_STRETCH_DF,
-                         on_select="rerun", selection_mode="single-row", height=620)
+    st.caption("Giữ nguyên các điều kiện lọc hiện tại. Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
+    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).reset_index(drop=True)
+    st.divider()
+    st.subheader("📋 Kết quả lọc")
+    st.caption(f"{len(f)} mã phù hợp với điều kiện lọc hiện tại.")
+    # Có thể bổ sung vốn hóa thực tế qua data/stock_metadata.csv (cột Mã,Vốn hóa TT; đơn vị tỷ đồng).
+    cap_map = {}
+    if os.path.exists("data/stock_metadata.csv"):
+        try:
+            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
+            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
+        except Exception: pass
     if f.empty:
-        st.info("Không có mã nào thoả bộ lọc hiện tại. Hãy nới lỏng bớt điều kiện.")
-    sel = event.selection.rows if event and event.selection else []
-    if sel and len(f):
-        code = f.iloc[sel[0]]["Mã"]
-        b1, b2, _ = st.columns([1, 1, 3])
-        if b1.button(f"🔎 Chi tiết {code}", type="primary"):
-            show_detail(code)
-        if b2.button(f"📊 Xem biểu đồ {code}"):
-            st.session_state["selected_code"] = code
-            st.switch_page(stock_page)
-
+        st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
+        return
+    for _, r in f.iterrows():
+        code = str(r["Mã"])
+        with st.container(border=True):
+            states = _stock_indicators(code)
+            forecast = _forecast(states) if states else "Chưa rõ xu hướng"
+            up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
+            bg, fg = ("#DDF1EB", "#08785E") if up else (("#FCE4E8", "#C02645") if down else ("#EEF1F5", "#626B78"))
+            groups = MEMBER.get(code, [])
+            industry = ", ".join(groups) if groups else "Khác / chưa phân loại"
+            cap = cap_map.get(code.upper())
+            try: cap_text = f"{float(cap):,.0f} tỷ đồng" if pd.notna(cap) else "Chưa có dữ liệu"
+            except (TypeError, ValueError): cap_text = str(cap) if cap is not None else "Chưa có dữ liệu"
+            chg = r.get("Chg_%", np.nan)
+            price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
+            html = f'<div style="border:1px solid #D9E1EA;border-radius:14px;padding:15px;margin:4px 0 8px;background:#fff"><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;align-items:start">'
+            html += f'<div><div style="font-size:11px;color:#687386">Mã chứng khoán</div><div style="font-size:21px;font-weight:800;color:#172033">{code}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Giá</div><div style="font-size:18px;font-weight:750;color:{price_color}">{r["Giá"]:,.2f}</div><div style="font-size:11px;color:{price_color}">{chg:+.2f}%</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Ngành</div><div style="font-size:12px;font-weight:650;color:#172033">{industry}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Vốn hóa TT</div><div style="font-size:12px;font-weight:650;color:#172033">{cap_text}</div></div>'
+            html += f'<div><div style="font-size:11px;color:#687386">Dự báo</div><span style="display:inline-block;background:{bg};color:{fg};padding:5px 7px;border-radius:8px;font-size:11px;font-weight:750">{forecast}</span></div></div><div style="border-top:1px solid #EDF0F4;margin-top:12px;padding-top:8px">'
+            html += "".join(_status_chip(label, val) for label, val in states.items()) + "</div></div>"
+            st.markdown(html, unsafe_allow_html=True)
+            if st.button(f"📊 Xem biểu đồ {code}", key=f"chart_{code}", use_container_width=True):
+                st.session_state["selected_code"] = code
+                st.switch_page(stock_page)
 
 # ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
+
 def page_ma():
     st.title("🧱 Khung cấu trúc - MA")
     header()
