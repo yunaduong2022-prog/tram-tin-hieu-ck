@@ -1,14 +1,14 @@
 {
- "updated_at": "18/10/2026 16:03 (giờ VN)",
- "latest_date": "2026-10-16",
+ "updated_at": "20/10/2026 01:00 (giờ VN)",
+ "latest_date": "2026-10-19",
  "symbols": 188,
- "symbols_on_latest_date": 185,
- "rows": 262442,
+ "symbols_on_latest_date": 186,
+ "rows": 262628,
  "sources": {
   "vci": 188
  },
  "failed": [
-  "PSS: EntitlementError: Nguồn 'vnd' không thuộc quyền của cấp Cộng đồng.\n(English: vnstock settings language en)"
+  "PSS: ProviderError: Nguồn VND trả về dữ liệu giá lịch sử không phải JSON hợp lệ\n(English: vnstock settings language en)"
  ],
  "skipped": 0,
  "adjusted": [],
