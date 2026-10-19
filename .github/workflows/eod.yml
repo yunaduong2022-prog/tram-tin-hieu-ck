@@ -12,7 +12,11 @@ on:
       start:
         description: "Ngày bắt đầu lịch sử khi tải đầy đủ (YYYY-MM-DD)"
         type: string
-        default: "2021-01-01"
+        default: "2018-11-01"
+      probe:
+        description: "Chẩn đoán: nhập 1 mã (ví dụ HPG) để xem nguồn trả về P/B, ROE, tên công ty; để trống nếu chạy bình thường"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -24,7 +28,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +41,23 @@ jobs:
       - name: Cài thư viện
         run: pip install -r requirements-eod.txt
 
+      - name: Đăng ký thiết bị vnstock (máy chạy GitHub là thiết bị mới mỗi lần)
+        continue-on-error: true
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+        run: |
+          printf '%s' "$VNSTOCK_API_KEY" | vnstock register --stdin
+          vnstock status
+
+      - name: Chẩn đoán P/B, ROE (chỉ khi nhập mã ở ô probe)
+        if: ${{ inputs.probe != '' }}
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          PROBE: ${{ inputs.probe }}
+        run: python update_fundamentals.py --probe "$PROBE"
+
       - name: Lấy dữ liệu cuối phiên
+        if: ${{ inputs.probe == '' }}
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: |
@@ -47,18 +67,25 @@ jobs:
           python eod_fetch.py $ARGS
 
       - name: Cập nhật vốn hóa (Mã, Vốn hóa TT)
-        if: always()
+        if: ${{ always() && inputs.probe == '' }}
         continue-on-error: true
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python update_metadata.py
 
+      - name: Cập nhật tên công ty, P/B, ROE
+        if: ${{ always() && inputs.probe == '' }}
+        continue-on-error: true
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+        run: python update_fundamentals.py
+
       - name: Lưu vào repo
-        if: always()
+        if: ${{ always() && inputs.probe == '' }}
         run: |
           git config user.name "eod-bot"
           git config user.email "eod-bot@users.noreply.github.com"
-          git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv
+          git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv
           if git diff --cached --quiet; then
             echo "Không có thay đổi dữ liệu."
           else
