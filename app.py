@@ -16,6 +16,7 @@ import wyckoff as WYK
 import nav as NAV
 import theme as TH
 import stock_tabs as ST
+import mtf_levels as ML
 
 st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
 
@@ -41,6 +42,16 @@ st.markdown("""
  .chip{display:inline-block;min-width:42px;text-align:center;padding:2px 6px;border-radius:6px;font-size:12px;font-weight:700;margin-right:8px}
  .chip-red{background:var(--tag-red-bg);color:var(--red)}.chip-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}.chip-gray{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
  .item{padding:6px 0;border-bottom:1px solid var(--line2);font-size:13px}
+ .multi-tf-title{font-weight:700;font-size:12px;color:var(--txt);margin:10px 0 6px}
+ .multi-tf-container{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:6px 0}
+ .tf-subcard{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0}
+ .tf-title{font-size:11.5px;font-weight:700;text-transform:uppercase;color:var(--txt);border-bottom:1px solid var(--line);padding-bottom:3px;margin-bottom:5px;display:flex;justify-content:space-between;gap:4px}
+ .tf-info{font-size:11px;color:var(--muted);margin-bottom:3px}
+ .tf-info b{color:var(--txt2)}
+ .tf-comment{font-size:10.5px;color:var(--txt);font-style:italic;background:var(--bg2);padding:3px 6px;border-radius:4px;margin-top:4px}
+ .strategy-box{background:var(--tag-green-bg);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:11.5px;margin-top:8px;color:var(--tag-green-fg);line-height:1.6}
+ .strategy-box.warn{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
+ .strategy-box.bad{background:var(--tag-red-bg);color:var(--red)}
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,6 +79,14 @@ st.markdown("""
 .stock-card .price-box{margin:8px 0 10px}
 .stock-card .metrics-grid{border-top:1px solid var(--line2);padding-top:10px;margin-bottom:10px}
 .stock-card .tag-container{margin-bottom:6px}
+/* Thẻ rộng 1 mã / hàng */
+.stock-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
+.stock-line .stock-code{font-size:20px}
+.stock-name{font-size:13px;color:var(--muted)}
+.price-pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:15px;font-weight:800;white-space:nowrap}
+.metrics-row{font-size:12px;color:var(--muted);margin:2px 0 4px;line-height:1.7}
+.metrics-row b{color:var(--txt2)}.metrics-row .sep{margin:0 8px;opacity:.5}
+.mtf-chips{margin-top:10px}
 /* Nhãn dự báo & chip */
 .badge-forecast{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap}
 .tag-container{display:flex;flex-wrap:wrap;gap:4px;padding-top:10px;border-top:1px solid var(--line2)}
@@ -566,6 +585,54 @@ def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap
             cap_map[code] = cap
 
 
+_TF_HEAD = {"D": ("📅 D (Ngày)", "#10B981"), "W": ("🗓️ W (Tuần)", "#3B82F6"), "M": ("🏛️ M (Tháng)", "#8B5CF6")}
+
+
+def sup_text(r):
+    """Hỗ trợ: dạng khoảng 'thấp – cao' khi giá nằm trên mây (cả dải mây là vùng đỡ), ngược lại là một mức."""
+    if r["sup"] is None:
+        return "—"
+    if r.get("sup_tol"):
+        return f"{fp(r['sup'])} ± {fp(r['sup_tol'])}"
+    return f"{fp(r['sup'])} – {fp(r['sup_hi'])}" if r.get("sup_hi") is not None else fp(r["sup"])
+_TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích lũy) màu vàng
+
+
+@st.cache_data(show_spinner=False)
+def mtf_cached(_frames: dict, code: str, key: str) -> dict:
+    pick = lambda tf: _frames[tf][_frames[tf]["Mã"] == code]
+    return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
+
+
+def mtf_block(res: dict) -> str:
+    """Khối 'Phân tích đa khung D - W - M' + hộp chiến lược cho thẻ kết quả lọc (không có dòng trống / thụt lề để Markdown không vỡ)."""
+    subs = []
+    for tf in ("D", "W", "M"):
+        title, accent = _TF_HEAD[tf]
+        r = res[tf]
+        if r["ok"]:
+            sup = sup_text(r)
+            rs = fp(r["res"]) if r["res"] is not None else "—"
+            body = (f'<div class="tf-info">• Hỗ trợ: <b>{sup}</b></div><div class="tf-info">• Kháng cự: <b>{rs}</b></div>'
+                    f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>')
+            trend = f'<span class="{_TREND_CLS.get(r["trend"], "c-amber")}">{r["trend"]}</span>'
+        else:
+            body, trend = f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>', '<span class="c-gray">—</span>'
+        subs.append(f'<div class="tf-subcard" style="border-top:3px solid {accent}"><div class="tf-title"><span>{title}</span>{trend}</div>{body}</div>')
+    s = res["strategy"]
+    if s["ok"]:
+        cls = "" if s["rr_value"] >= 1.8 else "warn" if s["rr_value"] > 0 else "bad"
+        extra = "".join(f"<br>⚠ {htmllib.escape(w)}" for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
+        strat = (f'<div class="strategy-box {cls}">🎯 <b>CHIẾN LƯỢC GIAO DỊCH:</b><br>'
+                 f'• <b>Vùng gom (Entry):</b> {s["entry"]} &nbsp;|&nbsp; • <b>Cắt lỗ (SL):</b> {s["sl"]} &nbsp;|&nbsp; '
+                 f'• <b>Kỳ vọng (TP):</b> {s["tp"]}<br>• <b>Tỷ lệ R:R:</b> <b class="{"c-green" if not cls else "c-amber" if cls == "warn" else "c-red"}">{s["rr"]}</b><br>'
+                 f'<i>{htmllib.escape(s["status"])}</i>{extra}</div>')
+    else:
+        strat = f'<div class="strategy-box warn">🎯 <b>CHIẾN LƯỢC GIAO DỊCH:</b><br>{htmllib.escape(s["msg"])}</div>'
+    return ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
+            f'<div class="multi-tf-container">{"".join(subs)}</div>{strat}')
+
+
 def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
@@ -574,6 +641,7 @@ def page_filter():
     st.divider()
     st.subheader("📋 Kết quả lọc")
     st.caption(f"{len(f)} mã phù hợp với điều kiện lọc hiện tại.")
+    show_mtf = st.toggle("Hiện phân tích đa khung (D · W · M) và chiến lược trong từng thẻ", value=True, key="show_mtf")
     # Có thể bổ sung vốn hóa thực tế qua data/stock_metadata.csv (cột Mã,Vốn hóa TT; đơn vị tỷ đồng).
     cap_map = {}
     if os.path.exists("data/stock_metadata.csv"):
@@ -601,57 +669,54 @@ def page_filter():
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
     CHIP_ONLY_GOOD = False                        # True: chỉ chip xanh "Tốt"; False: đủ 3 màu Tốt/Xấu/Chưa rõ
-    per_row = 3                                   # số thẻ trên một hàng (màn hình hẹp Streamlit tự xếp thành 1 cột)
-    rows = [f.iloc[i:i + per_row] for i in range(0, len(f), per_row)]
-    for chunk in rows:
-        cols = st.columns(per_row)
-        for col, (_, r) in zip(cols, chunk.iterrows()):
-            code = str(r["Mã"])
-            with col:
-                states = _stock_indicators(code)
-                forecast = _forecast(states) if states else "Chưa rõ xu hướng"
-                up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
-                bg, fg = ("#DDF1EB", "#08785E") if up else (("#FCE4E8", "#C02645") if down else ("#EEF1F5", "#626B78"))
-                groups = MEMBER.get(code, [])
-                sectors = [g for g in groups if g != WL.VN30]
-                industry = htmllib.escape(", ".join(sectors)) if sectors else "Khác / chưa phân loại"
-                vn30_badge = " · VN30" if WL.VN30 in groups else ""
-                cap = cap_map.get(code.upper())
-                try: cap_text = f"{float(cap):,.0f} tỷ" if pd.notna(cap) else "Chưa có"
-                except (TypeError, ValueError): cap_text = htmllib.escape(str(cap)) if cap is not None else "Chưa có"
-                fd = fund_map.get(code.upper(), {})
-                cname = fd.get("Tên công ty")
-                name_text = htmllib.escape(cname.strip()) if isinstance(cname, str) and cname.strip() else "Chưa có tên công ty"
-                def _fmt(v, f_):
-                    try: return f_.format(float(v)) if pd.notna(v) else "Chưa có"
-                    except (TypeError, ValueError): return "Chưa có"
-                pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
-                chg = r.get("Chg_%", np.nan)
-                price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
-                chg_text = f"{chg:+.2f}%" if pd.notna(chg) else "—"
-                if CHIP_ONLY_GOOD:     # chỉ hiện các chỉ báo "Tốt" (chip xanh); đặt False để hiện đủ Tốt/Xấu/Chưa rõ
-                    good = [lb for lb, v in states.items() if v == "Tốt"]
-                    chips_html = "".join(f'<span class="tag-chip">{htmllib.escape(lb)}</span>' for lb in good) \
-                        or '<span class="muted">Chưa có chỉ báo Tốt</span>'
-                else:
-                    chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
-                html = (f'<div class="stock-card in-box">'
-                        f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
-                        f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
-                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div></div>'
-                        f'<div class="price-box"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
-                        f'<span class="price-chg" style="color:{price_color}">{chg_text}</span></div>'
-                        f'<div class="metrics-grid">'
-                        f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
-                        f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
-                        f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
-                        f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
-                        f'<div class="tag-container">' + chips_html + '</div></div>')
-                with st.container(border=True):
-                    st.markdown(html, unsafe_allow_html=True)
-                    if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
-                        st.session_state["selected_code"] = code
-                        NAV.goto("Cổ phiếu", "Tổng quát")
+    for _, r in f.iterrows():                     # mỗi mã một thẻ rộng, xếp dọc
+        code = str(r["Mã"])
+        states = _stock_indicators(code)
+        forecast = _forecast(states) if states else "Chưa rõ xu hướng"
+        up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
+        fc_text = forecast.replace("Dự báo ", "").capitalize()
+        fc_color = "#08785E" if up else "#C02645" if down else "#626B78"
+        groups = MEMBER.get(code, [])
+        sectors = [g for g in groups if g != WL.VN30]
+        industry = htmllib.escape(", ".join(sectors)) if sectors else "Khác / chưa phân loại"
+        vn30_badge = " · VN30" if WL.VN30 in groups else ""
+        cap = cap_map.get(code.upper())
+        try: cap_text = f"{float(cap):,.0f} tỷ" if pd.notna(cap) else "Chưa có"
+        except (TypeError, ValueError): cap_text = htmllib.escape(str(cap)) if cap is not None else "Chưa có"
+        fd = fund_map.get(code.upper(), {})
+        cname = fd.get("Tên công ty")
+        name_text = htmllib.escape(cname.strip()) if isinstance(cname, str) and cname.strip() else "Chưa có tên công ty"
+        def _fmt(v, f_):
+            try: return f_.format(float(v)) if pd.notna(v) else "Chưa có"
+            except (TypeError, ValueError): return "Chưa có"
+        pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
+        chg = r.get("Chg_%", np.nan)
+        price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
+        chg_text = f"{chg:+.2f}%" if pd.notna(chg) else "—"
+        if CHIP_ONLY_GOOD:
+            good = [lb for lb, v in states.items() if v == "Tốt"]
+            chips_html = "".join(f'<span class="tag-chip">{htmllib.escape(lb)}</span>' for lb in good) \
+                or '<span class="muted">Chưa có chỉ báo Tốt</span>'
+        else:
+            chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
+        sep = '<span class="sep">|</span>'
+        metrics_html = ('<div class="metrics-row">'
+                        f'Ngành: <b>{industry}{vn30_badge}</b>{sep}Vốn hóa: <b>{cap_text}</b>{sep}P/B: <b>{pb_text}</b>{sep}'
+                        f'ROE: <b>{roe_text}</b>{sep}Dự báo: <b style="color:{fc_color}">{fc_text}</b></div>')
+        mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
+        with st.container(border=True):
+            # Hàng 1: mã · tên công ty | giá (+%) | nút biểu đồ
+            h1, h2, h3 = st.columns([6, 3, 1.7], vertical_alignment="center")
+            h1.markdown(f'<div class="stock-line"><span class="stock-code">📌 {code}</span>'
+                        f'<span class="stock-name" title="{name_text}">· {name_text}</span></div>', unsafe_allow_html=True)
+            h2.markdown(f'<div style="text-align:right"><span class="price-pill" style="color:{price_color}">'
+                        f'Giá: {r["Giá"]:,.2f} ({chg_text})</span></div>', unsafe_allow_html=True)
+            if h3.button("📊 Biểu đồ", key=f"chart_{code}", use_container_width=True):
+                st.session_state["selected_code"] = code
+                NAV.goto("Cổ phiếu", "Tổng quát")
+            # Hàng 2-4: chỉ số cơ bản, đa khung D-W-M, chiến lược, rồi hàng chip chỉ báo ở cuối thẻ
+            st.markdown(metrics_html + mtf_html + f'<div class="tag-container mtf-chips">{chips_html}</div>',
+                        unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
 
@@ -1099,9 +1164,56 @@ def page_stock_tab(sub):
     ST.render(sub, df, sorted(res_df["Mã"].unique()), fm, WL.GROUPS)
 
 
+# ------------------------------------------------------------------ ĐA KHUNG NGÀY · TUẦN · THÁNG
+def mtf_level_card(tf, r):
+    title = f"Khung {ML.TF_LABEL[tf]}"
+    if not r["ok"]:
+        return card(title, f'<div class="muted">{htmllib.escape(r["cmt"])}</div>')
+    kind = {"Tăng": "green", "Giảm": "red"}.get(r["trend"], "amber")
+    lo, hi = r["cloud"]
+    return card(title, f'<div class="big c-{kind}">{r["trend"]}</div>'
+                + row("Giá đóng cửa", fp(r["close"]))
+                + row("Hỗ trợ", sup_text(r))
+                + row("Kháng cự", fp(r["res"]) if r["res"] is not None else "—")
+                + row("Mây Kumo", f"{fp(lo)} – {fp(hi)}")
+                + f'<div class="muted" style="margin-top:8px">{htmllib.escape(r["cmt"])}</div>')
+
+
+def mtf_strategy_card(s):
+    title = "Chiến lược giao dịch (theo khung Ngày)"
+    if not s["ok"]:
+        return card(title, f'<div class="muted">{htmllib.escape(s["msg"])}</div>')
+    kind = "green" if s["rr_value"] >= 1.8 else "amber" if s["rr_value"] > 0 else "red"
+    body = (row("Vùng gom", s["entry"]) + row("Cắt lỗ (SL)", s["sl"]) + row("Chốt lời (TP)", s["tp"])
+            + row("R:R", f'<span class="tag tag-{kind}">{s["rr"]}</span>')
+            + f'<div class="box">{htmllib.escape(s["status"])}</div>')
+    for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []):
+        body += f'<div class="muted c-amber">⚠ {htmllib.escape(w)}</div>'
+    body += (f'<div class="muted" style="margin-top:8px">Vùng gom = hỗ trợ đến hỗ trợ +2%. Cắt lỗ = hỗ trợ −{s["sl_pct"]}%. '
+             'Chốt lời = kháng cự gần nhất. R:R tính từ giữa vùng gom. Đây là kế hoạch tham khảo, không phải khuyến nghị.</div>')
+    return card(title, body)
+
+
+def page_mtf_levels():
+    st.title("📐 Đa khung Ngày · Tuần · Tháng")
+    header()
+    codes = sorted(res_df["Mã"].unique())
+    saved = st.session_state.get("selected_code")
+    code = st.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0, key="mtf_code")
+    st.session_state["selected_code"] = code
+    res = mtf_cached(frames, code, DATA_KEY)
+    for col, tf in zip(st.columns(3), ("D", "W", "M")):
+        col.markdown(mtf_level_card(tf, res[tf]), unsafe_allow_html=True)
+    st.markdown(mtf_strategy_card(res["strategy"]), unsafe_allow_html=True)
+    st.caption("Mỗi khung cần ≥ 52 nến để có mây Ichimoku (khung Tháng cần khoảng 4,5 năm lịch sử). "
+               "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+
+
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
 def route():
     main, sub = NAV.render_nav()
+    if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
+        return page_mtf_levels()
     if main == "Bộ lọc & Backtest":
         if sub == "Bộ lọc Realtime": return page_filter()
         if sub == "Khung cấu trúc MA": return page_ma()
