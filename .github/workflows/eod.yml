@@ -80,7 +80,7 @@ jobs:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python update_fundamentals.py
 
-            - name: Sao lưu dữ liệu ra artifact (phòng khi push lỗi)
+      - name: Sao lưu dữ liệu ra artifact (phòng khi push lỗi)
         if: ${{ always() && inputs.probe == '' }}
         uses: actions/upload-artifact@v4
         with:
