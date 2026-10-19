@@ -80,6 +80,14 @@ jobs:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python update_fundamentals.py
 
+            - name: Sao lưu dữ liệu ra artifact (phòng khi push lỗi)
+        if: ${{ always() && inputs.probe == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: eod-data
+          path: data/
+          retention-days: 7
+
       - name: Lưu vào repo
         if: ${{ always() && inputs.probe == '' }}
         run: |
@@ -88,8 +96,17 @@ jobs:
           git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv
           if git diff --cached --quiet; then
             echo "Không có thay đổi dữ liệu."
-          else
-            git commit -m "Dữ liệu cuối phiên $(TZ=Asia/Ho_Chi_Minh date +%d/%m/%Y)"
-            git pull --rebase --autostash
-            git push
+            exit 0
           fi
+          git commit -m "Dữ liệu cuối phiên $(TZ=Asia/Ho_Chi_Minh date +%d/%m/%Y)"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase --autostash && git push; then
+              echo "Push thành công."
+              exit 0
+            fi
+            echo "Push lỗi, thử lại lần $i sau $((i * 15)) giây..."
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 15))
+          done
+          echo "Push thất bại sau 5 lần thử."
+          exit 1
