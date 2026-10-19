@@ -595,6 +595,11 @@ def sup_text(r):
     if r.get("sup_tol"):
         return f"{fp(r['sup'])} ± {fp(r['sup_tol'])}"
     return f"{fp(r['sup'])} – {fp(r['sup_hi'])}" if r.get("sup_hi") is not None else fp(r["sup"])
+def res_text(r):
+    """Kháng cự: một mức, hoặc khoảng 'gần – xa' khi giá dưới mây (đường Ichimoku 65-129 / đỉnh gần nhất)."""
+    if r["res"] is None:
+        return "—"
+    return f"{fp(r['res'])} – {fp(r['res_hi'])}" if r.get("res_hi") is not None else fp(r["res"])
 _TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích lũy) màu vàng
 
 
@@ -612,7 +617,7 @@ def mtf_block(res: dict) -> str:
         r = res[tf]
         if r["ok"]:
             sup = sup_text(r)
-            rs = fp(r["res"]) if r["res"] is not None else "—"
+            rs = res_text(r)
             body = (f'<div class="tf-info">• Hỗ trợ: <b>{sup}</b></div><div class="tf-info">• Kháng cự: <b>{rs}</b></div>'
                     f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>')
             trend = f'<span class="{_TREND_CLS.get(r["trend"], "c-amber")}">{r["trend"]}</span>'
@@ -1174,7 +1179,7 @@ def mtf_level_card(tf, r):
     return card(title, f'<div class="big c-{kind}">{r["trend"]}</div>'
                 + row("Giá đóng cửa", fp(r["close"]))
                 + row("Hỗ trợ", sup_text(r))
-                + row("Kháng cự", fp(r["res"]) if r["res"] is not None else "—")
+                + row("Kháng cự", res_text(r))
                 + row("Mây Kumo", f"{fp(lo)} – {fp(hi)}")
                 + f'<div class="muted" style="margin-top:8px">{htmllib.escape(r["cmt"])}</div>')
 
