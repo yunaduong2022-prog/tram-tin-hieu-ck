@@ -443,10 +443,23 @@ def advice(r):
     return out
 
 
+def swing_view(r):
+    """(văn bản, màu, tooltip) cho ô % của thẻ mã: giảm từ đỉnh hoặc tăng từ đáy."""
+    kind, text = r.get("Swing_kind", ""), r.get("Swing_text", "—")
+    chg = r.get("Chg_%", np.nan)
+    day = f"Hôm nay {chg:+.2f}% so với phiên kề trước" if pd.notna(chg) else "Chưa đủ dữ liệu phiên kề trước"
+    if kind not in ("down", "up") or text == "—":
+        return "—", "#374151", day
+    ref, dt = r.get("Swing_ref", np.nan), r.get("Swing_date", pd.NaT)
+    nm = "Đỉnh" if kind == "down" else "Đáy"
+    tip = f"{nm} {ref:,.2f}" + (f" ({dt:%d/%m/%Y})" if pd.notna(dt) else "") + f" · {day}"
+    return text, ("#C02645" if kind == "down" else "#08785E"), tip
+
+
 @st.dialog("Chi tiết mã", width="large")
 def show_detail(code):
     r = res_df[res_df["Mã"] == code].iloc[0]
-    st.subheader(f"{code} · {r['Giá']:,.2f} (" + (f"{r['Chg_%']:+.2f}%" if pd.notna(r["Chg_%"]) else "—") + ")")
+    st.subheader(f"{code} · {r['Giá']:,.2f} ({swing_view(r)[0]})")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Score", f"{r['Score']:.1f}/10")
     m2.metric("RS vs VNI", f"{r['RS vs VNI']:.2f}" if pd.notna(r["RS vs VNI"]) else "-")
@@ -687,8 +700,7 @@ def page_filter():
                     except (TypeError, ValueError): return "Chưa có"
                 pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
                 chg = r.get("Chg_%", np.nan)
-                price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
-                chg_text = f"{chg:+.2f}%" if pd.notna(chg) else "—"
+                chg_text, price_color, chg_tip = swing_view(r)     # "Đã giảm X% từ đỉnh" / "Đã tăng X% từ đáy"
                 if CHIP_ONLY_GOOD:     # chỉ hiện các chỉ báo "Tốt" (chip xanh); đặt False để hiện đủ Tốt/Xấu/Chưa rõ
                     good = [lb for lb, v in states.items() if v == "Tốt"]
                     chips_html = "".join(f'<span class="tag-chip">{htmllib.escape(lb)}</span>' for lb in good) \
@@ -701,7 +713,7 @@ def page_filter():
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
                         f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div></div>'
                         f'<div class="price-box"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
-                        f'<span class="price-chg" style="color:{price_color}">{chg_text}</span></div>'
+                        f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         f'<div class="metrics-grid">'
                         f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
                         f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
@@ -1098,7 +1110,9 @@ def page_stock():
 
     m1, m2, m3, m4, m5 = st.columns(5)
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
-    m1.metric("Giá", f"{info['Giá']:,.2f}", f"{d_chg:+.2f}%" if pd.notna(d_chg) else None)
+    _sw_text, _, _sw_tip = swing_view(info)
+    m1.metric("Giá", f"{info['Giá']:,.2f}", _sw_text if _sw_text != "—" else None,
+              delta_color="inverse" if info.get("Swing_kind") == "down" else "normal", help=_sw_tip)
     m2.metric("Vol vs MA10", f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-")
     m3.metric("Position %", f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-")
     m4.metric("Cảnh báo (phiên mới nhất)", info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có")

@@ -322,6 +322,66 @@ def swing_state(h: np.ndarray, l: np.ndarray, k: int):
     return last, prev, stack
 
 
+def swing_context(w: pd.DataFrame, price: float, k: int = PIVOT_K["W"]) -> dict:
+    """Mã đang ở nhịp GIẢM (tính từ đỉnh) hay nhịp TĂNG/phục hồi (tính từ đáy), dựa trên pivot khung Tuần.
+
+    - Cấu trúc đỉnh-đáy: đỉnh thấp dần + đáy thấp dần = giảm; đỉnh cao dần + đáy cao dần = tăng.
+      Giá phá đáy gần nhất = giảm; giá vượt đỉnh gần nhất = tăng; còn lại xét pivot xác nhận gần nhất (đáy = phục hồi, đỉnh = điều chỉnh).
+    - Giảm: tham chiếu là ĐỈNH nơi xu hướng tăng chuyển sang giảm (đi ngược chuỗi các đỉnh thấp dần tới đỉnh cao nhất).
+    - Tăng: tham chiếu là ĐÁY nơi xu hướng giảm đảo chiều (đi ngược chuỗi các đáy cao dần tới đáy thấp nhất).
+    Trả về {"kind": "down"|"up", "pct": số % dương, "ref": giá, "date": ngày của đỉnh/đáy}; rỗng nếu không đủ dữ liệu.
+    """
+    if w is None or len(w) < 2 * k + 3 or not price or pd.isna(price):
+        return {}
+    h, l, dts = w["Giá cao nhất"].values, w["Giá thấp nhất"].values, w["Ngày"].values
+    _, _, stack = swing_state(h, l, k)
+    Hs, Ls = [p for p in stack if p[1] == "H"], [p for p in stack if p[1] == "L"]
+
+    def pack(kind, idx, ref):
+        pct = abs(price / ref - 1) * 100 if ref else np.nan
+        return {"kind": kind, "pct": pct, "ref": float(ref), "date": pd.Timestamp(dts[idx])}
+
+    if len(Hs) < 2 or len(Ls) < 2:        # chưa đủ pivot: dùng đỉnh/đáy toàn bộ dữ liệu đang có
+        ih, il = int(np.argmax(h)), int(np.argmin(l))
+        return pack("down", ih, h[ih]) if ih > il else pack("up", il, l[il])
+
+    (_, _, lh), (_, _, ph), (_, _, ll), (_, _, pl) = Hs[-1], Hs[-2], Ls[-1], Ls[-2]
+    if price > lh:
+        kind = "up"
+    elif price < ll:
+        kind = "down"
+    elif lh > ph and ll > pl:
+        kind = "up"
+    elif lh < ph and ll < pl:
+        kind = "down"
+    else:
+        kind = "up" if stack[-1][1] == "L" else "down"
+
+    if kind == "down":
+        cand = Hs[-1]
+        for p in reversed(Hs[:-1]):
+            if p[2] > cand[2]:
+                cand = p
+            else:
+                break
+        i0 = cand[0] + int(np.argmax(h[cand[0]:]))             # đỉnh cao nhất kể từ đó (kể cả nến chưa xác nhận)
+        return pack("down", i0, h[i0])
+    cand = Ls[-1]
+    for p in reversed(Ls[:-1]):
+        if p[2] < cand[2]:
+            cand = p
+        else:
+            break
+    i0 = cand[0] + int(np.argmin(l[cand[0]:]))
+    return pack("up", i0, l[i0])
+
+
+def swing_label(sw: dict) -> str:
+    if not sw or pd.isna(sw.get("pct")):
+        return "—"
+    return f"Đã giảm {sw['pct']:.1f}% từ đỉnh" if sw["kind"] == "down" else f"Đã tăng {sw['pct']:.1f}% từ đáy"
+
+
 def fib_eval(prev, last, price):
     if prev is None or last is None or prev[2] == last[2]:
         return 0.0, "Chưa đủ nhịp sóng để áp dụng Fibonacci"
@@ -708,6 +768,7 @@ def build_screener(frames: dict, mkt: pd.Series) -> pd.DataFrame:
         c = r["Giá đóng cửa"]
         dh, dl = (hi - c) / hi * 100, (c - lo) / lo * 100
         w = wg.get(code)
+        sw = swing_context(w, c)
         ws = (lambda a, b: osc_state(w[a].values, w[b].values)) if w is not None else (lambda a, b: "-")
         ma = {n: r[f"MA{n}"] for n in (10, 20, 50, 100, 200)}
         chain = [x for x in ma.values() if pd.notna(x)]
@@ -733,7 +794,9 @@ def build_screener(frames: dict, mkt: pd.Series) -> pd.DataFrame:
             "Lực mua/bán": {"High": "Lực mua mạnh", "Low": "Bị bán mạnh", "Mid-Sell": "Giằng co"}.get(zone, "-"),
             "Giá tăng/giảm": "Giá Không đổi" if abs(chg) < 1e-9 else "Giá Tăng" if chg > 0 else "Giá Giảm",
             "Vol vs tháng trước": "-" if pd.isna(vm) else "Vol Tăng" if vm > 1 else "Vol Giảm",
-            "Vol/Avg10": r["Vol_vs_MA10"], "Nhận xét": comment_of(zone, chg), "Chg_%": chg,
+            "Vol/Avg10": r["Vol_vs_MA10"], "Nhận xét": comment_of(zone, chg), "Chg_%": r["Chg_%"],   # giữ NaN nếu thiếu phiên kề trước
+            "Swing_text": swing_label(sw), "Swing_kind": sw.get("kind", ""), "Swing_%": sw.get("pct", np.nan),
+            "Swing_ref": sw.get("ref", np.nan), "Swing_date": sw.get("date", pd.NaT),
             "RS20": rs20, "RS50": rs50, "RS vs VNI": rs20,
             "MACD D": macd_d, "MACD W": ws("MACD", "MACD_sig"), "Fisher D": fish_d, "Fisher W": ws("FISH", "FISH_T"),
             "Dist_High_52W": dh, "Dist_Low_52W": dl, "Bars52": len(t52),
