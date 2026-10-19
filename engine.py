@@ -56,6 +56,26 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
+def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
+    """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
+
+    Lịch phiên lấy từ chính dữ liệu: những ngày có ít nhất `min_share` số mã giao dịch.
+    Nếu mã bị thiếu phiên kề trước (kho chưa cập nhật, mã tạm ngừng giao dịch...) thì pct_change
+    đang so với một phiên xa hơn, nên đặt NaN để hiện "—" thay vì một con số sai.
+    """
+    if d.empty or "Chg_%" not in d:
+        return d
+    d = d.copy()
+    cnt = d.groupby("Ngày")["Mã"].nunique()
+    cal = cnt[cnt >= max(1, min_share * d["Mã"].nunique())].index.sort_values()
+    prev_cal = pd.Series(cal[:-1], index=cal[1:])             # ngày giao dịch -> phiên kề trước của thị trường
+    prev_row = d.groupby("Mã")["Ngày"].shift(1)               # dòng liền trước của chính mã đó
+    expected = d["Ngày"].map(prev_cal)
+    bad = prev_row.notna() & expected.notna() & (prev_row != expected)
+    d.loc[bad, "Chg_%"] = np.nan
+    return d
+
+
 def add_indicators(g: pd.DataFrame) -> pd.DataFrame:
     g = g.copy()
     c, h, l, v = g["Giá đóng cửa"], g["Giá cao nhất"], g["Giá thấp nhất"], g[VOL]

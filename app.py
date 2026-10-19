@@ -79,14 +79,6 @@ st.markdown("""
 .stock-card .price-box{margin:8px 0 10px}
 .stock-card .metrics-grid{border-top:1px solid var(--line2);padding-top:10px;margin-bottom:10px}
 .stock-card .tag-container{margin-bottom:6px}
-/* Thẻ rộng 1 mã / hàng */
-.stock-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
-.stock-line .stock-code{font-size:20px}
-.stock-name{font-size:13px;color:var(--muted)}
-.price-pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:15px;font-weight:800;white-space:nowrap}
-.metrics-row{font-size:12px;color:var(--muted);margin:2px 0 4px;line-height:1.7}
-.metrics-row b{color:var(--txt2)}.metrics-row .sep{margin:0 8px;opacity:.5}
-.mtf-chips{margin-top:10px}
 /* Nhãn dự báo & chip */
 .badge-forecast{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap}
 .tag-container{display:flex;flex-wrap:wrap;gap:4px;padding-top:10px;border-top:1px solid var(--line2)}
@@ -135,7 +127,9 @@ def build_frames(raw: pd.DataFrame) -> dict:
         base = g[["Mã", "Ngày"] + E.NUMERIC_COLS]
         for tf in parts:
             parts[tf].append(E.add_indicators(E.resample_ohlcv(base, tf)))
-    return {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
+    frames = {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
+    frames["D"] = E.mask_chg_gaps(frames["D"])     # % thay đổi chỉ tính so với phiên kề trước, thiếu phiên thì hiện "—"
+    return frames
 
 
 @st.cache_data(show_spinner="Đang phân tích...")
@@ -452,7 +446,7 @@ def advice(r):
 @st.dialog("Chi tiết mã", width="large")
 def show_detail(code):
     r = res_df[res_df["Mã"] == code].iloc[0]
-    st.subheader(f"{code} · {r['Giá']:,.2f} ({r['Chg_%']:+.2f}%)")
+    st.subheader(f"{code} · {r['Giá']:,.2f} (" + (f"{r['Chg_%']:+.2f}%" if pd.notna(r["Chg_%"]) else "—") + ")")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Score", f"{r['Score']:.1f}/10")
     m2.metric("RS vs VNI", f"{r['RS vs VNI']:.2f}" if pd.notna(r["RS vs VNI"]) else "-")
@@ -592,14 +586,7 @@ def sup_text(r):
     """Hỗ trợ: dạng khoảng 'thấp – cao' khi giá nằm trên mây (cả dải mây là vùng đỡ), ngược lại là một mức."""
     if r["sup"] is None:
         return "—"
-    if r.get("sup_tol"):
-        return f"{fp(r['sup'])} ± {fp(r['sup_tol'])}"
     return f"{fp(r['sup'])} – {fp(r['sup_hi'])}" if r.get("sup_hi") is not None else fp(r["sup"])
-def res_text(r):
-    """Kháng cự: một mức, hoặc khoảng 'gần – xa' khi giá dưới mây (đường Ichimoku 65-129 / đỉnh gần nhất)."""
-    if r["res"] is None:
-        return "—"
-    return f"{fp(r['res'])} – {fp(r['res_hi'])}" if r.get("res_hi") is not None else fp(r["res"])
 _TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích lũy) màu vàng
 
 
@@ -617,7 +604,7 @@ def mtf_block(res: dict) -> str:
         r = res[tf]
         if r["ok"]:
             sup = sup_text(r)
-            rs = res_text(r)
+            rs = fp(r["res"]) if r["res"] is not None else "—"
             body = (f'<div class="tf-info">• Hỗ trợ: <b>{sup}</b></div><div class="tf-info">• Kháng cự: <b>{rs}</b></div>'
                     f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>')
             trend = f'<span class="{_TREND_CLS.get(r["trend"], "c-amber")}">{r["trend"]}</span>'
@@ -630,7 +617,7 @@ def mtf_block(res: dict) -> str:
         extra = "".join(f"<br>⚠ {htmllib.escape(w)}" for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
         strat = (f'<div class="strategy-box {cls}">🎯 <b>CHIẾN LƯỢC GIAO DỊCH:</b><br>'
                  f'• <b>Vùng gom (Entry):</b> {s["entry"]} &nbsp;|&nbsp; • <b>Cắt lỗ (SL):</b> {s["sl"]} &nbsp;|&nbsp; '
-                 f'• <b>Kỳ vọng (TP):</b> {s["tp"]}<br>• <b>Tỷ lệ R:R:</b> <b class="{"c-green" if not cls else "c-amber" if cls == "warn" else "c-red"}">{s["rr"]}</b><br>'
+                 f'• <b>Kỳ vọng (TP):</b> {s["tp"]}<br>• <b>Tỷ lệ R:R:</b> <b>{s["rr"]}</b><br>'
                  f'<i>{htmllib.escape(s["status"])}</i>{extra}</div>')
     else:
         strat = f'<div class="strategy-box warn">🎯 <b>CHIẾN LƯỢC GIAO DỊCH:</b><br>{htmllib.escape(s["msg"])}</div>'
@@ -674,54 +661,58 @@ def page_filter():
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
     CHIP_ONLY_GOOD = False                        # True: chỉ chip xanh "Tốt"; False: đủ 3 màu Tốt/Xấu/Chưa rõ
-    for _, r in f.iterrows():                     # mỗi mã một thẻ rộng, xếp dọc
-        code = str(r["Mã"])
-        states = _stock_indicators(code)
-        forecast = _forecast(states) if states else "Chưa rõ xu hướng"
-        up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
-        fc_text = forecast.replace("Dự báo ", "").capitalize()
-        fc_color = "#08785E" if up else "#C02645" if down else "#626B78"
-        groups = MEMBER.get(code, [])
-        sectors = [g for g in groups if g != WL.VN30]
-        industry = htmllib.escape(", ".join(sectors)) if sectors else "Khác / chưa phân loại"
-        vn30_badge = " · VN30" if WL.VN30 in groups else ""
-        cap = cap_map.get(code.upper())
-        try: cap_text = f"{float(cap):,.0f} tỷ" if pd.notna(cap) else "Chưa có"
-        except (TypeError, ValueError): cap_text = htmllib.escape(str(cap)) if cap is not None else "Chưa có"
-        fd = fund_map.get(code.upper(), {})
-        cname = fd.get("Tên công ty")
-        name_text = htmllib.escape(cname.strip()) if isinstance(cname, str) and cname.strip() else "Chưa có tên công ty"
-        def _fmt(v, f_):
-            try: return f_.format(float(v)) if pd.notna(v) else "Chưa có"
-            except (TypeError, ValueError): return "Chưa có"
-        pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
-        chg = r.get("Chg_%", np.nan)
-        price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
-        chg_text = f"{chg:+.2f}%" if pd.notna(chg) else "—"
-        if CHIP_ONLY_GOOD:
-            good = [lb for lb, v in states.items() if v == "Tốt"]
-            chips_html = "".join(f'<span class="tag-chip">{htmllib.escape(lb)}</span>' for lb in good) \
-                or '<span class="muted">Chưa có chỉ báo Tốt</span>'
-        else:
-            chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
-        sep = '<span class="sep">|</span>'
-        metrics_html = ('<div class="metrics-row">'
-                        f'Ngành: <b>{industry}{vn30_badge}</b>{sep}Vốn hóa: <b>{cap_text}</b>{sep}P/B: <b>{pb_text}</b>{sep}'
-                        f'ROE: <b>{roe_text}</b>{sep}Dự báo: <b style="color:{fc_color}">{fc_text}</b></div>')
-        mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
-        with st.container(border=True):
-            # Hàng 1: mã · tên công ty | giá (+%) | nút biểu đồ
-            h1, h2, h3 = st.columns([6, 3, 1.7], vertical_alignment="center")
-            h1.markdown(f'<div class="stock-line"><span class="stock-code">📌 {code}</span>'
-                        f'<span class="stock-name" title="{name_text}">· {name_text}</span></div>', unsafe_allow_html=True)
-            h2.markdown(f'<div style="text-align:right"><span class="price-pill" style="color:{price_color}">'
-                        f'Giá: {r["Giá"]:,.2f} ({chg_text})</span></div>', unsafe_allow_html=True)
-            if h3.button("📊 Biểu đồ", key=f"chart_{code}", use_container_width=True):
-                st.session_state["selected_code"] = code
-                NAV.goto("Cổ phiếu", "Tổng quát")
-            # Hàng 2-4: chỉ số cơ bản, đa khung D-W-M, chiến lược, rồi hàng chip chỉ báo ở cuối thẻ
-            st.markdown(metrics_html + mtf_html + f'<div class="tag-container mtf-chips">{chips_html}</div>',
-                        unsafe_allow_html=True)
+    per_row = 3                                   # số thẻ trên một hàng (màn hình hẹp Streamlit tự xếp thành 1 cột)
+    rows = [f.iloc[i:i + per_row] for i in range(0, len(f), per_row)]
+    for chunk in rows:
+        cols = st.columns(per_row)
+        for col, (_, r) in zip(cols, chunk.iterrows()):
+            code = str(r["Mã"])
+            with col:
+                states = _stock_indicators(code)
+                forecast = _forecast(states) if states else "Chưa rõ xu hướng"
+                up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
+                bg, fg = ("#DDF1EB", "#08785E") if up else (("#FCE4E8", "#C02645") if down else ("#EEF1F5", "#626B78"))
+                groups = MEMBER.get(code, [])
+                sectors = [g for g in groups if g != WL.VN30]
+                industry = htmllib.escape(", ".join(sectors)) if sectors else "Khác / chưa phân loại"
+                vn30_badge = " · VN30" if WL.VN30 in groups else ""
+                cap = cap_map.get(code.upper())
+                try: cap_text = f"{float(cap):,.0f} tỷ" if pd.notna(cap) else "Chưa có"
+                except (TypeError, ValueError): cap_text = htmllib.escape(str(cap)) if cap is not None else "Chưa có"
+                fd = fund_map.get(code.upper(), {})
+                cname = fd.get("Tên công ty")
+                name_text = htmllib.escape(cname.strip()) if isinstance(cname, str) and cname.strip() else "Chưa có tên công ty"
+                def _fmt(v, f_):
+                    try: return f_.format(float(v)) if pd.notna(v) else "Chưa có"
+                    except (TypeError, ValueError): return "Chưa có"
+                pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
+                chg = r.get("Chg_%", np.nan)
+                price_color = "#08785E" if pd.notna(chg) and chg > 0 else "#C02645" if pd.notna(chg) and chg < 0 else "#374151"
+                chg_text = f"{chg:+.2f}%" if pd.notna(chg) else "—"
+                if CHIP_ONLY_GOOD:     # chỉ hiện các chỉ báo "Tốt" (chip xanh); đặt False để hiện đủ Tốt/Xấu/Chưa rõ
+                    good = [lb for lb, v in states.items() if v == "Tốt"]
+                    chips_html = "".join(f'<span class="tag-chip">{htmllib.escape(lb)}</span>' for lb in good) \
+                        or '<span class="muted">Chưa có chỉ báo Tốt</span>'
+                else:
+                    chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
+                mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
+                html = (f'<div class="stock-card in-box">'
+                        f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
+                        f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
+                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div></div>'
+                        f'<div class="price-box"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
+                        f'<span class="price-chg" style="color:{price_color}">{chg_text}</span></div>'
+                        f'<div class="metrics-grid">'
+                        f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
+                        f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
+                        f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
+                        f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
+                        f'<div class="tag-container">' + chips_html + '</div>' + mtf_html + '</div>')
+                with st.container(border=True):
+                    st.markdown(html, unsafe_allow_html=True)
+                    if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
+                        st.session_state["selected_code"] = code
+                        NAV.goto("Cổ phiếu", "Tổng quát")
 
 # ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
 
@@ -1179,7 +1170,7 @@ def mtf_level_card(tf, r):
     return card(title, f'<div class="big c-{kind}">{r["trend"]}</div>'
                 + row("Giá đóng cửa", fp(r["close"]))
                 + row("Hỗ trợ", sup_text(r))
-                + row("Kháng cự", res_text(r))
+                + row("Kháng cự", fp(r["res"]) if r["res"] is not None else "—")
                 + row("Mây Kumo", f"{fp(lo)} – {fp(hi)}")
                 + f'<div class="muted" style="margin-top:8px">{htmllib.escape(r["cmt"])}</div>')
 
