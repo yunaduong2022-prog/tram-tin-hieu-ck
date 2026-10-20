@@ -19,6 +19,7 @@ import nav as NAV
 import theme as TH
 import stock_tabs as ST
 import mtf_levels as ML
+import waiting_buy as WB
 
 st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
 
@@ -958,41 +959,129 @@ def page_filter():
                             st.session_state[_k] = code
                         NAV.goto("Cổ phiếu", "Tổng quát")
 
-# ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
+# ------------------------------------------------------------------ TRANG: CỔ PHIẾU CHỜ MUA TRONG TUẦN
+@st.cache_data(show_spinner="Đang nhận diện trạng thái chờ mua cho cả rổ...")
+def waiting_cached(_frames: dict, _screener: pd.DataFrame, key: str) -> pd.DataFrame:
+    return WB.build_waiting_buy(_frames, _screener)
 
-def page_ma():
-    st.title("🧱 Khung cấu trúc - MA")
+
+WB_CHIP = {WB.G1: "tag-green", WB.G2: "tag-amber", WB.G3: "tag-gray"}
+WB_HELP = {WB.G1: "Ra quyết định giải ngân ngay: đã có tín hiệu mua hoặc đang test hỗ trợ với khối lượng cạn.",
+           WB.G2: "Chuẩn bị sức mua và canh lệnh trong phiên.",
+           WB.G3: "Danh sách quan sát cho các tuần tiếp theo."}
+WB_PER_GROUP = 24
+
+
+def _wb_table() -> pd.DataFrame:
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb1")
+
+
+def _wb_card(r, group):
+    px = lambda x: "-" if pd.isna(x) else f"{x:,.2f}"
+    with st.container(border=True):
+        h1, h2 = st.columns([1, 2])
+        h1.subheader(r["Mã"])
+        h2.markdown(f'<div style="text-align:right"><span class="tag {WB_CHIP.get(group, "tag-gray")}">'
+                    f'{htmllib.escape(r["Trạng thái"])}</span></div>', unsafe_allow_html=True)
+        st.caption(f"Giá {px(r['Giá'])} · Score {r['Score']:.1f} · RS {px(r['RS20'])}")
+        st.markdown(f'<div class="muted">{htmllib.escape(str(r["Lý do"]))}</div>', unsafe_allow_html=True)
+        if pd.notna(r["Vùng mua từ"]):
+            gap = r["Cách vùng mua %"]
+            gap_txt = "đang trong vùng mua" if abs(gap) < 0.05 else (f"cao hơn vùng mua {gap:.1f}%" if gap > 0 else f"thấp hơn vùng mua {abs(gap):.1f}%")
+            rr = "-" if pd.isna(r["R:R"]) else f"{r['R:R']:.1f}"
+            st.markdown(f'<div class="box"><div class="row"><span>Vùng mua</span><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b></div>'
+                        f'<div class="row"><span>Cắt lỗ</span><b class="c-red">{px(r["Cắt lỗ"])}</b></div>'
+                        f'<div class="row"><span>Mục tiêu</span><b class="c-green">{px(r["Mục tiêu"])}</b></div>'
+                        f'<div class="row"><span>R:R</span><b>{rr}</b></div>'
+                        f'<div class="muted">{gap_txt}</div></div>', unsafe_allow_html=True)
+        if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
+            st.session_state["selected_code"] = r["Mã"]
+            for _k in ("mtf_code", "tab_code"):
+                st.session_state[_k] = r["Mã"]
+            NAV.goto("Cổ phiếu", "Tổng quát")
+
+
+def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
+    c1, c2, c3 = st.columns([1.2, 2, 2])
+    q = c1.text_input("Tìm mã", "", key="wb_q", placeholder="🔍 Tìm mã...").upper().strip()
+    inds = c2.multiselect("Nhóm ngành", sorted({x.strip() for t in d["Nhóm"] for x in str(t).split(",")}),
+                          key="wb_ind", placeholder="Tất cả nhóm")
+    sts = c3.multiselect("Trạng thái", states, key="wb_st", placeholder="Tất cả trạng thái")
+    if q:
+        d = d[d["Mã"].str.contains(q, regex=False)]
+    if inds:
+        d = d[d["Nhóm"].apply(lambda t: any(i in [x.strip() for x in str(t).split(",")] for i in inds))]
+    if sts:
+        d = d[d["Trạng thái"].isin(sts)]
+    return d
+
+
+def page_wait_buy():
+    st.title("🛒 Cổ phiếu chờ mua trong tuần")
     header()
-    st.caption("Vị trí giá so với MA10 · MA20 · MA50 · MA100 · MA200 và cấu trúc ngắn, trung, dài hạn.")
-    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("TỔNG SỐ MÃ", f"{len(f)} mã")
-    c2.metric("NGẮN HẠN · TĂNG", int((f["Trend_NganHan"] == "TĂNG").sum()), "MA10 > MA20", delta_color="off")
-    c3.metric("TRUNG HẠN · TĂNG", int((f["Trend_TrungHan"] == "TĂNG").sum()), "MA20 > MA50 > MA100", delta_color="off")
-    c4.metric("DÀI HẠN · TĂNG", int((f["Trend_DaiHan"] == "TĂNG").sum()), "MA50 > MA100 > MA200", delta_color="off")
-    st.divider()
-    if len(f) > 60:
-        st.caption("Hiển thị 60 mã có Score cao nhất; dùng bộ lọc để thu hẹp.")
-    cols = st.columns(3)
-    for i, (_, r) in enumerate(f.head(60).iterrows()):
-        with cols[i % 3], st.container(border=True):
-            h1, h2 = st.columns([2, 1])
-            h1.subheader(r["Mã"])
-            h1.caption(f"Giá: {r['Giá']:,.2f} · Score {r['Score']:.1f}")
-            st_ = r["Trend_NganHan"]
-            h2.markdown(f":{'green' if st_ == 'TĂNG' else 'red' if st_ == 'GIẢM' else 'orange'}[**{st_}**]")
-            t1, t2, t3 = st.columns(3)
-            t1.caption(f"Ngắn hạn: **{r['Trend_NganHan']}**")
-            t2.caption(f"Trung hạn: **{r['Trend_TrungHan']}**")
-            t3.caption(f"Dài hạn: **{r['Trend_DaiHan']}**")
-            st.markdown("**GIÁ SO VỚI MA**")
-            for n in (10, 20, 50, 100, 200):
-                v = r[f"MA{n}"]
-                if pd.isna(v) or not v:
-                    st.text(f"MA{n:<3}: chưa đủ dữ liệu")
-                    continue
-                dp = (r["Giá"] - v) / v * 100
-                st.text(f"MA{n:<3}: {v:>8.2f} ({dp:+6.2f}%) {'🟢' if dp >= 0 else '🔴'}")
+    st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với Bộ lọc Realtime và Backtest. "
+               "Chỉ gồm mã có xu hướng đủ khỏe; mã tăng quá đà, suy yếu, đang phục hồi hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
+    t = _wb_table()
+    buy = t[t["Danh sách"].isin(WB.BUY_GROUPS)]
+    m = st.columns(4)
+    m[0].metric("TỔNG SỐ MÃ CHỜ MUA", f"{len(buy)} mã")
+    for col, grp in zip(m[1:], WB.BUY_GROUPS):
+        col.metric(grp.upper(), int((buy["Danh sách"] == grp).sum()))
+    with st.expander("ℹ️ Quy tắc phân loại 9 trạng thái"):
+        st.markdown(
+            "- **Điểm mua đã xác nhận**: *Đã có tín hiệu mua* (thuật toán chính phát tín hiệu trong "
+            f"{WB.CFG['buy_lookback']} phiên, giá chưa cao hơn {WB.CFG['buy_max_chase']:.0f}% so với giá phát tín hiệu) · "
+            f"*Điểm mua đẹp* (uptrend, giá test EMA20 / MA50 / MA10-20 tuần / đáy nền trong {WB.CFG['support_touch']:.0f}%, "
+            f"Vol 5 phiên ≤ {WB.CFG['dry_vol']:.1f} lần MA20 Vol, R:R ≥ {WB.CFG['min_rr']:.0f}).\n"
+            "- **Sắp có điểm mua**: *Theo dõi điểm mua* (uptrend, điều chỉnh lành mạnh) · *Gần vùng mua, cần thêm xác nhận* "
+            "(sát kháng cự / hỗ trợ, cần 1 phiên bứt phá hoặc đảo chiều) · *Chớm tăng giá* (dòng tiền sớm, chưa bứt nền) · "
+            "*Tích lũy / Siết nền giá* (biên độ hẹp, Vol cạn, MA hội tụ).\n"
+            "- **Theo dõi thêm**: *Có dấu hiệu cải thiện* (đáy sau cao hơn đáy trước) · *Chờ xác nhận* (mô hình đảo chiều chưa được MA/thanh khoản xác nhận) · "
+            "*Chỉ đưa vào khi xu hướng không quá yếu* (điều kiện biên, có dòng tiền hỗ trợ).\n\n"
+            "Hệ thống dùng EMA10/EMA20/MA50 ngày + MA10/MA20 tuần, Vol so với MA20 Vol, biên độ nền 5-10 phiên và hỗ trợ/kháng cự gần nhất. "
+            "Ngưỡng nằm trong `CFG` của `waiting_buy.py`. Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    if buy.empty:
+        st.info("Hiện chưa có mã nào đạt điều kiện chờ mua.")
+        return
+    buy = _wb_filters(buy, [s for g_ in WB.BUY_GROUPS for s in WB.STATES_BY_GROUP[g_]])
+    for grp in WB.BUY_GROUPS:
+        d = WB.sort_group(buy[buy["Danh sách"] == grp], grp)
+        st.divider()
+        st.subheader(f"{grp} ({len(d)})")
+        st.caption(WB_HELP[grp])
+        if d.empty:
+            st.caption("Không có mã nào.")
+            continue
+        show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key=f"wb_all_{grp}")
+        cols = st.columns(3)
+        for i, (_, r) in enumerate(d.head(len(d) if show_all else WB_PER_GROUP).iterrows()):
+            with cols[i % 3]:
+                _wb_card(r, grp)
+        if len(d) > WB_PER_GROUP and not show_all:
+            st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
+
+
+def page_alert_lists():
+    st.title("⚠️ Danh sách cảnh báo")
+    header()
+    st.caption("Các mã KHÔNG nằm trong **Cổ phiếu chờ mua trong tuần**: đang phục hồi, tăng quá đà, xu hướng suy yếu.")
+    t = _wb_table()
+    lists = [(WB.L_RECOVER, "Đang phục hồi", "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng)."),
+             (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought)."),
+             (WB.L_RISK, "Hạ tỷ trọng / Xu hướng suy yếu", "Cảnh báo rủi ro / cân nhắc bán.")]
+    for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
+        with tab:
+            st.caption(note)
+            d = t[t["Danh sách"] == key].sort_values("Score", ascending=False)
+            if d.empty:
+                st.info("Không có mã nào.")
+                continue
+            st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
+                         column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                        "Score": st.column_config.NumberColumn(format="%.1f"),
+                                        "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
+                         **_STRETCH_DF)
+    st.caption(f"{int((t['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
 
 
 # ------------------------------------------------------------------ HTML CARDS
@@ -1458,7 +1547,8 @@ def route():
         return page_mtf_levels()
     if main == "Bộ lọc & Backtest":
         if sub == "Bộ lọc Realtime": return page_filter()
-        if sub == "Khung cấu trúc MA": return page_ma()
+        if sub == "Cổ phiếu chờ mua trong tuần": return page_wait_buy()
+        if sub == "Danh sách cảnh báo": return page_alert_lists()
         return NAV.placeholder("🧪 Backtest chiến lược",
                                ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",
                                 "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])

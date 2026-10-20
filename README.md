@@ -86,6 +86,15 @@ Mở `data/nhap_tay.csv` (đã liệt kê sẵn ~190 mã, 4 cột để trống)
 - Có thể thêm dòng cho mã mới. Lưu file ở dạng CSV UTF-8 để không lỗi tiếng Việt.
 - Sửa ngay trên GitHub: mở file → bút chì → sửa → Commit changes.
 
+## Đa khung Ngày · Tuần · Tháng (mới)
+
+- **Trong thẻ Kết quả lọc**: mỗi thẻ có thêm khối "Phân tích đa khung (D - W - M)" và hộp chiến lược của chính mã đó; tắt/bật bằng công tắc phía trên danh sách thẻ. Muốn thẻ rộng hơn, đổi `per_row = 3` trong `page_filter` thành 2 hoặc 1.
+- **Tab riêng**: Cổ phiếu → Đa khung D-W-M (thẻ lớn cho từng khung và chiến lược).
+- Logic nằm trong `mtf_levels.py` (hàm `analyze_dwm_timeframe(df_d, df_w, df_m)`): xu hướng theo mây Ichimoku 9-17-26 (Tăng / Tích lũy / Giảm), hỗ trợ, kháng cự và một câu nhận xét cho mỗi khung. Hàm `analyze_multi_timeframe` (1h - D - W) vẫn còn trong file nhưng giao diện không dùng vì app không có nến giờ.
+- Hỗ trợ luôn nằm **dưới** giá và kháng cự luôn nằm **trên** giá. Khi giá nằm trên mây, hỗ trợ hiện dạng khoảng "đáy mây – đỉnh mây" (cả dải mây là vùng đỡ); vùng gom của chiến lược lấy từ đáy mây. Hỗ trợ = đáy mây; nếu giá đã xuống dưới mây thì dùng đáy 20 hoặc 60 nến gần nhất. Kháng cự = đỉnh 20 nến; nếu giá đang ở đỉnh thì dùng đỉnh 60 nến, không còn mức nào thì ghi "—".
+- Chiến lược theo khung Ngày: vùng gom = hỗ trợ → hỗ trợ +2%; cắt lỗ = hỗ trợ −4%; chốt lời = kháng cự; R:R tính từ giữa vùng gom, ≥ 1.8 là "Khả thi". Có cảnh báo khi khung Ngày, Tuần hoặc Tháng đang giảm.
+- Mỗi khung cần ≥ 52 nến (mây Ichimoku cần đủ lịch sử). Khung Tháng cần khoảng 4,5 năm dữ liệu ngày; thiếu thì hiện "Không đủ dữ liệu" thay vì báo lỗi.
+
 ## Giới hạn quan trọng
 
 - **Đây là polling qua REST/API, không phải kết nối WebSocket trực tiếp tới sở giao dịch.** Chu kỳ làm mới 5 giây chỉ là nhịp hỏi lại ứng dụng; nguồn dữ liệu có thể trễ hơn, giới hạn lượt gọi hoặc không trả dữ liệu.
@@ -116,7 +125,8 @@ Có thể deploy Streamlit Community Cloud nếu môi trường deploy cho phép
 - **Trang Bộ lọc** có thêm: Cảnh báo (MUA/BÁN/Crossover/Đáy KT), Score 0-10, RS vs VNI, Vol/Avg10, MA Alignment, cấu trúc MA ngắn/trung/dài, đỉnh/đáy 52 tuần, trên MA200, dòng tiền sớm (Vol tăng 3 phiên, gom ngầm, cạn cung, NR4/NR7), cùng bộ lọc Nhóm ngành và Wyckoff (Tích lũy, Phân phối, Pha C/D/E) có sẵn.
 - **Bảng** có thêm cột Score, RS vs VNI, MACD và Fisher (Ngày/Tuần), MA align, Nhận xét.
 - **Popup chi tiết**: chọn một dòng rồi bấm "Chi tiết": cảnh báo sớm kèm lời khuyên có số, MACD/Fisher đa khung, trạng thái nhóm ngành, dòng tiền nội tại.
-- **Trang "Khung cấu trúc MA"**: thẻ giá so với MA10/20/50/100/200 và xu hướng ngắn/trung/dài.
+- **Trang "Cổ phiếu chờ mua trong tuần"** (thay cho "Khung cấu trúc MA", menu Bộ lọc & Backtest): nhận diện 9 trạng thái chờ mua chia 3 nhóm (Điểm mua đã xác nhận / Sắp có điểm mua / Theo dõi thêm) bằng EMA10, EMA20, MA50 ngày + MA10, MA20 tuần, Vol so với MA20 Vol, biên độ nền và hỗ trợ/kháng cự. Mỗi mã chỉ vào đúng một trạng thái, kèm lý do, vùng mua, cắt lỗ, mục tiêu, R:R. Logic nằm ở `waiting_buy.py`, ngưỡng chỉnh trong `CFG`.
+- **Trang "Danh sách cảnh báo"**: 3 danh sách nằm ngoài tab chờ mua: Đang phục hồi, Tăng quá đà (không mua đuổi), Hạ tỷ trọng / suy yếu (rủi ro / bán). Nhóm "Không có điểm mua" bị loại khỏi mọi danh sách.
 - **RS vs VNI**: nếu dữ liệu có mã `VNINDEX` thì dùng nó; nếu không (mặc định với rổ cổ phiếu) thì dùng trung bình cộng các mã trong dữ liệu làm "thị trường". Dòng chú thích đầu trang ghi rõ đang dùng loại nào.
 - Phần tính toán mới nằm trong `engine.py` (`build_screener`, các cột MACD/Fisher/WaveTrend/MFI trong `add_indicators`).
 
