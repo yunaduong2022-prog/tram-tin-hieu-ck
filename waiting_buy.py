@@ -14,6 +14,8 @@ Chỉ nhóm 6 mới vào tab "Cổ phiếu chờ mua trong tuần".
 """
 from __future__ import annotations
 
+import html as _html
+
 import numpy as np
 import pandas as pd
 
@@ -323,8 +325,8 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         can, t1 = res.get("Cản gần", np.nan), res.get("Mục tiêu 1", np.nan)
         if res["Hành động"] == "Vào ngay" and pd.notna(can) and pd.notna(t1) and can < t1:
             res["Ghi chú hành động"] += f"; lưu ý cản gần {can:.2f} (+{(can / r['Giá'] - 1) * 100:.1f}%) thấp hơn Mục tiêu 1"
-        rows.append({"Mã": code, "Giá": r["Giá"], "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
-    cols = ["Mã", "Giá", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Ghi chú hành động",
+        rows.append({"Mã": code, "Giá": r["Giá"], "Chg %": r.get("Chg_%", np.nan), "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
+    cols = ["Mã", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Ghi chú hành động",
             "Vùng mua từ", "Vùng mua đến", "Giá vào", "Cắt lỗ", "Cắt lỗ %", "Mục tiêu 1", "Lời 1 %", "Mục tiêu 2", "Lời 2 %",
             "R:R", "Cản gần", "Cách vùng mua %"]
     out = pd.DataFrame(rows)
@@ -339,3 +341,81 @@ def sort_group(d: pd.DataFrame, group: str) -> pd.DataFrame:
     order = {s: i for i, s in enumerate(STATES_BY_GROUP.get(group, []))}
     return (d.assign(_o=d["Trạng thái"].map(order).fillna(99)).sort_values(["_o", "Score"], ascending=[True, False])
             .drop(columns="_o"))
+
+
+# ------------------------------------------------------------------ GIAO DIỆN THẺ (HTML/CSS, ăn theo biến màu của theme.py)
+_BADGE = {G1: "g", G2: "a", G3: "n"}
+
+
+def card_css(dark: bool) -> str:
+    """CSS của thẻ. Màu lấy từ biến CSS của theme.py nên tự đổi theo nền Sáng / Tối; chỉ nền khối chiến lược chọn theo chế độ."""
+    box = "var(--card2)" if dark else "var(--bg2)"
+    return """
+[class*="st-key-wbcard-"]{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
+  box-shadow:0 2px 12px var(--shadow);gap:14px!important}
+.wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
+.wb-px{font-size:20px;font-weight:700;line-height:1.1}
+.wb-px.up{color:var(--green)}.wb-px.down{color:var(--red)}.wb-px.flat{color:var(--muted)}
+.wb-px small{font-size:13px;margin-left:3px}
+.wb-badge{display:inline-block;padding:6px 14px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;white-space:nowrap}
+.wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
+.wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
+.wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
+.wb-pill{background:var(--tag-gray-bg);color:var(--muted);border-radius:12px;padding:9px 14px;font-size:13.5px;font-weight:500}
+.wb-pill i{font-style:normal;margin:0 7px;opacity:.7}
+.wb-note{font-size:13.5px;line-height:1.55;color:var(--txt)}
+.wb-box{background:BOXBG;border-radius:14px;padding:4px 16px 12px}
+.wb-sec{padding:12px 0}
+.wb-sec+.wb-sec{border-top:1px solid var(--line)}
+.wb-line{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.wb-line+.wb-line{margin-top:9px}
+.wb-lab{font-size:14.5px;font-weight:500;color:var(--txt)}
+.wb-lab small{font-size:11.5px;font-weight:500;color:var(--muted);margin-left:8px}
+.wb-zone{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.wb-zone b{font-size:15px;color:var(--txt2)}
+.wb-go,.wb-wait{display:inline-block;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.wb-go{background:var(--tag-green-bg);color:var(--tag-green-fg)}
+.wb-wait{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
+.wb-sub{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:7px}
+.wb-red{color:var(--red);font-size:15px}.wb-grn{color:var(--green);font-size:15px}
+.wb-foot{font-size:11.5px;line-height:1.45;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+[class*="st-key-wbcard-"] button{background:var(--txt2)!important;border:none!important;border-radius:12px!important;
+  padding:.65rem 1rem!important;box-shadow:none!important;transition:opacity .15s}
+[class*="st-key-wbcard-"] button:hover{opacity:.88}
+[class*="st-key-wbcard-"] button,[class*="st-key-wbcard-"] button *{color:var(--bg)!important;font-weight:700!important}
+""".replace("BOXBG", box)
+
+
+def card_html(r: pd.Series, group: str) -> str:
+    """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới)."""
+    esc = _html.escape
+    px = lambda x: "-" if pd.isna(x) else f"{x:,.2f}"
+    sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
+    chg = r.get("Chg %", np.nan)
+    cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
+    html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
+            f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
+            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(str(r["Trạng thái"]))}</span></div>'
+            f'<div class="wb-pill">Giá: {px(r["Giá"])}<i>•</i>Score: {r["Score"]:.1f}<i>•</i>RS: {px(r["RS20"])}</div>'
+            f'<div class="wb-note">{esc(str(r["Lý do"]))}</div>')
+    if pd.isna(r.get("Vùng mua từ")):
+        return html
+    go = r.get("Hành động") == "Vào ngay"
+    badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
+    html += (
+        '<div class="wb-box">'
+        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
+        f'<span class="wb-zone"><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b>{badge}</span></div>'
+        f'<div class="wb-sub">{esc(str(r["Ghi chú hành động"]))}</div></div>'
+        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
+        f'<b class="wb-red">{px(r["Cắt lỗ"])}{sg(r["Cắt lỗ %"])}</b></div></div>'
+        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu 1<small>R:R 1:2</small></span>'
+        f'<b class="wb-grn">{px(r["Mục tiêu 1"])}{sg(r["Lời 1 %"])}</b></div>'
+        f'<div class="wb-line"><span class="wb-lab">Mục tiêu 2<small>R:R 1:3</small></span>'
+        f'<b class="wb-grn">{px(r["Mục tiêu 2"])}{sg(r["Lời 2 %"])}</b></div></div>'
+        f'<div class="wb-foot">Vùng mua, cắt lỗ, mục tiêu tính theo ATR, khớp với trang biểu đồ · % so với giá hiện tại {px(r["Giá vào"])}</div>'
+        '</div>')
+    return html

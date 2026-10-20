@@ -977,27 +977,10 @@ def _wb_table() -> pd.DataFrame:
 
 
 def _wb_card(r, group):
-    px = lambda x: "-" if pd.isna(x) else f"{x:,.2f}"
-    with st.container(border=True):
-        h1, h2 = st.columns([1, 2])
-        h1.subheader(r["Mã"])
-        h2.markdown(f'<div style="text-align:right"><span class="tag {WB_CHIP.get(group, "tag-gray")}">'
-                    f'{htmllib.escape(r["Trạng thái"])}</span></div>', unsafe_allow_html=True)
-        st.caption(f"Giá {px(r['Giá'])} · Score {r['Score']:.1f} · RS {px(r['RS20'])}")
-        st.markdown(f'<div class="muted">{htmllib.escape(str(r["Lý do"]))}</div>', unsafe_allow_html=True)
-        if pd.notna(r["Vùng mua từ"]):
-            now = r["Hành động"] == "Vào ngay"
-            badge = ('<span class="tag tag-green">✅ Vào được ngay</span>' if now
-                     else '<span class="tag tag-amber">⏳ Chờ mua</span>')
-            sgn = lambda x: "-" if pd.isna(x) else f"{x:+.1f}%"
-            rows_html = (f'<div class="row"><span>Vùng mua</span><span><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b> {badge}</span></div>'
-                         f'<div class="muted" style="margin-bottom:4px">{htmllib.escape(str(r["Ghi chú hành động"]))}</div>'
-                         f'<div class="row"><span>Cắt lỗ</span><b class="c-red">{px(r["Cắt lỗ"])} ({sgn(r["Cắt lỗ %"])})</b></div>'
-                         f'<div class="row"><span>Mục tiêu 1 <span class="muted">R:R 1:2</span></span><b class="c-green">{px(r["Mục tiêu 1"])} ({sgn(r["Lời 1 %"])})</b></div>'
-                         f'<div class="row"><span>Mục tiêu 2 <span class="muted">R:R 1:3</span></span><b class="c-green">{px(r["Mục tiêu 2"])} ({sgn(r["Lời 2 %"])})</b></div>'
-                         f'<div class="muted">Vùng mua, cắt lỗ, mục tiêu tính theo ATR, khớp với trang biểu đồ · % so với giá hiện tại {px(r["Giá vào"])}</div>')
-            st.markdown(f'<div class="box">{rows_html}</div>', unsafe_allow_html=True)
-        if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
+    gi = WB.BUY_GROUPS.index(group)
+    with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
+        st.markdown(WB.card_html(r, group), unsafe_allow_html=True)
+        if st.button("📈 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = r["Mã"]
@@ -1024,6 +1007,7 @@ def page_wait_buy():
     header()
     st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với Bộ lọc Realtime và Backtest. "
                "Chỉ gồm mã có xu hướng đủ khỏe; mã tăng quá đà, suy yếu, đang phục hồi hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
     buy = t[t["Danh sách"].isin(WB.BUY_GROUPS)]
     m = st.columns(4)
