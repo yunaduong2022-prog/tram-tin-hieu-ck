@@ -170,6 +170,7 @@ MEMBER = WL.membership(VN30_LIST)
 HAS_EOD = os.path.exists(EOD_CSV)
 
 with st.sidebar:
+    st.caption(f"Engine {E.ENGINE_VERSION}")
     st.header("📂 Dữ liệu")
     data_mode = st.radio("Nguồn dữ liệu", [MODE_EOD, MODE_XLS, MODE_LIVE], index=0 if HAS_EOD else 1,
                          help="Cuối phiên: file data/eod_prices.csv do lịch tự động cập nhật sau giờ đóng cửa (khuyến nghị). "
@@ -453,6 +454,9 @@ def swing_view(r):
     ref, dt = r.get("Swing_ref", np.nan), r.get("Swing_date", pd.NaT)
     nm = "Đỉnh gần nhất" if kind == "down" else "Đáy gần nhất"
     tip = f"{nm} {ref:,.2f}" + (f" ({dt:%d/%m/%Y})" if pd.notna(dt) else "") + f" · {day}"
+    wv = r.get("Swing_waves", "")
+    if isinstance(wv, str) and wv:
+        tip += " · " + wv
     hi52, lo52 = r.get("Hi52", np.nan), r.get("Lo52", np.nan)
     sub = f"Đỉnh 52 tuần {hi52:,.2f} · Đáy 52 tuần {lo52:,.2f}" if pd.notna(hi52) and pd.notna(lo52) else ""
     if r.get("Swing_bear", False):                 # hồi kỹ thuật trong xu hướng giảm: không dùng màu xanh của "đảo chiều"

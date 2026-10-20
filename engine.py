@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v7"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v9"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -408,8 +408,9 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
         if g["dir"] == "up" and not g["cur"]:
             if legs and legs[-1]["dir"] == "up" and not legs[-1]["cur"]:
                 legs[-1]["pcts"].append(g["pct"]); legs[-1]["pct"] = g["pct"]; legs[-1]["ref"] = g["ref"]; legs[-1]["date"] = g["date"]
+                legs[-1]["items"].append((g["date"], g["ref"], g["pct"]))
                 continue
-            g = dict(g, pcts=[g["pct"]])
+            g = dict(g, pcts=[g["pct"]], items=[(g["date"], g["ref"], g["pct"])])
         legs.append(g)
     if not legs:
         return {}
@@ -435,6 +436,15 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
     return {"kind": last["dir"], "pct": last["pct"], "ref": last["ref"], "date": last["date"], "legs": legs,
             "bearish": bearish, "trend_ref": tref,
             "hi52": hi, "hi52_date": pd.Timestamp(dts[ih]), "lo52": lo, "lo52_date": pd.Timestamp(dts[il])}
+
+
+def swing_waves_text(sw: dict) -> str:
+    """Liệt kê từng sóng tăng/hồi đã đếm: 'Sóng 1: từ 23.00 (25/04/2026) +45% | Sóng 2: ...' (để đối chiếu với biểu đồ)."""
+    out = []
+    for g in (sw or {}).get("legs", []):
+        for d, ref, pct in g.get("items", []):
+            out.append(f"Sóng {len(out) + 1}: từ {ref:,.2f} ({d:%d/%m/%Y}) +{pct:.0f}%")
+    return " | ".join(out)
 
 
 def swing_label(sw: dict) -> str:
@@ -851,6 +861,10 @@ def build_screener(frames: dict, mkt: pd.Series) -> pd.DataFrame:
         dh, dl = (hi - c) / hi * 100, (c - lo) / lo * 100
         w = wg.get(code)
         sw = swing_context(w, c)
+        # Quy tắc: "Sóng trung" đang TĂNG (MA20 > MA50 > MA100) thì không gọi là "hồi trong xu hướng giảm" -> ghi "sóng tăng".
+        _m = [r.get("MA20", np.nan), r.get("MA50", np.nan), r.get("MA100", np.nan)]
+        if sw and sw.get("bearish") and not any(pd.isna(x) for x in _m) and _m[0] > _m[1] > _m[2]:
+            sw["bearish"] = False
         ws = (lambda a, b: osc_state(w[a].values, w[b].values)) if w is not None else (lambda a, b: "-")
         ma = {n: r[f"MA{n}"] for n in (10, 20, 50, 100, 200)}
         chain = [x for x in ma.values() if pd.notna(x)]
@@ -877,7 +891,7 @@ def build_screener(frames: dict, mkt: pd.Series) -> pd.DataFrame:
             "Giá tăng/giảm": "Giá Không đổi" if abs(chg) < 1e-9 else "Giá Tăng" if chg > 0 else "Giá Giảm",
             "Vol vs tháng trước": "-" if pd.isna(vm) else "Vol Tăng" if vm > 1 else "Vol Giảm",
             "Vol/Avg10": r["Vol_vs_MA10"], "Nhận xét": comment_of(zone, chg), "Chg_%": r["Chg_%"],   # giữ NaN nếu thiếu phiên kề trước
-            "Swing_text": swing_label(sw), "Swing_kind": sw.get("kind", ""), "Swing_%": sw.get("pct", np.nan),
+            "Swing_text": swing_label(sw), "Swing_waves": swing_waves_text(sw), "Swing_kind": sw.get("kind", ""), "Swing_%": sw.get("pct", np.nan),
             "Swing_ref": sw.get("ref", np.nan), "Swing_date": sw.get("date", pd.NaT),
             "Hi52": sw.get("hi52", np.nan), "Lo52": sw.get("lo52", np.nan),
             "Swing_bear": bool(sw.get("bearish", False)), "Swing_trend_ref": sw.get("trend_ref", np.nan),
