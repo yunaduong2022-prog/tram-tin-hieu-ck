@@ -990,16 +990,12 @@ def _wb_card(r, group):
             badge = ('<span class="tag tag-green">✅ Vào được ngay</span>' if now
                      else '<span class="tag tag-amber">⏳ Chờ mua</span>')
             sgn = lambda x: "-" if pd.isna(x) else f"{x:+.1f}%"
-            rr = "-" if pd.isna(r["R:R"]) else f"{r['R:R']:.1f}"
             rows_html = (f'<div class="row"><span>Vùng mua</span><span><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b> {badge}</span></div>'
                          f'<div class="muted" style="margin-bottom:4px">{htmllib.escape(str(r["Ghi chú hành động"]))}</div>'
                          f'<div class="row"><span>Cắt lỗ</span><b class="c-red">{px(r["Cắt lỗ"])} ({sgn(r["Cắt lỗ %"])})</b></div>'
-                         f'<div class="row"><span>Mục tiêu 1</span><b class="c-green">{px(r["Mục tiêu 1"])} ({sgn(r["Lời 1 %"])})</b></div>')
-            if pd.notna(r["Mục tiêu 2"]):
-                rows_html += f'<div class="row"><span>Mục tiêu 2</span><b class="c-green">{px(r["Mục tiêu 2"])} ({sgn(r["Lời 2 %"])})</b></div>'
-            rows_html += (f'<div class="row"><span>R:R (tới Mục tiêu 1)</span><b>{rr}</b></div>'
-                          f'<div class="muted">% tính theo giá vào tham chiếu {px(r["Giá vào"])}'
-                          + (" (giá hiện tại)" if now or abs(r["Cách vùng mua %"]) < 0.05 else "") + '</div>')
+                         f'<div class="row"><span>Mục tiêu 1 <span class="muted">R:R 1:2</span></span><b class="c-green">{px(r["Mục tiêu 1"])} ({sgn(r["Lời 1 %"])})</b></div>'
+                         f'<div class="row"><span>Mục tiêu 2 <span class="muted">R:R 1:3</span></span><b class="c-green">{px(r["Mục tiêu 2"])} ({sgn(r["Lời 2 %"])})</b></div>'
+                         f'<div class="muted">Vùng mua, cắt lỗ, mục tiêu tính theo ATR, khớp với trang biểu đồ · % so với giá hiện tại {px(r["Giá vào"])}</div>')
             st.markdown(f'<div class="box">{rows_html}</div>', unsafe_allow_html=True)
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]

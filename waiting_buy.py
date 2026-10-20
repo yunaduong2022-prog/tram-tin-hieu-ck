@@ -147,31 +147,37 @@ def _levels(f: dict, support: float, entry_lo: float | None = None, entry_hi: fl
     pct = lambda x: (x / entry - 1) * 100 if not np.isnan(x) and entry > 0 else np.nan
     return {"Vùng mua từ": lo, "Vùng mua đến": hi, "Giá vào": entry, "Cắt lỗ": sl, "Cắt lỗ %": pct(sl),
             "Mục tiêu 1": t1, "Lời 1 %": pct(t1), "Mục tiêu 2": t2, "Lời 2 %": pct(t2), "R:R": rr,
+            "Cản gần": above[0] if above else np.nan,
             "Cách vùng mua %": (c / hi - 1) * 100 if c > hi else (c / lo - 1) * 100 if c < lo else 0.0}
 
 
-# Hành động theo trạng thái: lúc giá ĐANG trong vùng mua, trạng thái nào được vào ngay, trạng thái nào còn phải chờ gì
+def _chart_levels(lv: dict, fc: dict) -> dict:
+    """Thay vùng mua / cắt lỗ / mục tiêu bằng số của trang biểu đồ (engine.forecast_levels). Phần cấu trúc (R:R tới cản gần nhất)
+    đã dùng xong ở bước lọc "Điểm mua đẹp"; chỉ giữ lại "Cản gần" để cảnh báo."""
+    c = fc["entry"]
+    return {"Vùng mua từ": fc["lo"], "Vùng mua đến": fc["hi"], "Giá vào": c,
+            "Cắt lỗ": fc["sl"], "Cắt lỗ %": -fc["sl_pct"],
+            "Mục tiêu 1": fc["t1"], "Lời 1 %": (fc["t1"] / c - 1) * 100,
+            "Mục tiêu 2": fc["t2"], "Lời 2 %": (fc["t2"] / c - 1) * 100,
+            "R:R": 2.0, "Cản gần": lv.get("Cản gần", np.nan), "Cách vùng mua %": 0.0}
+
+
+# Hành động theo trạng thái: vùng mua (theo trang biểu đồ) luôn quanh giá hiện tại, nên "vào ngay hay chờ" do trạng thái quyết định
 ACT_NOW = {BUY_SIGNAL, GOOD_ENTRY}
-ACT_WAIT_NOTE = {NEAR_ZONE: "chờ 1 phiên bứt phá có khối lượng hoặc phiên đảo chiều rõ ràng",
-                 EARLY_UP: "chờ giá bứt khỏi nền kèm khối lượng",
-                 ACCUM: "chờ giá phá khỏi biên độ nền kèm khối lượng",
-                 WATCH: "chờ giá điều chỉnh về sát vùng mua",
+ACT_WAIT_NOTE = {NEAR_ZONE: "chờ 1 phiên bứt phá có khối lượng hoặc phiên đảo chiều rõ ràng rồi mới vào vùng này",
+                 EARLY_UP: "chờ giá bứt khỏi nền kèm khối lượng rồi mới vào vùng này",
+                 ACCUM: "chờ giá phá khỏi biên độ nền kèm khối lượng rồi mới vào vùng này",
+                 WATCH: "chờ giá điều chỉnh về sát hỗ trợ (xem lý do) rồi mới vào vùng này",
                  IMPROVING: "chỉ theo dõi, chưa nên giải ngân",
-                 WAIT_CONFIRM: "chờ MA và thanh khoản xác nhận đảo chiều",
+                 WAIT_CONFIRM: "chờ MA và thanh khoản xác nhận đảo chiều rồi mới vào",
                  MARGINAL: "chỉ theo dõi, chưa nên giải ngân"}
 
 
-def action_of(state: str, gap: float) -> tuple[str, str]:
-    """(Hành động, ghi chú). Hành động là "Vào ngay" hoặc "Chờ mua"; gap = % giá hiện tại lệch khỏi vùng mua."""
-    if pd.isna(gap):
-        return "Chờ mua", ACT_WAIT_NOTE.get(state, "")
-    if abs(gap) < 0.05:
-        if state in ACT_NOW:
-            return "Vào ngay", "giá đang trong vùng mua, có thể giải ngân (nên chia lệnh)"
-        return "Chờ mua", "giá đang trong vùng mua nhưng " + ACT_WAIT_NOTE.get(state, "cần thêm xác nhận")
-    if gap > 0:
-        return "Chờ mua", f"giá cao hơn vùng mua {gap:.1f}%, không mua đuổi, chờ điều chỉnh về vùng mua"
-    return "Chờ mua", f"giá còn thấp hơn vùng mua {abs(gap):.1f}%, chờ giá lên tới vùng kích hoạt"
+def action_of(state: str) -> tuple[str, str]:
+    """(Hành động, ghi chú). Hành động là "Vào ngay" hoặc "Chờ mua"."""
+    if state in ACT_NOW:
+        return "Vào ngay", "giá đang trong vùng mua, có thể giải ngân (nên chia lệnh)"
+    return "Chờ mua", ACT_WAIT_NOTE.get(state, "cần thêm xác nhận")
 
 
 def _recent_buy_signal(g: pd.DataFrame, n: int):
@@ -194,12 +200,17 @@ def _support_candidates(f: dict) -> list[tuple[str, float]]:
 
 def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
     """Trả về {state, group, reason, + vùng mua/cắt lỗ/mục tiêu} cho một mã."""
+    ctx: dict = {}
+
     def out(state, reason, **lv):
+        if lv and ctx.get("fc"):
+            lv = _chart_levels(lv, ctx["fc"])
         return {"Trạng thái": state, "Danh sách": STATE_GROUP[state], "Lý do": reason, **lv}
 
     if len(g) < CFG["min_bars"] or pd.isna(g["MA50"].iat[-1]):
         return out(NO_BUY, f"Chưa đủ dữ liệu (cần ≥ {CFG['min_bars']} phiên để tính MA50)")
     f = _features(g, w, r)
+    ctx["fc"] = E.forecast_levels(f["c"], _f(g["ATR"].iat[-1]), 1)
     c, wk = f["c"], ("" if f["has_week"] else " (chưa đủ dữ liệu tuần)")
     ext20 = (c / f["ema20"] - 1) * 100
 
@@ -308,14 +319,14 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
             res = classify(g.reset_index(drop=True), wg.get(code), r)
         except Exception as e:     # một mã lỗi dữ liệu không được làm sập cả trang
             res = {"Trạng thái": NO_BUY, "Danh sách": L_NONE, "Lý do": f"Lỗi khi phân loại: {e}"}
-        res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"], res.get("Cách vùng mua %", np.nan))
-        rr_ = res.get("R:R", np.nan)
-        if res["Hành động"] == "Vào ngay" and pd.notna(rr_) and rr_ < 1.5:
-            res["Ghi chú hành động"] += f"; lưu ý R:R thấp ({rr_:.1f}), cản phía trên rất gần"
+        res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"])
+        can, t1 = res.get("Cản gần", np.nan), res.get("Mục tiêu 1", np.nan)
+        if res["Hành động"] == "Vào ngay" and pd.notna(can) and pd.notna(t1) and can < t1:
+            res["Ghi chú hành động"] += f"; lưu ý cản gần {can:.2f} (+{(can / r['Giá'] - 1) * 100:.1f}%) thấp hơn Mục tiêu 1"
         rows.append({"Mã": code, "Giá": r["Giá"], "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
     cols = ["Mã", "Giá", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Ghi chú hành động",
             "Vùng mua từ", "Vùng mua đến", "Giá vào", "Cắt lỗ", "Cắt lỗ %", "Mục tiêu 1", "Lời 1 %", "Mục tiêu 2", "Lời 2 %",
-            "R:R", "Cách vùng mua %"]
+            "R:R", "Cản gần", "Cách vùng mua %"]
     out = pd.DataFrame(rows)
     for col in cols:
         if col not in out:

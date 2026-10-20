@@ -743,14 +743,20 @@ def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
     if fprev and flast:
         out["fib"] = {"A": fprev, "B": flast}
 
-    c, atr = g["Giá đóng cửa"].iat[-1], g["ATR"].iat[-1]
-    atr = atr if pd.notna(atr) and atr > 0 else c * 0.02
-    d, risk = out["dir"], 1.5 * atr
+    d = out["dir"]
     if d != 0:
-        out["fc"] = {"dir": d, "lo": c - 0.25 * atr, "hi": c + 0.25 * atr, "entry": c,
-                     "sl": c - d * risk, "sl_pct": risk / c * 100,
-                     "t1": c + d * 2 * risk, "t2": c + d * 3 * risk}
+        out["fc"] = forecast_levels(g["Giá đóng cửa"].iat[-1], g["ATR"].iat[-1], d)
     return out
+
+
+def forecast_levels(c: float, atr: float, d: int = 1) -> dict:
+    """Vùng vào / cắt lỗ / mục tiêu của trang biểu đồ: vùng vào = giá ± 0,25 ATR, cắt lỗ = 1,5 ATR, mục tiêu 1 = 2R, mục tiêu 2 = 3R.
+    d = +1 (mua) hoặc -1 (bán). Trang \"Cổ phiếu chờ mua trong tuần\" gọi lại hàm này (d = +1) để số liệu luôn khớp với trang biểu đồ."""
+    atr = atr if pd.notna(atr) and atr > 0 else c * 0.02
+    risk = 1.5 * atr
+    return {"dir": d, "lo": c - 0.25 * atr, "hi": c + 0.25 * atr, "entry": c,
+            "sl": c - d * risk, "sl_pct": risk / c * 100,
+            "t1": c + d * 2 * risk, "t2": c + d * 3 * risk}
 
 
 # ------------------------------------------------------------------ KẾT LUẬN ĐA KHUNG
