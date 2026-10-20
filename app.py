@@ -74,6 +74,12 @@ st.markdown("""
 /* Chỉ số cơ bản (lưới 2x2) */
 .metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;color:var(--muted);margin-bottom:12px}
 .metric-item b{color:var(--txt2)}
+.ma-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:2px 0 10px}
+.ma-item{background:var(--card2);border:1px solid var(--line2);border-radius:7px;padding:6px 7px;min-width:0}
+.ma-label{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.2px}
+.ma-value{font-size:13px;font-weight:800;color:var(--txt2);margin:2px 0;white-space:nowrap}
+.ma-state{font-size:10px;font-weight:650;line-height:1.25;overflow-wrap:anywhere}
+.ma-up{color:var(--green)}.ma-down{color:var(--red)}.ma-unknown{color:var(--muted)}
 .stock-card.in-box{border:none;box-shadow:none;padding:2px 2px 0;background:transparent;transform:none}
 .stock-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px}
 .stock-card .price-box{margin:8px 0 10px}
@@ -555,6 +561,36 @@ def _stock_indicators(code: str) -> dict:
     }
 
 
+def _ma_summary_html(code: str) -> str:
+    """Hiển thị MA20/50/200 theo giá đóng cửa ngày; thiếu lịch sử thì không đoán giá trị."""
+    g = df[df["Mã"].astype(str).str.upper() == str(code).upper()].sort_values("Ngày")
+    if g.empty or "Giá đóng cửa" not in g:
+        close = np.nan
+        mas = {20: np.nan, 50: np.nan, 200: np.nan}
+    else:
+        close_series = pd.to_numeric(g["Giá đóng cửa"], errors="coerce")
+        close = close_series.iloc[-1] if len(close_series) else np.nan
+        mas = {n: close_series.rolling(n, min_periods=n).mean().iloc[-1]
+               if len(close_series) >= n else np.nan for n in (20, 50, 200)}
+    items = []
+    for n in (20, 50, 200):
+        ma = mas[n]
+        if pd.isna(close) or pd.isna(ma) or ma == 0:
+            value, status, cls = "—", "Chưa đủ dữ liệu", "ma-unknown"
+        else:
+            diff = (float(close) / float(ma) - 1) * 100
+            value = f"{float(ma):,.2f}"
+            if abs(diff) < 0.05:
+                status, cls = "Sát MA", "ma-unknown"
+            elif diff > 0:
+                status, cls = f"Trên MA +{diff:.1f}%", "ma-up"
+            else:
+                status, cls = f"Dưới MA {diff:.1f}%", "ma-down"
+        items.append(f'<div class="ma-item"><div class="ma-label">MA{n}</div>'
+                     f'<div class="ma-value">{value}</div><div class="ma-state {cls}">{status}</div></div>')
+    return '<div class="ma-summary" aria-label="Giá trung bình động ngày">' + ''.join(items) + '</div>'
+
+
 def _status_chip(label: str, state: str) -> str:
     bg, fg = {"Tốt": ("#DDF1EB", "#08785E"), "Xấu": ("#FCE4E8", "#C02645"), "Chưa rõ": ("#EEF1F5", "#626B78")}.get(state, ("#EEF1F5", "#626B78"))
     return f'<span title="{state}" style="display:inline-block;background:{bg};color:{fg};border-radius:7px;padding:5px 8px;margin:3px 4px 3px 0;font-size:12px;font-weight:650;white-space:nowrap">{label}</span>'
@@ -737,7 +773,8 @@ def page_filter():
                         f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
                         f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
-                        f'<div class="tag-container">' + chips_html + '</div>' + mtf_html + '</div>')
+                        + _ma_summary_html(code)
+                        + f'<div class="tag-container">' + chips_html + '</div>' + mtf_html + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
