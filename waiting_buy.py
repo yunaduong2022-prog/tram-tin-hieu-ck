@@ -251,6 +251,20 @@ def _rsi_confirms_uptrend(g: pd.DataFrame, w: pd.DataFrame | None) -> dict | Non
     return None
 
 
+def _rsi_bearish(g: pd.DataFrame, w: pd.DataFrame | None) -> dict | None:
+    """Phân kỳ RSI xấu (hướng giảm: thường giảm, phóng đại giảm, ẩn giảm) còn hiệu lực trên khung Ngày hoặc Tuần."""
+    for tf, df in (("W", w), ("D", g)):
+        if df is None or len(df) == 0:
+            continue
+        try:
+            for sg in DV.detect(df, tf):
+                if sg["dir"] == "down":
+                    return sg
+        except Exception:
+            continue
+    return None
+
+
 def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
     """Phân loại theo 9 trạng thái chờ mua (chưa xét RSI). Kết quả có thêm khóa _zone = vùng mua theo cấu trúc (hỗ trợ / kháng cự)."""
     ctx: dict = {}
@@ -378,15 +392,23 @@ def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
     (theo hỗ trợ / kháng cự của trạng thái đó, cho phép lệch 1.5% bên dưới như quy tắc test hỗ trợ) -> \"Điểm mua đẹp\"."""
     res = _classify_base(g, w, r)
     zone, alt = res.pop("_zone", None), res.pop("_alt", None)
+    bear = _rsi_bearish(g, w)
+    tfn = lambda sg: "tuần" if sg["tf"] == "W" else "ngày"
+    if bear is not None:
+        # RSI xấu: không nâng cấp; mã đang là Điểm mua đẹp / Đã có tín hiệu mua thì hạ xuống Theo dõi điểm mua
+        if res["Trạng thái"] in (GOOD_ENTRY, BUY_SIGNAL):
+            res["Lý do"] = (f"{str(res['Lý do']).rstrip('.')}; nhưng RSI cảnh báo đảo chiều ({bear['name'].lower()} khung {tfn(bear)}): "
+                            f"chờ RSI hết cảnh báo mới vào")
+            res["Trạng thái"], res["Danh sách"] = WATCH, STATE_GROUP[WATCH]
+        return res
     if res["Trạng thái"] in UPGRADABLE and zone is not None:
         lo, hi = zone
         c = float(g["Giá đóng cửa"].iat[-1])
         if pd.notna(lo) and pd.notna(hi) and lo * 0.985 <= c <= hi:
             dv = _rsi_confirms_uptrend(g, w)
             if dv is not None:
-                tfn = "ngày" if dv["tf"] == "D" else "tuần"
                 res["Lý do"] = (f"{str(res['Lý do']).rstrip('.')}; giá đang trong vùng mua ({lo:.2f} – {hi:.2f}) và RSI phân kỳ ẩn tăng "
-                                f"khung {tfn} xác nhận tiếp diễn xu hướng tăng")
+                                f"khung {tfn(dv)} xác nhận tiếp diễn xu hướng tăng")
                 res["Trạng thái"], res["Danh sách"] = GOOD_ENTRY, STATE_GROUP[GOOD_ENTRY]
                 if alt:
                     res.update(alt)
