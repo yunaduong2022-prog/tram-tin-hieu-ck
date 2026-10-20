@@ -434,7 +434,7 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, rsi_note: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -454,7 +454,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, rsi_note: str 
                  f'<div>Ngành: <b>{esc(str(meta["Ngành"]))}</b></div><div>Vốn hóa: <b>{esc(str(meta["Vốn hóa"]))}</b></div>'
                  f'<div>P/B: <b>{esc(str(meta["P/B"]))}</b></div><div>ROE: <b>{esc(str(meta["ROE"]))}</b></div></div>')
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
-    html += rsi_note     # cảnh báo RSI đỉnh thấp dần (chỉ hiển thị, không đổi trạng thái)
+    html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     if pd.isna(r.get("Vùng mua từ")):
         return html
     go = r.get("Hành động") == "Vào ngay"

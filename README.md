@@ -18,6 +18,13 @@ streamlit run app.py
 
 Trên macOS/Linux, kích hoạt môi trường bằng `source .venv/bin/activate`.
 
+## Cảnh báo phân kỳ RSI & giá (mới)
+Thẻ ở **Bộ lọc Realtime** và **Cổ phiếu chờ mua trong tuần** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
+- **Cảnh báo đảo chiều**: Phân kỳ thường giảm (giá HH, RSI LH), phân kỳ thường tăng (giá LL, RSI HL), phân kỳ phóng đại (2 đỉnh / 2 đáy giá bằng nhau, RSI đỉnh sau thấp hơn / đáy sau cao hơn) → nhãn `TẠI VÙNG CẢN`.
+- **Xác nhận tiếp diễn**: Phân kỳ ẩn tăng (giá HL, RSI LL), phân kỳ ẩn giảm (giá LH, RSI HH).
+- Ngưỡng (số nến xác nhận pivot, khoảng cách giữa 2 pivot, độ "tươi" của tín hiệu, dung sai "bằng nhau", chênh lệch RSI tối thiểu) chỉnh ở `PARAMS` và `RSI_MIN_DIFF`. Khung 15m / 1h / 4h đã có sẵn tham số nhưng app chưa có dữ liệu nến này nên chưa hiển thị.
+- Tín hiệu tự hết hạn khi giá vượt đỉnh (thủng đáy) của pivot sau. Pivot cần vài nến để xác nhận nên tín hiệu luôn trễ vài nến. Chỉ để tham khảo, không tính vào điểm tín hiệu / backtest và không phải khuyến nghị đầu tư.
+
 ## Rổ mã theo nhóm ngành (mới)
 - Ở chế độ **Vnstock tự động**, thanh bên có ô **Rổ mã**: chọn VN30 và các nhóm ngành (dầu khí, cảng biển, vận tải, cao su, phân bón, bán lẻ, ngân hàng, chứng khoán, bất động sản, khoáng sản, thép, thủy sản, dược phẩm). Mặc định chọn tất cả. Có thêm mục "Danh mục cũ của bạn" (130 mã cũ) và ô **Mã thêm tay**.
 - VN30 lấy trực tiếp từ vnstock mỗi 12 giờ; nếu lấy lỗi, app dùng danh sách dự phòng trong `watchlist.py` và ghi rõ ở thanh bên. Hãy đối chiếu lại danh sách dự phòng với rổ VN30 hiện hành.

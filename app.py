@@ -21,6 +21,7 @@ import brand as BR
 import stock_tabs as ST
 import mtf_levels as ML
 import waiting_buy as WB
+import rsi_divergence as DV
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
@@ -56,6 +57,8 @@ st.markdown("""
  .strategy-box.bad{background:var(--tag-red-bg);color:var(--red)}
 </style>
 """, unsafe_allow_html=True)
+
+st.markdown(f"<style>{DV.css()}</style>", unsafe_allow_html=True)   # cảnh báo phân kỳ RSI trong thẻ
 
 st.markdown("""
 <style>
@@ -715,25 +718,9 @@ _TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích l�
 
 
 @st.cache_data(show_spinner=False)
-def rsi_notes_cached(_frames: dict, code: str, key: str) -> list[str]:
-    """Các dòng cảnh báo RSI đỉnh thấp dần (khung Ngày, Tuần); rỗng nếu không có."""
-    out = []
-    for tf in ("W", "D"):
-        g = _frames[tf][_frames[tf]["Mã"] == code].sort_values("Ngày")
-        t = E.rsi_peak_text(E.rsi_peak_warning(g, tf))
-        if t:
-            out.append(t)
-    return out
-
-
-def _rsi_note_html(code: str) -> str:
-    """Khối HTML cảnh báo RSI cho thẻ; chuỗi rỗng nếu không có cảnh báo (thẻ không bị rối)."""
-    try:
-        notes = rsi_notes_cached(frames, code, DATA_KEY)
-    except Exception:
-        return ""
-    return "".join(f'<div style="font-size:12.5px;line-height:1.5;margin:8px 0 0;color:var(--red);font-weight:600">'
-                   f'{htmllib.escape(t)}</div>' for t in notes)
+def divergence_cached(_frames: dict, code: str, key: str) -> list:
+    """Phân kỳ RSI/giá khung D và W của một mã (xem rsi_divergence.py)."""
+    return DV.analyze(_frames, code, ("W", "D"))
 
 
 @st.cache_data(show_spinner=False)
@@ -961,6 +948,7 @@ def page_filter():
                 else:
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
                 mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
+                div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
                 _wb = _wb_map.get(code)
                 if _wb:
                     _tl, _tbg, _tfg = WB.status_tag(_wb["Trạng thái"], _wb["Lý do"])
@@ -981,7 +969,7 @@ def page_filter():
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
                         f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
                         + _ma_summary_html(code)
-                        + f'<div class="tag-container">' + chips_html + '</div>' + _rsi_note_html(code) + mtf_html + '</div>')
+                        + f'<div class="tag-container">' + chips_html + '</div>' + div_html + mtf_html + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
@@ -1043,7 +1031,8 @@ def _wb_meta(code: str) -> dict:
 def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
-        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), _rsi_note_html(str(r["Mã"]))), unsafe_allow_html=True)
+        div_html = DV.html(divergence_cached(frames, str(r["Mã"]), DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
+        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html), unsafe_allow_html=True)
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
