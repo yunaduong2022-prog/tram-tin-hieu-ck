@@ -715,6 +715,28 @@ _TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích l�
 
 
 @st.cache_data(show_spinner=False)
+def rsi_notes_cached(_frames: dict, code: str, key: str) -> list[str]:
+    """Các dòng cảnh báo RSI đỉnh thấp dần (khung Ngày, Tuần); rỗng nếu không có."""
+    out = []
+    for tf in ("W", "D"):
+        g = _frames[tf][_frames[tf]["Mã"] == code].sort_values("Ngày")
+        t = E.rsi_peak_text(E.rsi_peak_warning(g, tf))
+        if t:
+            out.append(t)
+    return out
+
+
+def _rsi_note_html(code: str) -> str:
+    """Khối HTML cảnh báo RSI cho thẻ; chuỗi rỗng nếu không có cảnh báo (thẻ không bị rối)."""
+    try:
+        notes = rsi_notes_cached(frames, code, DATA_KEY)
+    except Exception:
+        return ""
+    return "".join(f'<div style="font-size:12.5px;line-height:1.5;margin:8px 0 0;color:var(--red);font-weight:600">'
+                   f'{htmllib.escape(t)}</div>' for t in notes)
+
+
+@st.cache_data(show_spinner=False)
 def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     pick = lambda tf: _frames[tf][_frames[tf]["Mã"] == code]
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
@@ -959,7 +981,7 @@ def page_filter():
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
                         f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
                         + _ma_summary_html(code)
-                        + f'<div class="tag-container">' + chips_html + '</div>' + mtf_html + '</div>')
+                        + f'<div class="tag-container">' + chips_html + '</div>' + _rsi_note_html(code) + mtf_html + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
@@ -1021,7 +1043,7 @@ def _wb_meta(code: str) -> dict:
 def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
-        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"]))), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), _rsi_note_html(str(r["Mã"]))), unsafe_allow_html=True)
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
