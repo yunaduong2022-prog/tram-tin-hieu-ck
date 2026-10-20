@@ -22,6 +22,7 @@ import stock_tabs as ST
 import mtf_levels as ML
 import waiting_buy as WB
 import rsi_divergence as DV
+import foreign_flow as FF
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
@@ -1587,6 +1588,8 @@ def route():
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
+    if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
+        return FF.render()
     if main == "Bộ lọc & Backtest":
         if sub == "Bộ lọc Realtime": return page_filter()
         if sub == "Cổ phiếu chờ mua trong tuần": return page_wait_buy()

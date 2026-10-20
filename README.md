@@ -143,3 +143,12 @@ Trang **Bộ lọc** hiển thị từng mã dạng thẻ: mã chứng khoán, g
 **Lưu ý vốn hóa:** nguồn OHLCV hiện tại không bảo đảm trả về vốn hóa thị trường cho mọi mã. Để hiển thị con số vốn hóa, điền `data/stock_metadata.csv` theo mẫu gồm hai cột `Mã,Vốn hóa TT`; đơn vị của `Vốn hóa TT` là tỷ đồng. Nếu chưa có dữ liệu, giao diện ghi rõ “Chưa có dữ liệu” thay vì tự ước lượng.
 
 Nhãn dự báo được suy ra từ số lượng trạng thái kỹ thuật tích cực/tiêu cực trên thẻ, là bộ lọc định hướng tham khảo chứ không phải xác suất đã hiệu chuẩn. Trạng thái sóng ngắn/trung/trục chính dựa trên cấu trúc MA; Ichimoku/MACD/Volume/RSI dựa trên dữ liệu nến hiện có. Tín hiệu có thể thay đổi khi nến mới cập nhật.
+
+
+## Dòng tiền khối ngoại (mới)
+
+Tab **Thị trường → Dòng tiền khối ngoại** đã có dashboard để đọc dữ liệu mua/bán ròng theo mã: tổng quan phiên, Top mua/bán ròng, lịch sử lũy kế 5/20 phiên, phân tích theo nhóm ngành, bảng chi tiết và xuất CSV.
+
+**Nạp dữ liệu:** mở tab này, tải `foreign_flow_template.csv`, điền dữ liệu từ nguồn dữ liệu chứng khoán phù hợp rồi tải CSV lên. Các cột bắt buộc: `Ngày`, `Mã`, `Giá trị mua`, `Giá trị bán`. Các cột bổ sung được hỗ trợ: `Sàn`, `Khối lượng mua`, `Khối lượng bán`, `Giá đóng cửa`, `Tổng GTGD`, `Nhóm ngành`. Giá trị mua/bán và tổng GTGD phải cùng đơn vị (khuyến nghị tỷ đồng).
+
+File sau khi nạp được lưu tại `data/foreign_flow.csv`. Để dữ liệu tồn tại sau các lần deploy và được chia sẻ với người dùng app, cần commit file này lên repo; không nên dùng upload trong app làm phương thức nhập dữ liệu sản xuất lâu dài. Tự động cập nhật qua API chưa được bật vì cần chọn nhà cung cấp có dữ liệu khối ngoại, xác thực API và điều kiện cấp phép. App không suy ra giao dịch khối ngoại từ dữ liệu OHLCV.
