@@ -508,7 +508,7 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -529,6 +529,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             f'<div><span>ROE</span><b>{esc(str((meta or {}).get("ROE", "Chưa có")))}</b></div>'
             f'<div class="wide"><span>Ngành</span><b>{esc(str((meta or {}).get("Ngành", "Chưa có")))}</b></div>'
             f'<div><span>Vốn hóa</span><b>{esc(str((meta or {}).get("Vốn hóa", "Chưa có")))}</b></div></div>')
+    html += ma_html       # MA20/50/200 + chip Ngắn hạn/Trung hạn (app._ma_summary_html, cùng thẻ ở Bộ lọc)
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     if pd.isna(r.get("Vùng mua từ")):
