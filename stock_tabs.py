@@ -434,6 +434,81 @@ def market_table(sub, df, codes):
                "Ngành, Sàn lấy từ data/bctc.csv (nếu đã điền).")
 
 
+INFO_PATH = "data/thong_tin_chung.csv"      # nhập tay: Vốn điều lệ, SLCP lưu hành, %freefloat, %room NN, GDTD ròng, Website
+SHARES_PATH = "data/shares_outstanding.csv"  # do update_metadata.py tự cập nhật
+FOREIGN_PATH = "data/foreign_flow.csv"       # giao dịch khối ngoại (cùng nguồn trang Dòng tiền khối ngoại)
+
+
+def _read_csv_by_code(path):
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=["Mã"])
+    try:
+        x = pd.read_csv(path, encoding="utf-8-sig")
+        x.columns = [str(c).strip() for c in x.columns]
+        x["Mã"] = x["Mã"].astype(str).str.upper().str.strip()
+        return x.drop_duplicates("Mã", keep="last").set_index("Mã")
+    except Exception as e:  # noqa: BLE001
+        st.warning(f"Không đọc được {path}: {e}")
+        return pd.DataFrame(columns=["Mã"])
+
+
+def _foreign_net_latest():
+    """GDNN ròng (mua - bán) của phiên mới nhất trong data/foreign_flow.csv, theo mã."""
+    if not os.path.exists(FOREIGN_PATH):
+        return {}, None
+    try:
+        d = pd.read_csv(FOREIGN_PATH, encoding="utf-8-sig")
+        d.columns = [str(c).strip() for c in d.columns]
+        d["Ngày"] = pd.to_datetime(d["Ngày"], errors="coerce", dayfirst=True)
+        d["Mã"] = d["Mã"].astype(str).str.upper().str.strip()
+        d = d.dropna(subset=["Ngày"])
+        day = d["Ngày"].max()
+        t = d[d["Ngày"] == day]
+        net = pd.to_numeric(t["Giá trị mua"], errors="coerce").fillna(0) - pd.to_numeric(t["Giá trị bán"], errors="coerce").fillna(0)
+        return dict(zip(t["Mã"], net)), day
+    except Exception:  # noqa: BLE001
+        return {}, None
+
+
+def tab_info_table(codes, fund_map):
+    """Bảng Thông tin chung: Ngành, Sàn, Tên, Vốn điều lệ, Vốn hóa, SLCP lưu hành, %freefloat, SLCP freefloat, %room NN, GDNN/GDTD ròng, Website, Ghi chú."""
+    base = _sector_exchange(codes).set_index("Mã")
+    info, shares = _read_csv_by_code(INFO_PATH), _read_csv_by_code(SHARES_PATH)
+    notes = _read_csv_by_code(NOTE_PATH)
+    fnet, fday = _foreign_net_latest()
+    import watchlist as WL  # Ngành trống trong bctc.csv -> lấy nhóm ngành theo watchlist.py
+    _mem = WL.membership(WL.VN30_DU_PHONG)
+    _grp = lambda c: next((g for g in _mem.get(c, []) if g != WL.VN30), None)
+    num = lambda v: None if v is None or pd.isna(pd.to_numeric(v, errors="coerce")) else float(pd.to_numeric(v, errors="coerce"))
+    txt = lambda v: None if v is None or pd.isna(v) or str(v).strip() == "" else str(v).strip()
+    get = lambda df, c, col: df.at[c, col] if c in df.index and col in df.columns else None
+    cols = [("Mã CK", "txt"), ("Ngành", "txt"), ("Sàn", "txt"), ("Tên công ty", "txt"), ("Vốn điều lệ (tỷ)", "num0"),
+            ("Vốn hoá TT (tỷ)", "num0"), ("SLCP lưu hành (cp)", "num0"), ("%freefloat (%)", "pct"),
+            ("SLCP freefloat (cp)", "num0"), ("%room NN còn lại (%)", "pct"), ("GDNN ròng (tỷ)", "num2"),
+            ("GDTD ròng (tỷ)", "num2"), ("Website", "txt"), ("Ghi chú", "txt")]
+    rows = []
+    for code in codes:
+        slcp = num(get(info, code, "SLCP lưu hành (cp)"))
+        if slcp is None:
+            slcp = num(get(shares, code, "Số CP lưu hành"))
+        ff = num(get(info, code, "%freefloat"))
+        vdl = num(get(info, code, "Vốn điều lệ (tỷ)"))
+        if vdl is None and slcp:  # mệnh giá 10.000đ/cp
+            vdl = slcp * 10000 / 1e9
+        rows.append([code, txt(get(base, code, "Ngành")) or _grp(code), txt(get(base, code, "Sàn")), txt(_fund(code, fund_map).get("Tên công ty")),
+                     vdl, num(_fund(code, fund_map).get("Vốn hóa TT")), slcp, ff,
+                     slcp * ff / 100 if slcp and ff is not None else None,
+                     num(get(info, code, "%room NN còn lại")), num(fnet.get(code)) if code in fnet else None,
+                     num(get(info, code, "GDTD ròng (tỷ)")), txt(get(info, code, "Website")), txt(get(notes, code, "Ghi chú"))])
+    _dark_table(cols, rows)
+    st.caption(f"{len(rows)} mã · SLCP freefloat = SLCP lưu hành × %freefloat. Bấm tiêu đề cột để sắp xếp. "
+               f"Điền {INFO_PATH} (Vốn điều lệ, SLCP lưu hành, %freefloat, %room NN, GDTD ròng, Website); "
+               "SLCP lưu hành tự lấy từ data/shares_outstanding.csv nếu chưa điền; Vốn điều lệ để trống sẽ tính theo mệnh giá 10.000đ. "
+               + (f"GDNN ròng lấy từ {FOREIGN_PATH} ngày {fday:%d/%m/%Y} (đơn vị theo file, mặc định tỷ đồng)." if fday is not None
+                  else f"GDNN ròng cần file {FOREIGN_PATH}.") + " Ô trống hiển thị “—”.")
+
+
+
 def render(sub, df, codes, fund_map, groups=None):
     if sub == "Tin tức":
         news_page(codes, groups, df, fund_map)
@@ -444,6 +519,8 @@ def render(sub, df, codes, fund_map, groups=None):
         return
     if sub == "Định giá":
         tab_valuation_table(codes, fund_map)
+    elif sub == "Thông tin chung":
+        tab_info_table(codes, fund_map)
     elif sub in MARKET_SPECS:
         market_table(sub, df, codes)
     st.subheader("Chi tiết theo mã")
