@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v9"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v10"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -346,14 +346,14 @@ def zigzag_pct(h: np.ndarray, l: np.ndarray, dev: float):
     return piv, trend
 
 
-def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int = 52,
+def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int = 104,
                   tail: float = 0.10, max_legs: int = 3, wave: float = 0.20) -> dict:
-    """Chuỗi các NHỊP gần nhất (giảm/tăng) trong `weeks` tuần, trên khung Tuần.
+    """Chuỗi các NHỊP gần nhất (giảm/tăng) trong `weeks` tuần (mặc định 104 = 2 năm, đủ để lấy đúng đỉnh lớn), trên khung Tuần.
 
-    - Nhịp chính: từ đỉnh lớn xuống đáy lớn 52 tuần (hoặc ngược lại). Sau đó lấy lần lượt đáy thấp nhất / đỉnh cao nhất kế tiếp (nhịp >= `dev`), nên đáy đôi hay đỉnh phụ được gộp thành một.
+    - Nhịp chính: từ đỉnh lớn xuống đáy lớn trong cửa sổ (hoặc ngược lại). Sau đó lấy lần lượt đáy thấp nhất / đỉnh cao nhất kế tiếp (nhịp >= `dev`), nên đáy đôi hay đỉnh phụ được gộp thành một.
     - Nhịp cuối đi đến giá hiện tại. Nếu giá đã lùi/hồi >= `tail` so với đỉnh/đáy gần nhất thì tách thành một nhịp riêng
       (ví dụ tăng 44% từ đáy rồi giảm 14%); nhỏ hơn thì coi là nhiễu và gộp vào nhịp trước.
-    - Giữ tối đa `max_legs` nhịp cuối. Luôn trả thêm đỉnh/đáy 52 tuần để hiển thị.
+    - Giữ tối đa `max_legs` nhịp cuối. Luôn trả thêm đỉnh/đáy của cửa sổ để hiển thị.
     """
     if w is None or len(w) < 10 or not price or pd.isna(price):
         return {}
@@ -362,7 +362,7 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
     n = len(h)
     ih, il = int(np.argmax(h)), int(np.argmin(l))
     hi, lo = float(h[ih]), float(l[il])
-    # Neo vào đỉnh lớn / đáy lớn 52 tuần, rồi đi tiếp theo kiểu "cực trị sâu nhất": từ đỉnh lấy ĐÁY THẤP NHẤT sau đó,
+    # Neo vào đỉnh lớn / đáy lớn của cửa sổ, rồi đi tiếp theo kiểu "cực trị sâu nhất": từ đỉnh lấy ĐÁY THẤP NHẤT sau đó,
     # từ đáy lấy ĐỈNH CAO NHẤT sau đó (nhịp phải >= dev). Nhờ vậy nhiều đáy/đỉnh phụ (đáy đôi...) được gộp thành một.
     (i1, t1, p1), (i2, t2, p2) = sorted([(ih, "H", hi), (il, "L", lo)])
     pts = [(i1, t1, p1), (i2, t2, p2)]

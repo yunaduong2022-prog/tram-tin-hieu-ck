@@ -458,7 +458,7 @@ def swing_view(r):
     if isinstance(wv, str) and wv:
         tip += " · " + wv
     hi52, lo52 = r.get("Hi52", np.nan), r.get("Lo52", np.nan)
-    sub = f"Đỉnh 52 tuần {hi52:,.2f} · Đáy 52 tuần {lo52:,.2f}" if pd.notna(hi52) and pd.notna(lo52) else ""
+    sub = f"Đỉnh 2 năm {hi52:,.2f} · Đáy 2 năm {lo52:,.2f}" if pd.notna(hi52) and pd.notna(lo52) else ""
     if r.get("Swing_bear", False):                 # hồi kỹ thuật trong xu hướng giảm: không dùng màu xanh của "đảo chiều"
         tr = r.get("Swing_trend_ref", np.nan)
         note = "⚠ Đang hồi trong xu hướng giảm, chưa xác nhận đảo chiều" + (
