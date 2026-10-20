@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 import engine as E
+import rsi_divergence as DV
 
 # ------------------------------------------------------------------ NGƯỠNG (chỉnh tại đây)
 CFG = {
@@ -235,6 +236,21 @@ def _support_candidates(f: dict) -> list[tuple[str, float]]:
     return [(n, s) for n, s in out if not np.isnan(s) and s > 0]
 
 
+def _rsi_confirms_uptrend(g: pd.DataFrame, w: pd.DataFrame | None) -> dict | None:
+    """Phân kỳ ẩn tăng RSI (nhãn \"Xác nhận tiếp diễn · XU HƯỚNG TĂNG\") còn hiệu lực trên khung Ngày hoặc Tuần.
+    Cùng nguồn với khối cảnh báo phân kỳ hiển thị trên thẻ (rsi_divergence.detect), nên thẻ và trạng thái luôn khớp nhau."""
+    for tf, df in (("D", g), ("W", w)):
+        if df is None or len(df) == 0:
+            continue
+        try:
+            for sg in DV.detect(df, tf):
+                if sg["kind"] == "hid_bull":
+                    return sg
+        except Exception:
+            continue
+    return None
+
+
 def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
     """Trả về {state, group, reason, + vùng mua/cắt lỗ/mục tiêu} cho một mã."""
     ctx: dict = {}
@@ -300,6 +316,12 @@ def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
         near = [(n, s) for n, s in _support_candidates(f) if s < c and (c / s - 1) * 100 <= 8.0]
         if CFG["pullback_min"] <= pull <= CFG["pullback_max"] and near and f["vol5"] < 1.0:
             n, s = max(near, key=lambda x: x[1])
+            # RSI xác nhận tiếp diễn xu hướng tăng + giá đã vào vùng mua (cách hỗ trợ <= support_touch %) -> nâng lên "Điểm mua đẹp"
+            dv = _rsi_confirms_uptrend(g, w)
+            if dv is not None and (c / s - 1) * 100 <= CFG["support_touch"]:
+                tfn = "ngày" if dv["tf"] == "D" else "tuần"
+                return out(GOOD_ENTRY, f"Uptrend, điều chỉnh {pull:.1f}% từ đỉnh 20 phiên về sát {n} ({s:.2f}, cách {(c / s - 1) * 100:.1f}%), "
+                                       f"khối lượng co lại; RSI phân kỳ ẩn tăng khung {tfn} xác nhận tiếp diễn xu hướng tăng", **_levels(f, s))
             return out(WATCH, f"Uptrend, điều chỉnh {pull:.1f}% từ đỉnh 20 phiên, còn cách {n} ({s:.2f}) {(c / s - 1) * 100:.1f}%, khối lượng co lại", **_levels(f, s))
 
     res = f["res"]
