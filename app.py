@@ -565,7 +565,7 @@ def _stock_indicators(code: str) -> dict:
         "MACD": state(not macd_unknown and r["MACD"] > r["MACD_sig"], macd_unknown),
         "Volume": state(not vol_unknown and vol_now > vol_prev, vol_unknown),
         "RSI": "Tốt" if pd.notna(rnow) and pd.notna(rprev) and rnow > rprev else "Xấu" if pd.notna(rnow) and pd.notna(rprev) else "Chưa rõ",
-        "Sóng ngắn": trend((10, 20)), "Sóng trung": trend((20, 50, 100)), "Trục chính": trend((50, 100, 200)),
+        "Ngắn hạn": trend((10, 20)), "Trung hạn": trend((20, 50, 100)), "Dài hạn": trend((50, 100, 200)),
     }
 
 
@@ -636,9 +636,14 @@ def _ma_summary_html(code: str) -> str:
     return '<div class="ma-summary" aria-label="Giá trung bình động ngày">' + ''.join(items) + '</div>' + overview_html
 
 
+# Chú thích khi rê chuột: 3 chip xu hướng chỉ đo cấu trúc đường MA (không phải khung Ngày/Tuần/Tháng bên dưới).
+CHIP_TIPS = {"Ngắn hạn": "MA10 > MA20", "Trung hạn": "MA20 > MA50 > MA100", "Dài hạn": "MA50 > MA100 > MA200"}
+
+
 def _status_chip(label: str, state: str) -> str:
     bg, fg = {"Tốt": ("#DDF1EB", "#08785E"), "Xấu": ("#FCE4E8", "#C02645"), "Chưa rõ": ("#EEF1F5", "#626B78")}.get(state, ("#EEF1F5", "#626B78"))
-    return f'<span title="{state}" style="display:inline-block;background:{bg};color:{fg};border-radius:7px;padding:5px 8px;margin:3px 4px 3px 0;font-size:12px;font-weight:650;white-space:nowrap">{label}</span>'
+    tip = (htmllib.escape(CHIP_TIPS[label]) + f" · {state}") if label in CHIP_TIPS else state
+    return f'<span title="{tip}" style="display:inline-block;background:{bg};color:{fg};border-radius:7px;padding:5px 8px;margin:3px 4px 3px 0;font-size:12px;font-weight:650;white-space:nowrap">{label}</span>'
 
 
 def _forecast(states: dict) -> str:
