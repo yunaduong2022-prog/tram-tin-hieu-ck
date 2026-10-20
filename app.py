@@ -1598,7 +1598,8 @@ def route():
         return page_stock()
     if main == "Cổ phiếu" and sub in ST.TABS:
         return page_stock_tab(sub)
-    NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""))
+    NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""),
+                    NAV.MARKET_DESC.get(sub) if main == "Thị trường" else None)
 
 
 route()
