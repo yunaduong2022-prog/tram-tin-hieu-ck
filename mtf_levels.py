@@ -7,12 +7,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-LONG_TENKAN, LONG_KIJUN = 65, 129   # Ichimoku thứ 2 (65-129-52): đường Chuyển đổi 65 và Cơ sở 129 = vùng hỗ trợ khi giá nằm trên mây
-BAND_GAP_PCT = 0.03    # hai đường cách nhau ≤ 3% giá: gộp thành một mức "x ± dung sai"; xa hơn: hiện khoảng "thấp – cao"
-TOL_PCT = 0.006        # dung sai ± quanh mức hỗ trợ (0.6% giá, ví dụ 50.33 → ± 0.30)
-RES_LOOKBACK = {"1h": 120, "D": 120, "W": 104, "M": 60}   # kháng cự = "Đỉnh" của vùng nhìn thấy: ~6 tháng / 2 năm / 5 năm
-FAR_LINE_PCT = 1.25    # đường Ichimoku 65-129 gần nhất cao hơn giá > 25%: thêm "đỉnh gần nhất" làm mép dưới vùng kháng cự
-PIVOT_K = 3            # đỉnh gần nhất = đỉnh cục bộ cao hơn 3 nến mỗi bên
 MIN_BARS = 52          # mây Ichimoku 9-17-26 (span B 26 nến, dịch 26) cần ≥ 52 nến mới có mây
 TF_LABEL = {"1h": "1 giờ", "D": "Ngày", "W": "Tuần", "M": "Tháng"}
 VI_COLS = {"Giá mở cửa": "open", "Giá cao nhất": "high", "Giá thấp nhất": "low", "Giá đóng cửa": "close",
@@ -38,36 +32,47 @@ def std_ohlc(g):
     out = g.rename(columns=VI_COLS)
     if not {"high", "low", "close"} <= set(out.columns):
         return None
-    return out[[c for c in ("open", "high", "low", "close", "volume") if c in out.columns]].reset_index(drop=True)
+    if "Ngày" in out.columns:      # luôn xếp theo thời gian: iloc[-20:] phải đúng là 20 nến GẦN NHẤT, không phụ thuộc thứ tự dòng đầu vào
+        out = out.sort_values("Ngày").drop_duplicates("Ngày", keep="last").rename(columns={"Ngày": "date"})
+    cols = [c for c in ("date", "open", "high", "low", "close", "volume") if c in out.columns]
+    return out[cols].reset_index(drop=True)
+
+
+# Kháng cự = ĐỈNH SÓNG (swing high) gần nhất phía trên giá, giống cách nhìn trên biểu đồ.
+# Đỉnh sóng: nến có giá cao nhất trong K nến trước và K nến sau nó (nên cần K nến để xác nhận).
+PIVOT_K = {"1h": 3, "D": 3, "W": 2, "M": 2}
+PIVOT_LOOKBACK = {"1h": 120, "D": 120, "W": 104, "M": 120}   # chỉ xét các đỉnh trong ngần ấy nến gần nhất
+
+
+def _swing_highs(h, k, lookback):
+    """Danh sách (vị trí, giá) các đỉnh sóng trong `lookback` nến gần nhất, theo thứ tự thời gian."""
+    n = len(h)
+    out = []
+    for i in range(max(k, n - lookback), n - k):
+        w = h.iloc[i - k:i + k + 1]
+        if h.iloc[i] >= w.max():
+            out.append((i, float(h.iloc[i])))
+    return out
+
+
+def _resistances(df, tf, close):
+    """(kháng cự 1, kháng cự 2, ngày của kháng cự 1): hai đỉnh sóng GẦN GIÁ NHẤT phía trên giá.
+    Không có đỉnh sóng nào phía trên thì quay về cách cũ: đỉnh 20 nến, rồi đỉnh 60 nến."""
+    h = df["high"]
+    above = sorted({round(p, 4): i for i, p in _swing_highs(h, PIVOT_K[tf], PIVOT_LOOKBACK[tf]) if p > close * 1.002}.items())
+    if above:
+        r1 = above[0]
+        r2 = above[1][0] if len(above) > 1 else None
+        d1 = df["date"].iloc[r1[1]] if "date" in df.columns else None
+        return r1[0], r2, d1
+    high20, high60 = float(h.iloc[-20:].max()), float(h.iloc[-60:].max())
+    res = next((x for x in (high20, high60) if x > close * 1.002), None)
+    return res, None, None
 
 
 def _not_enough(tf, n):
     return {"ok": False, "trend": "Không đủ dữ liệu", "sup": None, "res": None, "close": None, "n": n,
             "cmt": f"Chưa đủ dữ liệu khung {TF_LABEL[tf]} (có {n} nến, cần ≥ {MIN_BARS})."}
-
-
-def _recent_pivot_high(h, close, tf):
-    """Đỉnh gần nhất: đỉnh cục bộ (cao hơn PIVOT_K nến mỗi bên) mới nhất nằm trên giá, trong RES_LOOKBACK nến."""
-    arr = h.to_numpy()
-    lo = max(PIVOT_K, len(arr) - RES_LOOKBACK[tf])
-    for i in range(len(arr) - PIVOT_K - 1, lo - 1, -1):
-        w = arr[i - PIVOT_K:i + PIVOT_K + 1]
-        if arr[i] >= w.max() and arr[i] > close * 1.002:
-            return float(arr[i])
-    return None
-
-
-def _resistance_zone(close, lines, pivot):
-    """Giá dưới mây: kháng cự là các đường Ichimoku 65-129 nằm trên giá.
-    - Đường gần nhất còn gần giá (≤ +25%): vùng = [đường thấp, đường cao]   (VD: SHS D 13.61 – 15.00, M 14.80 – 16.39)
-    - Đường gần nhất quá xa (> +25%) mà có đỉnh gần nhất ở giữa: vùng = [đỉnh gần nhất, đường thấp]   (VD: SHS W 14.19 – 18.50)
-    Trả về (mức gần, mức xa hoặc None); không có đường nào trên giá trả về (None, None)."""
-    above = sorted(x for x in lines if x > close)
-    if not above:
-        return None, None
-    if above[0] > close * FAR_LINE_PCT and pivot is not None and pivot < above[0]:
-        return pivot, above[0]
-    return above[0], (above[-1] if above[-1] > above[0] else None)
 
 
 def _frame_levels(df, tf, style):
@@ -90,39 +95,20 @@ def _frame_levels(df, tf, style):
     trend = "Tăng" if close > top else "Giảm" if close < bot else st["flat"]
     cmt = st["cmt"].get(tf, st["cmt"].get("*"))[trend].format(n=TF_LABEL[tf])
 
-    sup = sup_hi = sup_tol = res = res_hi = None
-    lines = None
-    if n >= LONG_KIJUN:      # Ichimoku 65-129-52: đường Chuyển đổi 65 và Cơ sở 129
-        tk = float(((h.rolling(LONG_TENKAN).max() + l.rolling(LONG_TENKAN).min()) / 2).iloc[-1])
-        kj = float(((h.rolling(LONG_KIJUN).max() + l.rolling(LONG_KIJUN).min()) / 2).iloc[-1])
-        lines = (tk, kj)
-    # Giá trên mây 9-17-26: hỗ trợ = các đường 65 / 129 nằm dưới giá.
-    if trend == "Tăng" and lines:
-        below = sorted(x for x in lines if x < close)
-        if below:
-            lo, hi = below[0], below[-1]
-            if hi - lo <= close * BAND_GAP_PCT:
-                sup, sup_tol = lo, round(lo * TOL_PCT, 2)
-            else:
-                sup, sup_hi = lo, hi
-    if sup is None:      # không đủ nến cho đường 129 hoặc giá chưa trên mây: đáy mây, rồi đáy 20 / 60 nến
-        low20, low60 = float(l.iloc[-20:].min()), float(l.iloc[-60:].min())
-        sup = next((x for x in (bot, low20, low60) if x < close), None)
-        sup_hi = top if (sup == bot and top < close and round(top, 2) > round(bot, 2)) else None   # giá trên mây: dải mây là vùng hỗ trợ
-    # Giá dưới / trong mây: kháng cự = các đường 65 / 129 nằm trên giá (kèm đỉnh gần nhất nếu các đường quá xa).
-    if trend != "Tăng" and lines:
-        res, res_hi = _resistance_zone(close, lines, _recent_pivot_high(h, close, tf))
-    if res is None:      # giá trên mây (hoặc không có mốc phù hợp): "Đỉnh" cao nhất của vùng nhìn thấy, phải nằm trên giá
-        res = float(h.iloc[-RES_LOOKBACK[tf]:].max())
-        res = res if res > close * 1.002 else None
+    # Hỗ trợ phải nằm dưới giá: đáy mây; giá đã xuống dưới mây thì dùng đáy 20 / 60 nến gần nhất.
+    low20, low60 = float(l.iloc[-20:].min()), float(l.iloc[-60:].min())
+    sup = next((x for x in (bot, low20, low60) if x < close), None)
+    # Kháng cự phải nằm trên giá: đỉnh sóng gần giá nhất phía trên; không có = không có kháng cự rõ.
+    res, res2, res_date = _resistances(df, tf, close)
     if res is None:
         cmt += " Giá đang ở vùng đỉnh, chưa có kháng cự rõ phía trên."
     if sup is None:
         cmt += " Giá đang ở vùng đáy mới, chưa có hỗ trợ rõ phía dưới."
+    sup_hi = top if (sup == bot and top < close and round(top, 2) > round(bot, 2)) else None   # giá trên mây: dải mây là vùng hỗ trợ
     return {"ok": True, "trend": trend, "cmt": cmt, "close": close, "n": n, "cloud": (round(bot, 2), round(top, 2)),
             "sup": round(sup, 2) if sup is not None else None, "sup_hi": round(sup_hi, 2) if sup_hi is not None else None,
-            "sup_tol": sup_tol,
-            "res": round(res, 2) if res is not None else None, "res_hi": round(res_hi, 2) if res_hi is not None else None}
+            "res": round(res, 2) if res is not None else None,
+            "res2": round(res2, 2) if res2 is not None else None, "res_date": res_date}
 
 
 def _strategy(res, sl_pct, watch):

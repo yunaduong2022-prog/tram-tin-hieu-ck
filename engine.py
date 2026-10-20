@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v11"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v12"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
