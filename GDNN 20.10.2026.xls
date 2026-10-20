@@ -1,0 +1,2709 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Giao dich nuoc ngoai</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><meta charset="utf-8"></head><body><table>
+            <thead>
+                <tr>
+                    <td class="symbol" rowspan="2">Mã</td>
+                    <td class="value" colspan="2">Mua</td>
+                    <td class="value" colspan="2">Bán</td>
+                    <td class="value-sort" colspan="2">Giao dịch ròng</td>
+                    <td rowspan="2">Room còn lại</td>
+                    <td rowspan="2">Đang sở hữu</td>
+                </tr>
+                <tr>
+                    <td>Khối lượng</td>
+                    <td>Giá trị</td>
+                    <td>Khối lượng</td>
+                    <td>Giá trị (VNĐ)</td>
+                    <td class="sort active-up" onclick="GDNN.handleSort('NetVolume')"><i class="fa fa-caret-up" aria-hidden="true"></i> Khối lượng</td>
+                    <td class="sort" onclick="GDNN.handleSort('NetValue')">Giá trị (VNĐ)</td>
+                </tr>
+            </thead>
+            <tbody id="data_table_GDNN" class="data_table_GDNN">
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HPG-cngatyacaphnatpaonahaaphat.chn" rel="HPG">HPG</a></td>
+                            <td class="content_value">8,197,700</td>
+                            <td class="content_value">171,618,350,000</td>
+                            <td class="content_value">1,266,300</td>
+                            <td class="content_value">26,601,710,000</td>
+                            <td class="content_value">6,931,400</td>
+                            <td class="content_value">145,016,640,000</td>
+                            <td class="content_room">2,310,198,605</td>
+                            <td class="content_room">21.64</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CTG-ngnahngathngamiacaphnacngathngavitanam.chn" rel="CTG">CTG</a></td>
+                            <td class="content_value">2,167,400</td>
+                            <td class="content_value">65,779,980,000</td>
+                            <td class="content_value">1,007,000</td>
+                            <td class="content_value">30,354,330,000</td>
+                            <td class="content_value">1,160,400</td>
+                            <td class="content_value">35,425,650,000</td>
+                            <td class="content_room">432,631,662</td>
+                            <td class="content_room">24.43</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HDB-ngnahngatmcpaphatatrinatpahachaminh.chn" rel="HDB">HDB</a></td>
+                            <td class="content_value">1,362,900</td>
+                            <td class="content_value">30,311,000,000</td>
+                            <td class="content_value">541,400</td>
+                            <td class="content_value">12,091,225,000</td>
+                            <td class="content_value">821,500</td>
+                            <td class="content_value">18,219,775,000</td>
+                            <td class="content_room">382,203,353</td>
+                            <td class="content_room">19.36</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DCM-cngatyacaphnaphnabnaduakhacamau.chn" rel="DCM">DCM</a></td>
+                            <td class="content_value">534,100</td>
+                            <td class="content_value">18,319,285,000</td>
+                            <td class="content_value">11,900</td>
+                            <td class="content_value">407,995,000</td>
+                            <td class="content_value">522,200</td>
+                            <td class="content_value">17,911,290,000</td>
+                            <td class="content_room">224,753,532</td>
+                            <td class="content_room">6.55</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KBC-tngacngatyaphatatrinaathakinhabcctcp.chn" rel="KBC">KBC</a></td>
+                            <td class="content_value">450,900</td>
+                            <td class="content_value">11,769,185,000</td>
+                            <td class="content_value">70,300</td>
+                            <td class="content_value">1,851,905,000</td>
+                            <td class="content_value">380,600</td>
+                            <td class="content_value">9,917,280,000</td>
+                            <td class="content_room">403,799,949</td>
+                            <td class="content_room">6.12</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MSN-cngatyacaphnatpaonamasan.chn" rel="MSN">MSN</a></td>
+                            <td class="content_value">597,300</td>
+                            <td class="content_value">43,630,250,000</td>
+                            <td class="content_value">338,300</td>
+                            <td class="content_value">24,525,750,000</td>
+                            <td class="content_value">259,000</td>
+                            <td class="content_value">19,104,500,000</td>
+                            <td class="content_room">1,161,983,663</td>
+                            <td class="content_room">25.54</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CTS-cngatyacaphnachngakhoanavietinbank.chn" rel="CTS">CTS</a></td>
+                            <td class="content_value">197,600</td>
+                            <td class="content_value">4,215,095,000</td>
+                            <td class="content_value">79,800</td>
+                            <td class="content_value">1,715,220,000</td>
+                            <td class="content_value">117,800</td>
+                            <td class="content_value">2,499,875,000</td>
+                            <td class="content_room">131,935,199</td>
+                            <td class="content_room">0.54</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NAB-ngnahngathngamiacaphnanamaa.chn" rel="NAB">NAB</a></td>
+                            <td class="content_value">158,400</td>
+                            <td class="content_value">1,879,335,000</td>
+                            <td class="content_value">41,100</td>
+                            <td class="content_value">488,065,000</td>
+                            <td class="content_value">117,300</td>
+                            <td class="content_value">1,391,270,000</td>
+                            <td class="content_room">627,734,238</td>
+                            <td class="content_room">0.97</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HHV-cngatyacaphnauatahatngagiaoathngaoac.chn" rel="HHV">HHV</a></td>
+                            <td class="content_value">212,800</td>
+                            <td class="content_value">1,996,382,000</td>
+                            <td class="content_value">96,800</td>
+                            <td class="content_value">911,021,000</td>
+                            <td class="content_value">116,000</td>
+                            <td class="content_value">1,085,361,000</td>
+                            <td class="content_room">223,446,367</td>
+                            <td class="content_room">10.11</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BVH-tpaonaboavit.chn" rel="BVH">BVH</a></td>
+                            <td class="content_value">159,400</td>
+                            <td class="content_value">11,084,030,000</td>
+                            <td class="content_value">68,700</td>
+                            <td class="content_value">4,780,490,000</td>
+                            <td class="content_value">90,700</td>
+                            <td class="content_value">6,303,540,000</td>
+                            <td class="content_room">161,968,341</td>
+                            <td class="content_room">27.18</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HHS-cngatyacaphnauatadchavahongahuy.chn" rel="HHS">HHS</a></td>
+                            <td class="content_value">97,800</td>
+                            <td class="content_value">871,511,000</td>
+                            <td class="content_value">13,300</td>
+                            <td class="content_value">119,448,000</td>
+                            <td class="content_value">84,500</td>
+                            <td class="content_value">752,063,000</td>
+                            <td class="content_room">214,728,529</td>
+                            <td class="content_room">0.29</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DPG-cngatyacaphnatpaonataphng.chn" rel="DPG">DPG</a></td>
+                            <td class="content_value">150,100</td>
+                            <td class="content_value">4,223,090,000</td>
+                            <td class="content_value">65,600</td>
+                            <td class="content_value">1,860,970,000</td>
+                            <td class="content_value">84,500</td>
+                            <td class="content_value">2,362,120,000</td>
+                            <td class="content_room">36,326,174</td>
+                            <td class="content_room">18.37</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BCM-tpaonauatavaphatatrinacnganghipabecamexaactcp.chn" rel="BCM">BCM</a></td>
+                            <td class="content_value">123,100</td>
+                            <td class="content_value">4,880,190,000</td>
+                            <td class="content_value">46,000</td>
+                            <td class="content_value">1,791,610,000</td>
+                            <td class="content_value">77,100</td>
+                            <td class="content_value">3,088,580,000</td>
+                            <td class="content_room">348,237,599</td>
+                            <td class="content_room">0.35</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FCN-cngatyacaphnafecon.chn" rel="FCN">FCN</a></td>
+                            <td class="content_value">94,800</td>
+                            <td class="content_value">1,007,765,000</td>
+                            <td class="content_value">17,700</td>
+                            <td class="content_value">186,245,000</td>
+                            <td class="content_value">77,100</td>
+                            <td class="content_value">821,520,000</td>
+                            <td class="content_room">29,990,722</td>
+                            <td class="content_room">30.95</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DIG-tngacngatyacaphnauataphatatrinaxyadng.chn" rel="DIG">DIG</a></td>
+                            <td class="content_value">532,500</td>
+                            <td class="content_value">5,113,884,000</td>
+                            <td class="content_value">463,900</td>
+                            <td class="content_value">4,435,090,000</td>
+                            <td class="content_value">68,600</td>
+                            <td class="content_value">678,794,000</td>
+                            <td class="content_room">392,911,307</td>
+                            <td class="content_room">2.46</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CTD-cngatyacaphnaxyadngacoteccons.chn" rel="CTD">CTD</a></td>
+                            <td class="content_value">88,200</td>
+                            <td class="content_value">5,741,290,000</td>
+                            <td class="content_value">21,400</td>
+                            <td class="content_value">1,394,180,000</td>
+                            <td class="content_value">66,800</td>
+                            <td class="content_value">4,347,110,000</td>
+                            <td class="content_room">3,985,318</td>
+                            <td class="content_room">46.5</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FRT-cngatyacaphnabanalakathutasafpt.chn" rel="FRT">FRT</a></td>
+                            <td class="content_value">101,100</td>
+                            <td class="content_value">14,811,560,000</td>
+                            <td class="content_value">49,800</td>
+                            <td class="content_value">7,276,860,000</td>
+                            <td class="content_value">51,300</td>
+                            <td class="content_value">7,534,700,000</td>
+                            <td class="content_room">27,737,305</td>
+                            <td class="content_room">33.49</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FTS-cngatyacaphnachngakhoanafpt.chn" rel="FTS">FTS</a></td>
+                            <td class="content_value">98,800</td>
+                            <td class="content_value">1,838,120,000</td>
+                            <td class="content_value">49,900</td>
+                            <td class="content_value">939,210,000</td>
+                            <td class="content_value">48,900</td>
+                            <td class="content_value">898,910,000</td>
+                            <td class="content_room">287,382,064</td>
+                            <td class="content_room">24.6</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AAA-cngatyacaphnanhaaanaphataxanh.chn" rel="AAA">AAA</a></td>
+                            <td class="content_value">44,000</td>
+                            <td class="content_value">315,188,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">44,000</td>
+                            <td class="content_value">315,188,000</td>
+                            <td class="content_room">386,507,222</td>
+                            <td class="content_room">1.84</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HDC-cngatyacaphnaphatatrinanhabaravngatu.chn" rel="HDC">HDC</a></td>
+                            <td class="content_value">76,900</td>
+                            <td class="content_value">793,195,000</td>
+                            <td class="content_value">38,200</td>
+                            <td class="content_value">392,340,000</td>
+                            <td class="content_value">38,700</td>
+                            <td class="content_value">400,855,000</td>
+                            <td class="content_room">109,505,865</td>
+                            <td class="content_room">1.33</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BSI-cngatyacaphnachngakhoanabidv.chn" rel="BSI">BSI</a></td>
+                            <td class="content_value">56,700</td>
+                            <td class="content_value">1,490,845,000</td>
+                            <td class="content_value">20,900</td>
+                            <td class="content_value">550,695,000</td>
+                            <td class="content_value">35,800</td>
+                            <td class="content_value">940,150,000</td>
+                            <td class="content_room">174,524,380</td>
+                            <td class="content_room">35.34</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MIG-tngacngatyacaphnaboahimaqunai.chn" rel="MIG">MIG</a></td>
+                            <td class="content_value">33,300</td>
+                            <td class="content_value">523,200,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">33,300</td>
+                            <td class="content_value">523,200,000</td>
+                            <td class="content_room">174,623,085</td>
+                            <td class="content_room">17.44</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GEL-cngatyacaphnahatngagelex.chn" rel="GEL">GEL</a></td>
+                            <td class="content_value">119,500</td>
+                            <td class="content_value">3,246,620,000</td>
+                            <td class="content_value">87,000</td>
+                            <td class="content_value">2,384,680,000</td>
+                            <td class="content_value">32,500</td>
+                            <td class="content_value">861,940,000</td>
+                            <td class="content_room">410,381,549</td>
+                            <td class="content_room">3.89</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DPR-cngatyacaphnacaoasuangaph.chn" rel="DPR">DPR</a></td>
+                            <td class="content_value">28,200</td>
+                            <td class="content_value">1,054,365,000</td>
+                            <td class="content_value">3,000</td>
+                            <td class="content_value">111,165,000</td>
+                            <td class="content_value">25,200</td>
+                            <td class="content_value">943,200,000</td>
+                            <td class="content_room">41,437,804</td>
+                            <td class="content_room">2.31</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/APH-cngatyacaphnatpaonaanaphataholdings.chn" rel="APH">APH</a></td>
+                            <td class="content_value">24,300</td>
+                            <td class="content_value">170,336,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">24,300</td>
+                            <td class="content_value">170,336,000</td>
+                            <td class="content_room">175,738,301</td>
+                            <td class="content_room">27.94</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/EVE-cngatyacaphnaeverpia.chn" rel="EVE">EVE</a></td>
+                            <td class="content_value">20,600</td>
+                            <td class="content_value">176,084,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">20,600</td>
+                            <td class="content_value">176,084,000</td>
+                            <td class="content_room">13,558,247</td>
+                            <td class="content_room">67.7</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HTN-cngatyacaphnahngathnhaincons.chn" rel="HTN">HTN</a></td>
+                            <td class="content_value">26,400</td>
+                            <td class="content_value">189,843,000</td>
+                            <td class="content_value">11,000</td>
+                            <td class="content_value">79,030,000</td>
+                            <td class="content_value">15,400</td>
+                            <td class="content_value">110,813,000</td>
+                            <td class="content_room">64,618,624</td>
+                            <td class="content_room">0.66</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CTR-tngacngatyacaphnacngatrnhaviettel.chn" rel="CTR">CTR</a></td>
+                            <td class="content_value">20,300</td>
+                            <td class="content_value">1,385,400,000</td>
+                            <td class="content_value">9,900</td>
+                            <td class="content_value">672,660,000</td>
+                            <td class="content_value">10,400</td>
+                            <td class="content_value">712,740,000</td>
+                            <td class="content_room">55,753,135</td>
+                            <td class="content_room">5.48</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CSM-cngatyacaphnacnganghipacaoasuaminanam.chn" rel="CSM">CSM</a></td>
+                            <td class="content_value">7,900</td>
+                            <td class="content_value">92,560,000</td>
+                            <td class="content_value">1,200</td>
+                            <td class="content_value">14,385,000</td>
+                            <td class="content_value">6,700</td>
+                            <td class="content_value">78,175,000</td>
+                            <td class="content_room">51,246,982</td>
+                            <td class="content_room">0.55</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GDT-cngatyacaphnachabinagacathnh.chn" rel="GDT">GDT</a></td>
+                            <td class="content_value">5,700</td>
+                            <td class="content_value">89,490,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">5,700</td>
+                            <td class="content_value">89,490,000</td>
+                            <td class="content_room">11,672,295</td>
+                            <td class="content_room">7.39</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GIL-cngatyacaphnasnaxutakinhadoanhaxutanhpakhuabnhathnh.chn" rel="GIL">GIL</a></td>
+                            <td class="content_value">4,800</td>
+                            <td class="content_value">38,723,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">4,800</td>
+                            <td class="content_value">38,723,000</td>
+                            <td class="content_room">49,681,677</td>
+                            <td class="content_room">1.1</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HPX-cngatyacaphnauatahiaphat.chn" rel="HPX">HPX</a></td>
+                            <td class="content_value">3,900</td>
+                            <td class="content_value">14,820,000</td>
+                            <td class="content_value">300</td>
+                            <td class="content_value">1,149,000</td>
+                            <td class="content_value">3,600</td>
+                            <td class="content_value">13,671,000</td>
+                            <td class="content_room">147,934,409</td>
+                            <td class="content_room">0.36</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DHG-cngatyacaphnadcahuagiang.chn" rel="DHG">DHG</a></td>
+                            <td class="content_value">3,500</td>
+                            <td class="content_value">314,300,000</td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">8,950,000</td>
+                            <td class="content_value">3,400</td>
+                            <td class="content_value">305,350,000</td>
+                            <td class="content_room">60,190,021</td>
+                            <td class="content_room">53.96</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BWE-cngatyacaphnancaundefinedamiatrngabnhadng.chn" rel="BWE">BWE</a></td>
+                            <td class="content_value">3,100</td>
+                            <td class="content_value">128,650,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">3,100</td>
+                            <td class="content_value">128,650,000</td>
+                            <td class="content_room">118,016,475</td>
+                            <td class="content_room">2.34</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/JVC-cngatyacaphnauatayataadcaphmavitanam.chn" rel="JVC">JVC</a></td>
+                            <td class="content_value">4,200</td>
+                            <td class="content_value">12,178,000</td>
+                            <td class="content_value">1,200</td>
+                            <td class="content_value">3,540,000</td>
+                            <td class="content_value">3,000</td>
+                            <td class="content_value">8,638,000</td>
+                            <td class="content_room">55,367,739</td>
+                            <td class="content_room">0.78</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GEG-cngatyacaphnainagiaalai.chn" rel="GEG">GEG</a></td>
+                            <td class="content_value">900</td>
+                            <td class="content_value">10,505,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">900</td>
+                            <td class="content_value">10,505,000</td>
+                            <td class="content_room">22,136,996</td>
+                            <td class="content_room">51.62</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LIX-cngatyacaphnalix.chn" rel="LIX">LIX</a></td>
+                            <td class="content_value">600</td>
+                            <td class="content_value">15,190,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">600</td>
+                            <td class="content_value">15,190,000</td>
+                            <td class="content_room">30,690,168</td>
+                            <td class="content_room">2.64</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ILB-cngatyacaphnaicdatnacngaundefinedalongabnh.chn" rel="ILB">ILB</a></td>
+                            <td class="content_value">500</td>
+                            <td class="content_value">9,500,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">500</td>
+                            <td class="content_value">9,500,000</td>
+                            <td class="content_room">13,812,610</td>
+                            <td class="content_room">12.84</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KOS-cngatyacaphnakosy.chn" rel="KOS">KOS</a></td>
+                            <td class="content_value">400</td>
+                            <td class="content_value">2,500,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">400</td>
+                            <td class="content_value">2,500,000</td>
+                            <td class="content_room">105,866,894</td>
+                            <td class="content_room">0.1</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HVN-tngacngatyahngakhngavitanamaactcp.chn" rel="HVN">HVN</a></td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">4,160,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">4,160,000</td>
+                            <td class="content_room">671,811,075</td>
+                            <td class="content_room">8.41</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CRC-cngatyacaphnacreateacapitalavitanam.chn" rel="CRC">CRC</a></td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">496,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">496,000</td>
+                            <td class="content_room">53,227,541</td>
+                            <td class="content_room">0.11</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ACG-cngatyacaphnagaanacng.chn" rel="ACG">ACG</a></td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">2,950,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">2,950,000</td>
+                            <td class="content_room">17,378,924</td>
+                            <td class="content_room">38.47</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GMH-cngatyacaphnaminhahngaqungatr.chn" rel="GMH">GMH</a></td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">624,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">624,000</td>
+                            <td class="content_room">8,111,100</td>
+                            <td class="content_room">0.84</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MHC-cngatyacaphnamhc.chn" rel="MHC">MHC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-370,006</td>
+                            <td class="content_room">0.81</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NBB-cngatyacaphnauatanmabyaby.chn" rel="NBB">NBB</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">49,847,804</td>
+                            <td class="content_room">0.39</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NAV-cngatyacaphnanamavit.chn" rel="NAV">NAV</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-57,041</td>
+                            <td class="content_room">0.71</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FDC-cngatyacaphnangoiathngavaphatatrinauatathnhaphahachaminh.chn" rel="FDC">FDC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">19,308,063</td>
+                            <td class="content_room">0.02</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KMR-cngatyacaphnamirae.chn" rel="KMR">KMR</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">20,011,393</td>
+                            <td class="content_room">64.82</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FIR-cngatyacaphnaaacafirstareal.chn" rel="FIR">FIR</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">35,256,140</td>
+                            <td class="content_room">0.11</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/L10-cngatyacaphnalilamaa10.chn" rel="L10">L10</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">4,749,557</td>
+                            <td class="content_room">0.98</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DXV-cngatyacaphnavicemavtaliuaxyadngaanng.chn" rel="DXV">DXV</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">4,800,650</td>
+                            <td class="content_room">0.51</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ECO-cngatyacaphnanhaasinhathaiavitanam.chn" rel="ECO">ECO</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">14,974,492</td>
+                            <td class="content_room">0.09</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NAF-cngatyacaphnanafoodsagroup.chn" rel="NAF">NAF</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">56,266,316</td>
+                            <td class="content_room">8.03</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FIT-cngatyacaphnatpaonafit.chn" rel="FIT">FIT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-19,579</td>
+                            <td class="content_room">0.01</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MDG-cngatyacaphnaminang.chn" rel="MDG">MDG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-5,700</td>
+                            <td class="content_room">0.05</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NHH-cngatyacaphnanhaahani.chn" rel="NHH">NHH</a></td>
+                            <td class="content_value">400</td>
+                            <td class="content_value">3,808,000</td>
+                            <td class="content_value">400</td>
+                            <td class="content_value">3,876,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">-68,000</td>
+                            <td class="content_room">112,635,740</td>
+                            <td class="content_room">0.29</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KHP-cngatyacaphnainalcakhanhaha.chn" rel="KHP">KHP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-734,315</td>
+                            <td class="content_room">1.18</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LAF-cngatyacaphnachabinahngaxutakhualongaan.chn" rel="LAF">LAF</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">7,347,434</td>
+                            <td class="content_room">1.75</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/IDI-cngatyacaphnauatavaphatatrinaaaqucagiaaidi.chn" rel="IDI">IDI</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-1,219,852</td>
+                            <td class="content_room">0.45</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ICT-cngatyacaphnavinathngaatinahcabuain.chn" rel="ICT">ICT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-54,883</td>
+                            <td class="content_room">0.17</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HVX-cngatyacaphnaxiamngavicemahiavn.chn" rel="HVX">HVX</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-322,300</td>
+                            <td class="content_room">0.84</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HVH-cngatyacaphnauatavacnganghahvc.chn" rel="HVH">HVH</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">35,097,445</td>
+                            <td class="content_room">0.08</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HUB-cngatyacaphnaxyalpathaathinahu.chn" rel="HUB">HUB</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">15,868,302</td>
+                            <td class="content_room">0.03</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HU1-cngatyacaphnauatavaxyadngahud1.chn" rel="HU1">HU1</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">12,498,099</td>
+                            <td class="content_room">0.01</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HTV-cngatyacaphnalogisticsavicem.chn" rel="HTV">HTV</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-761,963</td>
+                            <td class="content_room">5.81</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ITD-cngatyacaphnacnganghaitd.chn" rel="ITD">ITD</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">13,714,811</td>
+                            <td class="content_room">4.69</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HTL-cngatyacaphnakathutavaatatrngalong.chn" rel="HTL">HTL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">2,354,186</td>
+                            <td class="content_room">30.38</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HTG-tngacngatyacaphnadtamayahaath.chn" rel="HTG">HTG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-8,473</td>
+                            <td class="content_room">0.02</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HT1-cngatyacaphnaxiamngavicemahatin.chn" rel="HT1">HT1</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-8,666,721</td>
+                            <td class="content_room">2.27</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LBM-cngatyacaphnakhoangasnavavtaliuaxyadngalmang.chn" rel="LBM">LBM</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">18,964,582</td>
+                            <td class="content_room">12.07</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HRC-cngatyacaphnacaoasuahaabnh.chn" rel="HRC">HRC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-169,947</td>
+                            <td class="content_room">0.56</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MCP-cngatyacaphnainavabaoabamachu.chn" rel="MCP">MCP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-27,870</td>
+                            <td class="content_room">0.14</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LGC-cngatyacaphnauatacuangacii.chn" rel="LGC">LGC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">8,539,433</td>
+                            <td class="content_room">44.97</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LGL-cngatyacaphnauatavaphatatrinaathalongagiang.chn" rel="LGL">LGL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">25,528,283</td>
+                            <td class="content_room">0.43</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DTT-cngatyacaphnakanghaathnh.chn" rel="DTT">DTT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">0</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HCD-cngatyacaphnauatasnaxutavathngamiahcd.chn" rel="HCD">HCD</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">23,531,850</td>
+                            <td class="content_room">0.06</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HAR-cngatyacaphnauatathngamiabtangasnaanadngathoain.chn" rel="HAR">HAR</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">46,631,723</td>
+                            <td class="content_room">2.99</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HAP-cngatyacaphnatpaonahapaco.chn" rel="HAP">HAP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">53,012,978</td>
+                            <td class="content_room">1.28</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GVR-tpaonacnganghipacaoasuavitanam.chn" rel="GVR">GVR</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-22,712,996</td>
+                            <td class="content_room">0.57</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GTA-cngatyacaphnachabinagathunaan.chn" rel="GTA">GTA</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-34,976</td>
+                            <td class="content_room">0.34</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GSP-cngatyacaphnavnatiasnaphmakhaqucat.chn" rel="GSP">GSP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-497,780</td>
+                            <td class="content_room">0.67</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GHC-cngatyacaphnathyainagiaalai.chn" rel="GHC">GHC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">21,538,399</td>
+                            <td class="content_room">3.81</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ITC-cngatyacaphnauataakinhadoanhanh.chn" rel="ITC">ITC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-265,801</td>
+                            <td class="content_room">0.26</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LM8-cngatyacaphnalilamaa18.chn" rel="LM8">LM8</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-42,086</td>
+                            <td class="content_room">0.45</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LSS-cngatyacaphnamaangalamasn.chn" rel="LSS">LSS</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-503,741</td>
+                            <td class="content_room">0.56</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HNA-cngatyacaphnathyainahaana.chn" rel="HNA">HNA</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-1,000</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DTL-cngatyacaphnaiathinalc.chn" rel="DTL">DTL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">0</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NHT-cngatyacaphnasnaxutavathngamianamahoa.chn" rel="NHT">NHT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">11,278,280</td>
+                            <td class="content_room">3.06</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DSN-cngatyacaphnacngavinancamasen.chn" rel="DSN">DSN</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">4,155,908</td>
+                            <td class="content_room">14.61</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DBT-cngatyacaphnadcaphmabnatre.chn" rel="DBT">DBT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-230,266</td>
+                            <td class="content_room">1.05</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DBD-cngatyacaphnadcaatrangathitabayatabnhanh.chn" rel="DBD">DBD</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">78,664,423</td>
+                            <td class="content_room">16.78</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ACC-cngatyacaphnauatavaxyadngabnhadngaacc.chn" rel="ACC">ACC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-7,846,896</td>
+                            <td class="content_room">7.47</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DAT-cngatyacaphnauatadualchavaphatatrinathyasn.chn" rel="DAT">DAT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-4,875</td>
+                            <td class="content_room">0.01</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DTA-cngatyacaphnaatam.chn" rel="DTA">DTA</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">9,528,396</td>
+                            <td class="content_room">0.15</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CCL-cngatyacaphnauatavaphatatrinaathaduakhacualong.chn" rel="CCL">CCL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">31,683,372</td>
+                            <td class="content_room">1.66</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DAH-cngatyacaphnatpaoanakhachasanangaa.chn" rel="DAH">DAH</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-2,880</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/APG-cngatyacaphnachngakhoanaapg.chn" rel="APG">APG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">160,305,144</td>
+                            <td class="content_room">28.31</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ANT-cngatyacaphnarauaquathcaphmaanagiang.chn" rel="ANT">ANT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">14,371,301</td>
+                            <td class="content_room">0.13</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CHP-cngatyacaphnathyainaminatrung.chn" rel="CHP">CHP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-55,251</td>
+                            <td class="content_room">0.04</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ACL-cngatyacaphnaxutanhpakhuathyasnacualongaanagiang.chn" rel="ACL">ACL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-1,075,087</td>
+                            <td class="content_room">2.14</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CVT-cngatyacaphnacmc.chn" rel="CVT">CVT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">18,219,906</td>
+                            <td class="content_room">0.34</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CIG-cngatyacaphnacoma18.chn" rel="CIG">CIG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-5,513</td>
+                            <td class="content_room">0.01</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AGR-cngatyacaphnachngakhoanaagribank.chn" rel="AGR">AGR</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">227,677,713</td>
+                            <td class="content_room">0.28</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CKG-cngatyacaphnatpaonacic.chn" rel="CKG">CKG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">79,273,536</td>
+                            <td class="content_room">0.01</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ADG-cngatyacaphnacleveragroup.chn" rel="ADG">ADG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">8,341,585</td>
+                            <td class="content_room">25.99</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CRV-cngatyacaphnatpaonabtangasnacrv.chn" rel="CRV">CRV</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">343,699,935</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CLL-cngatyacaphnacngacatalai.chn" rel="CLL">CLL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-1,483,399</td>
+                            <td class="content_room">4.36</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ADP-cngatyacaphnasnaaang.chn" rel="ADP">ADP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">22,807,810</td>
+                            <td class="content_room">1.01</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CLW-cngatyacaphnacpancachaln.chn" rel="CLW">CLW</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-72,070</td>
+                            <td class="content_room">0.55</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ADS-cngatyacaphnadamsan.chn" rel="ADS">ADS</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">38,098,456</td>
+                            <td class="content_room">0.13</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CNG-cngatyacaphnacngavitanam.chn" rel="CNG">CNG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">16,660,426</td>
+                            <td class="content_room">1.53</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CMX-cngatyacaphnacamimexagroup.chn" rel="CMX">CMX</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">32,153,418</td>
+                            <td class="content_room">18.45</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DC4-cngatyacaphnadiceraaholdings.chn" rel="DC4">DC4</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">54,175,820</td>
+                            <td class="content_room">0.76</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AFX-cngatyacaphnaxutanhpakhuanngasnathcaphmaanagiang.chn" rel="AFX">AFX</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-600</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CMV-cngatyacaphnathnganghipacamau.chn" rel="CMV">CMV</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-4,703</td>
+                            <td class="content_room">0.03</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ASG-caphiuacngatyacaphnatpaonaasg.chn" rel="ASG">ASG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">26,532,528</td>
+                            <td class="content_room">0.77</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BHN-tngactcpabiaaaruaancagiiakhatahani.chn" rel="BHN">BHN</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">72,872,349</td>
+                            <td class="content_room">17.56</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BKG-cngatyacaphnauatabkgavitanam.chn" rel="BKG">BKG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">35,668,970</td>
+                            <td class="content_room">0.19</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BMC-cngatyacaphnakhoangasnabnhanh.chn" rel="BMC">BMC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-561,188</td>
+                            <td class="content_room">4.53</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AAM-cngatyacaphnathyasnamekong.chn" rel="AAM">AAM</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">6,070,069</td>
+                            <td class="content_room">0.84</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BRC-cngatyacaphnacaoasuabnathnh.chn" rel="BRC">BRC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">5,985,888</td>
+                            <td class="content_room">1.63</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DRL-cngatyacaphnathyainaundefinedainalca3.chn" rel="DRL">DRL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-261,230</td>
+                            <td class="content_room">2.75</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AAN-cngatyacaphnalngathcaaaan.chn" rel="AAN">AAN</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">0</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AAT-cngatyacaphnatpaonatinasnathanhaha.chn" rel="AAT">AAT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">35,251,670</td>
+                            <td class="content_room">0.22</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DRH-cngatyacaphnadrhaholdings.chn" rel="DRH">DRH</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">0</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ABR-cngatyacaphnauatanhnahiuavit.chn" rel="ABR">ABR</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">113,518</td>
+                            <td class="content_room">48.43</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DCL-cngatyacaphnadcaphmacualong.chn" rel="DCL">DCL</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-662,123</td>
+                            <td class="content_room">0.91</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ASP-cngatyacaphnatpaonaduakhaanapha.chn" rel="ASP">ASP</a></td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">3,100,000</td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">3,150,000</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">-50,000</td>
+                            <td class="content_room">200</td>
+                            <td class="content_room">49</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DRC-cngatyacaphnacaoasuaanng.chn" rel="DRC">DRC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-1,910,790</td>
+                            <td class="content_room">1.24</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DQC-cngatyacaphnabnganainaquang.chn" rel="DQC">DQC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-197,265</td>
+                            <td class="content_room">0.57</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ABS-cngatyacaphnadchavannganghipabnhathun.chn" rel="ABS">ABS</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-1,352</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BTT-cngatyacaphnathngamiaadchavabnathnh.chn" rel="BTT">BTT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-654,043</td>
+                            <td class="content_room">4.84</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/C32-cngatyacaphnacic39.chn" rel="C32">C32</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">14,931,141</td>
+                            <td class="content_room">0.33</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DMC-cngatyacaphnaxutanhpakhuayatadomesco.chn" rel="DMC">DMC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">15,041,032</td>
+                            <td class="content_room">56.69</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/C47-cngatyacaphnaxyadnga47.chn" rel="C47">C47</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">17,787,403</td>
+                            <td class="content_room">0.06</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DHM-cngatyacaphnathngamiavakhaiathacakhoangasnadngahiu.chn" rel="DHM">DHM</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-39,990</td>
+                            <td class="content_room">0.12</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CCC-cngatyacaphnaxyadngacdc.chn" rel="CCC">CCC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">0</td>
+                            <td class="content_room">0</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ABT-cngatyacaphnaxutanhpakhuathyasnabnatre.chn" rel="ABT">ABT</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">6,921,861</td>
+                            <td class="content_room">1.89</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BTP-cngatyacaphnanhitainabara.chn" rel="BTP">BTP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_room">-640,448</td>
+                            <td class="content_room">1.06</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HMC-cngatyacaphnakimakhathnhaphahachaminhaavnsteel.chn" rel="HMC">HMC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">1,085,000</td>
+                            <td class="content_value">-100</td>
+                            <td class="content_value">-1,085,000</td>
+                            <td class="content_room">13,277,812</td>
+                            <td class="content_room">0.36</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CLC-cngatyacaphnacatali.chn" rel="CLC">CLC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">10,620,000</td>
+                            <td class="content_value">-200</td>
+                            <td class="content_value">-10,620,000</td>
+                            <td class="content_room">12,628,445</td>
+                            <td class="content_room">1.81</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/COM-cngatyacaphnavtataaxngadu.chn" rel="COM">COM</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">5,800,000</td>
+                            <td class="content_value">-200</td>
+                            <td class="content_value">-5,800,000</td>
+                            <td class="content_room">-23,355</td>
+                            <td class="content_room">0.17</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BIC-tngacngatyacaphnaboahimangnahngauatavaphatatrinavitanam.chn" rel="BIC">BIC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">300</td>
+                            <td class="content_value">5,760,000</td>
+                            <td class="content_value">-300</td>
+                            <td class="content_value">-5,760,000</td>
+                            <td class="content_room">15,140,757</td>
+                            <td class="content_room">42.51</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DVP-cngatyacaphnauatavaphatatrinacnganhav.chn" rel="DVP">DVP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">500</td>
+                            <td class="content_value">37,200,000</td>
+                            <td class="content_value">-500</td>
+                            <td class="content_value">-37,200,000</td>
+                            <td class="content_room">15,472,355</td>
+                            <td class="content_room">10.32</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LHG-cngatyacaphnalongahu.chn" rel="LHG">LHG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">500</td>
+                            <td class="content_value">13,340,000</td>
+                            <td class="content_value">-500</td>
+                            <td class="content_value">-13,340,000</td>
+                            <td class="content_room">-3,643,956</td>
+                            <td class="content_room">7.29</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HTI-cngatyacaphnauataphatatrinahatngaidico.chn" rel="HTI">HTI</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">500</td>
+                            <td class="content_value">9,520,000</td>
+                            <td class="content_value">-500</td>
+                            <td class="content_value">-9,520,000</td>
+                            <td class="content_room">10,684,157</td>
+                            <td class="content_room">7.18</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AST-cngatyacaphnadchavahngakhngataseco.chn" rel="AST">AST</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">600</td>
+                            <td class="content_value">36,000,000</td>
+                            <td class="content_value">-600</td>
+                            <td class="content_value">-36,000,000</td>
+                            <td class="content_room">1,400,066</td>
+                            <td class="content_room">46.41</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HPA-cngatyacaphnaphatatrinannganghipahaaphat.chn" rel="HPA">HPA</a></td>
+                            <td class="content_value">1,000</td>
+                            <td class="content_value">27,100,000</td>
+                            <td class="content_value">1,700</td>
+                            <td class="content_value">45,535,000</td>
+                            <td class="content_value">-700</td>
+                            <td class="content_value">-18,435,000</td>
+                            <td class="content_room">282,532,417</td>
+                            <td class="content_room">0.87</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DSC-cngatyacaphnachngakhoanadsc.chn" rel="DSC">DSC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">700</td>
+                            <td class="content_value">6,710,000</td>
+                            <td class="content_value">-700</td>
+                            <td class="content_value">-6,710,000</td>
+                            <td class="content_room">278,432,345</td>
+                            <td class="content_room">0.01</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KDC-cngatyacaphnatpaonakido.chn" rel="KDC">KDC</a></td>
+                            <td class="content_value">400</td>
+                            <td class="content_value">20,200,000</td>
+                            <td class="content_value">1,400</td>
+                            <td class="content_value">70,730,000</td>
+                            <td class="content_value">-1,000</td>
+                            <td class="content_value">-50,530,000</td>
+                            <td class="content_room">106,920,879</td>
+                            <td class="content_room">13.11</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CCI-cngatyacaphnauataphatatrinacnganghipaathngamiacachi.chn" rel="CCI">CCI</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">1,000</td>
+                            <td class="content_value">17,000,000</td>
+                            <td class="content_value">-1,000</td>
+                            <td class="content_value">-17,000,000</td>
+                            <td class="content_room">-317,488</td>
+                            <td class="content_room">1.35</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BCE-cngatyacaphnaxyadngavagiaoathngabnhadng.chn" rel="BCE">BCE</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">1,000</td>
+                            <td class="content_value">5,880,000</td>
+                            <td class="content_value">-1,000</td>
+                            <td class="content_value">-5,880,000</td>
+                            <td class="content_room">19,900,309</td>
+                            <td class="content_room">2.62</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HAX-cngatyacaphnadchavaatahngaxanh.chn" rel="HAX">HAX</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">1,400</td>
+                            <td class="content_value">11,984,000</td>
+                            <td class="content_value">-1,400</td>
+                            <td class="content_value">-11,984,000</td>
+                            <td class="content_room">46,546,804</td>
+                            <td class="content_room">6.68</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FMC-cngatyacaphnathcaphmasaoata.chn" rel="FMC">FMC</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">1,500</td>
+                            <td class="content_value">52,275,000</td>
+                            <td class="content_value">-1,500</td>
+                            <td class="content_value">-52,275,000</td>
+                            <td class="content_room">12,518,037</td>
+                            <td class="content_room">30.86</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/D2D-cngatyacaphnaphatatrinaathacnganghipasa2.chn" rel="D2D">D2D</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">1,500</td>
+                            <td class="content_value">32,425,000</td>
+                            <td class="content_value">-1,500</td>
+                            <td class="content_value">-32,425,000</td>
+                            <td class="content_room">14,335,181</td>
+                            <td class="content_room">2.7</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DHA-cngatyacaphnahaaan.chn" rel="DHA">DHA</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">1,500</td>
+                            <td class="content_value">82,200,000</td>
+                            <td class="content_value">-1,500</td>
+                            <td class="content_value">-82,200,000</td>
+                            <td class="content_room">-2,045,674</td>
+                            <td class="content_room">13.53</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MCM-cngatyacaphnagingabasaamcachu.chn" rel="MCM">MCM</a></td>
+                            <td class="content_value">1,000</td>
+                            <td class="content_value">25,100,000</td>
+                            <td class="content_value">2,700</td>
+                            <td class="content_value">68,690,000</td>
+                            <td class="content_value">-1,700</td>
+                            <td class="content_value">-43,590,000</td>
+                            <td class="content_room">109,967,580</td>
+                            <td class="content_room">0.03</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NCT-cngatyacaphnadchavahngahaaniabi.chn" rel="NCT">NCT</a></td>
+                            <td class="content_value">4,300</td>
+                            <td class="content_value">356,900,000</td>
+                            <td class="content_value">6,000</td>
+                            <td class="content_value">498,600,000</td>
+                            <td class="content_value">-1,700</td>
+                            <td class="content_value">-141,700,000</td>
+                            <td class="content_room">4,994,111</td>
+                            <td class="content_room">10.91</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MWG-cngatyacaphnauatathagiiadiang.chn" rel="MWG">MWG</a></td>
+                            <td class="content_value">2,300</td>
+                            <td class="content_value">170,200,000</td>
+                            <td class="content_value">4,200</td>
+                            <td class="content_value">311,200,000</td>
+                            <td class="content_value">-1,900</td>
+                            <td class="content_value">-141,000,000</td>
+                            <td class="content_room">2,349</td>
+                            <td class="content_room">49</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DLG-cngatyacaphnatpaonacalongagiaalai.chn" rel="DLG">DLG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">2,000</td>
+                            <td class="content_value">3,800,000</td>
+                            <td class="content_value">-2,000</td>
+                            <td class="content_value">-3,800,000</td>
+                            <td class="content_room">128,873,650</td>
+                            <td class="content_room">5.94</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/IMP-cngatyacaphnadcaphmaimexpharm.chn" rel="IMP">IMP</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">2,200</td>
+                            <td class="content_value">78,490,000</td>
+                            <td class="content_value">-2,200</td>
+                            <td class="content_value">-78,490,000</td>
+                            <td class="content_room">8,302,058</td>
+                            <td class="content_room">72.57</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BFC-cngatyacaphnaphnabnabnhain.chn" rel="BFC">BFC</a></td>
+                            <td class="content_value">14,700</td>
+                            <td class="content_value">839,370,000</td>
+                            <td class="content_value">17,600</td>
+                            <td class="content_value">1,026,610,000</td>
+                            <td class="content_value">-2,900</td>
+                            <td class="content_value">-187,240,000</td>
+                            <td class="content_room">28,129,758</td>
+                            <td class="content_room">0.79</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DGC-cngatyacaphnatpaonahaachtacagiang.chn" rel="DGC">DGC</a></td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">3,365,000</td>
+                            <td class="content_value">3,100</td>
+                            <td class="content_value">104,270,000</td>
+                            <td class="content_value">-3,000</td>
+                            <td class="content_value">-100,905,000</td>
+                            <td class="content_room">176,024,567</td>
+                            <td class="content_room">2.65</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HAS-cngatyacaphnahacisco.chn" rel="HAS">HAS</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">3,100</td>
+                            <td class="content_value">24,211,000</td>
+                            <td class="content_value">-3,100</td>
+                            <td class="content_value">-24,211,000</td>
+                            <td class="content_room">2,702,836</td>
+                            <td class="content_room">15.21</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KLB-ngnahngathngamiacaphnakinalong.chn" rel="KLB">KLB</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">4,600</td>
+                            <td class="content_value">50,825,000</td>
+                            <td class="content_value">-4,600</td>
+                            <td class="content_value">-50,825,000</td>
+                            <td class="content_room">212,331,181</td>
+                            <td class="content_room">1.79</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HSG-cngatyacaphnatpaonahoaasen.chn" rel="HSG">HSG</a></td>
+                            <td class="content_value">408,400</td>
+                            <td class="content_value">4,320,285,000</td>
+                            <td class="content_value">413,100</td>
+                            <td class="content_value">4,411,385,000</td>
+                            <td class="content_value">-4,700</td>
+                            <td class="content_value">-91,100,000</td>
+                            <td class="content_room">370,171,731</td>
+                            <td class="content_room">3.14</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MSH-cngatyacaphnamayasngahng.chn" rel="MSH">MSH</a></td>
+                            <td class="content_value">4,200</td>
+                            <td class="content_value">135,870,000</td>
+                            <td class="content_value">9,000</td>
+                            <td class="content_value">292,125,000</td>
+                            <td class="content_value">-4,800</td>
+                            <td class="content_value">-156,255,000</td>
+                            <td class="content_room">50,451,869</td>
+                            <td class="content_room">5.16</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LDG-cngatyacaphnauataldg.chn" rel="LDG">LDG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">5,000</td>
+                            <td class="content_value">12,000,000</td>
+                            <td class="content_value">-5,000</td>
+                            <td class="content_value">-12,000,000</td>
+                            <td class="content_room">127,750,025</td>
+                            <td class="content_room">0.29</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FCM-cngatyacaphnabatngaphanavahanam.chn" rel="FCM">FCM</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">5,500</td>
+                            <td class="content_value">15,675,000</td>
+                            <td class="content_value">-5,500</td>
+                            <td class="content_value">-15,675,000</td>
+                            <td class="content_room">-1,510,635</td>
+                            <td class="content_room">3.27</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CTF-cngatyacaphnacityaauto.chn" rel="CTF">CTF</a></td>
+                            <td class="content_value">4,400</td>
+                            <td class="content_value">81,650,000</td>
+                            <td class="content_value">10,200</td>
+                            <td class="content_value">189,725,000</td>
+                            <td class="content_value">-5,800</td>
+                            <td class="content_value">-108,075,000</td>
+                            <td class="content_room">46,440,310</td>
+                            <td class="content_room">0.45</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/AGG-cngatyacaphnauatavaphatatrinabtangasnaanagia.chn" rel="AGG">AGG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">6,300</td>
+                            <td class="content_value">58,083,000</td>
+                            <td class="content_value">-6,300</td>
+                            <td class="content_value">-58,083,000</td>
+                            <td class="content_room">89,404,608</td>
+                            <td class="content_room">0.71</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/NHA-tngacngatyauataphatatrinanhavaathanamahani.chn" rel="NHA">NHA</a></td>
+                            <td class="content_value">4,300</td>
+                            <td class="content_value">30,359,000</td>
+                            <td class="content_value">11,700</td>
+                            <td class="content_value">82,346,000</td>
+                            <td class="content_value">-7,400</td>
+                            <td class="content_value">-51,987,000</td>
+                            <td class="content_room">34,746,474</td>
+                            <td class="content_room">0.24</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LPS-cngatyacaphnachngakhoanalpbank.chn" rel="LPS">LPS</a></td>
+                            <td class="content_value">43,700</td>
+                            <td class="content_value">750,400,000</td>
+                            <td class="content_value">51,300</td>
+                            <td class="content_value">883,220,000</td>
+                            <td class="content_value">-7,600</td>
+                            <td class="content_value">-132,820,000</td>
+                            <td class="content_room">1,408,333,800</td>
+                            <td class="content_room">0.02</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CTI-cngatyacaphnauataphatatrinacngathunaidico.chn" rel="CTI">CTI</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">8,000</td>
+                            <td class="content_value">130,045,000</td>
+                            <td class="content_value">-8,000</td>
+                            <td class="content_value">-130,045,000</td>
+                            <td class="content_room">33,770,471</td>
+                            <td class="content_room">0.27</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HSL-cngatyacaphnauataphatatrinathcaphmahngah.chn" rel="HSL">HSL</a></td>
+                            <td class="content_value">6,000</td>
+                            <td class="content_value">44,501,000</td>
+                            <td class="content_value">14,600</td>
+                            <td class="content_value">111,038,000</td>
+                            <td class="content_value">-8,600</td>
+                            <td class="content_value">-66,537,000</td>
+                            <td class="content_room">18,794,752</td>
+                            <td class="content_room">0.27</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DHC-cngatyacaphnangahiabnatre.chn" rel="DHC">DHC</a></td>
+                            <td class="content_value">6,100</td>
+                            <td class="content_value">231,000,000</td>
+                            <td class="content_value">14,900</td>
+                            <td class="content_value">563,810,000</td>
+                            <td class="content_value">-8,800</td>
+                            <td class="content_value">-332,810,000</td>
+                            <td class="content_room">15,665,489</td>
+                            <td class="content_room">35.26</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KSB-cngatyacaphnakhoangasnavaxyadngabnhadng.chn" rel="KSB">KSB</a></td>
+                            <td class="content_value">4,600</td>
+                            <td class="content_value">62,360,000</td>
+                            <td class="content_value">14,700</td>
+                            <td class="content_value">199,885,000</td>
+                            <td class="content_value">-10,100</td>
+                            <td class="content_value">-137,525,000</td>
+                            <td class="content_room">55,036,047</td>
+                            <td class="content_room">1.05</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MCH-cngatyacaphnahngatiuadngamasan.chn" rel="MCH">MCH</a></td>
+                            <td class="content_value">14,500</td>
+                            <td class="content_value">2,015,580,000</td>
+                            <td class="content_value">25,900</td>
+                            <td class="content_value">3,610,760,000</td>
+                            <td class="content_value">-11,400</td>
+                            <td class="content_value">-1,595,180,000</td>
+                            <td class="content_room">1,161,868,839</td>
+                            <td class="content_room">11.13</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LCG-cngatyacaphnalizen.chn" rel="LCG">LCG</a></td>
+                            <td class="content_value">77,400</td>
+                            <td class="content_value">504,304,000</td>
+                            <td class="content_value">89,700</td>
+                            <td class="content_value">580,683,000</td>
+                            <td class="content_value">-12,300</td>
+                            <td class="content_value">-76,379,000</td>
+                            <td class="content_room">100,625,476</td>
+                            <td class="content_room">1.76</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BMI-tngacngatyacaphnaboaminh.chn" rel="BMI">BMI</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">13,000</td>
+                            <td class="content_value">177,950,000</td>
+                            <td class="content_value">-13,000</td>
+                            <td class="content_value">-177,950,000</td>
+                            <td class="content_room">36,259,724</td>
+                            <td class="content_room">25.91</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HID-cngatyacaphnahalcomavitanam.chn" rel="HID">HID</a></td>
+                            <td class="content_value">100</td>
+                            <td class="content_value">496,000</td>
+                            <td class="content_value">13,700</td>
+                            <td class="content_value">68,232,000</td>
+                            <td class="content_value">-13,600</td>
+                            <td class="content_value">-67,736,000</td>
+                            <td class="content_room">37,315,551</td>
+                            <td class="content_room">0.39</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GAS-tngacngatyakhavitanamctcp.chn" rel="GAS">GAS</a></td>
+                            <td class="content_value">22,800</td>
+                            <td class="content_value">1,744,340,000</td>
+                            <td class="content_value">40,500</td>
+                            <td class="content_value">3,107,380,000</td>
+                            <td class="content_value">-17,700</td>
+                            <td class="content_value">-1,363,040,000</td>
+                            <td class="content_room">1,130,903,832</td>
+                            <td class="content_room">2.13</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DBC-cngatyacaphnatpaonadabacoavitanam.chn" rel="DBC">DBC</a></td>
+                            <td class="content_value">218,600</td>
+                            <td class="content_value">3,481,690,000</td>
+                            <td class="content_value">238,800</td>
+                            <td class="content_value">3,804,185,000</td>
+                            <td class="content_value">-20,200</td>
+                            <td class="content_value">-322,495,000</td>
+                            <td class="content_room">205,988,622</td>
+                            <td class="content_room">1.21</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BMP-cngatyacaphnanhaabnhaminh.chn" rel="BMP">BMP</a></td>
+                            <td class="content_value">400</td>
+                            <td class="content_value">55,110,000</td>
+                            <td class="content_value">24,200</td>
+                            <td class="content_value">3,337,700,000</td>
+                            <td class="content_value">-23,800</td>
+                            <td class="content_value">-3,282,590,000</td>
+                            <td class="content_room">14,474,115</td>
+                            <td class="content_room">82.32</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/EVG-cngatyacaphnatpaonaeverland.chn" rel="EVG">EVG</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">28,300</td>
+                            <td class="content_value">106,623,000</td>
+                            <td class="content_value">-28,300</td>
+                            <td class="content_value">-106,623,000</td>
+                            <td class="content_room">109,827,433</td>
+                            <td class="content_room">0.41</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DMX-cngatyacaphnauatainamayaxanh.chn" rel="DMX">DMX</a></td>
+                            <td class="content_value">4,200</td>
+                            <td class="content_value">313,780,000</td>
+                            <td class="content_value">34,200</td>
+                            <td class="content_value">2,565,430,000</td>
+                            <td class="content_value">-30,000</td>
+                            <td class="content_value">-2,251,650,000</td>
+                            <td class="content_room">507,495,920</td>
+                            <td class="content_room">8.97</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CDC-cngatyacaphnachngadng.chn" rel="CDC">CDC</a></td>
+                            <td class="content_value">500</td>
+                            <td class="content_value">11,840,000</td>
+                            <td class="content_value">37,700</td>
+                            <td class="content_value">868,295,000</td>
+                            <td class="content_value">-37,200</td>
+                            <td class="content_value">-856,455,000</td>
+                            <td class="content_room">51,119,733</td>
+                            <td class="content_room">0.57</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DPM-tngacngatyaphnabnavahaachtaduakhctcp.chn" rel="DPM">DPM</a></td>
+                            <td class="content_value">41,000</td>
+                            <td class="content_value">877,270,000</td>
+                            <td class="content_value">82,800</td>
+                            <td class="content_value">1,775,680,000</td>
+                            <td class="content_value">-41,800</td>
+                            <td class="content_value">-898,410,000</td>
+                            <td class="content_room">318,140,538</td>
+                            <td class="content_room">3.21</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/IJC-cngatyacaphnaphatatrinahatngakathut.chn" rel="IJC">IJC</a></td>
+                            <td class="content_value">11,900</td>
+                            <td class="content_value">81,589,000</td>
+                            <td class="content_value">58,300</td>
+                            <td class="content_value">397,356,000</td>
+                            <td class="content_value">-46,400</td>
+                            <td class="content_value">-315,767,000</td>
+                            <td class="content_room">283,135,601</td>
+                            <td class="content_room">4.03</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HII-cngatyacaphnaanatinaindustries.chn" rel="HII">HII</a></td>
+                            <td class="content_value">2,900</td>
+                            <td class="content_value">28,774,000</td>
+                            <td class="content_value">58,800</td>
+                            <td class="content_value">588,965,000</td>
+                            <td class="content_value">-55,900</td>
+                            <td class="content_value">-560,191,000</td>
+                            <td class="content_room">35,875,821</td>
+                            <td class="content_room">1.3</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KHG-cngatyacaphnatpaonakhiahonaland.chn" rel="KHG">KHG</a></td>
+                            <td class="content_value">72,800</td>
+                            <td class="content_value">325,226,000</td>
+                            <td class="content_value">130,400</td>
+                            <td class="content_value">586,473,000</td>
+                            <td class="content_value">-57,600</td>
+                            <td class="content_value">-261,247,000</td>
+                            <td class="content_room">218,916,625</td>
+                            <td class="content_room">0.29</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CSV-cngatyacaphnahaachtacabnaminanam.chn" rel="CSV">CSV</a></td>
+                            <td class="content_value">6,400</td>
+                            <td class="content_value">151,360,000</td>
+                            <td class="content_value">64,100</td>
+                            <td class="content_value">1,515,530,000</td>
+                            <td class="content_value">-57,700</td>
+                            <td class="content_value">-1,364,170,000</td>
+                            <td class="content_room">54,229,556</td>
+                            <td class="content_room">0.92</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/EVF-cngatyatiachnhacaphnainalc.chn" rel="EVF">EVF</a></td>
+                            <td class="content_value">5,900</td>
+                            <td class="content_value">67,580,000</td>
+                            <td class="content_value">64,400</td>
+                            <td class="content_value">739,370,000</td>
+                            <td class="content_value">-58,500</td>
+                            <td class="content_value">-671,790,000</td>
+                            <td class="content_room">377,968,021</td>
+                            <td class="content_room">0.3</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HAG-cngatyacaphnahongaanhagiaalai.chn" rel="HAG">HAG</a></td>
+                            <td class="content_value">29,900</td>
+                            <td class="content_value">426,590,000</td>
+                            <td class="content_value">95,500</td>
+                            <td class="content_value">1,365,150,000</td>
+                            <td class="content_value">-65,600</td>
+                            <td class="content_value">-938,560,000</td>
+                            <td class="content_room">600,125,862</td>
+                            <td class="content_room">1.65</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ELC-cngatyacaphnacnganghaavinathngaelcom.chn" rel="ELC">ELC</a></td>
+                            <td class="content_value">200</td>
+                            <td class="content_value">2,245,000</td>
+                            <td class="content_value">69,700</td>
+                            <td class="content_value">782,985,000</td>
+                            <td class="content_value">-69,500</td>
+                            <td class="content_value">-780,740,000</td>
+                            <td class="content_room">53,781,852</td>
+                            <td class="content_room">3.34</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CMG-cngatyacaphnatpaonacnganghacmc.chn" rel="CMG">CMG</a></td>
+                            <td class="content_value">3,900</td>
+                            <td class="content_value">77,415,000</td>
+                            <td class="content_value">78,700</td>
+                            <td class="content_value">1,552,795,000</td>
+                            <td class="content_value">-74,800</td>
+                            <td class="content_value">-1,475,380,000</td>
+                            <td class="content_room">32,638,446</td>
+                            <td class="content_room">35.99</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HAH-cngatyacaphnavnatiavaxpadahiaan.chn" rel="HAH">HAH</a></td>
+                            <td class="content_value">34,100</td>
+                            <td class="content_value">1,679,545,000</td>
+                            <td class="content_value">118,100</td>
+                            <td class="content_value">5,811,245,000</td>
+                            <td class="content_value">-84,000</td>
+                            <td class="content_value">-4,131,700,000</td>
+                            <td class="content_room">50,116,992</td>
+                            <td class="content_room">3.88</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HDG-cngatyacaphnatpaonaha.chn" rel="HDG">HDG</a></td>
+                            <td class="content_value">28,800</td>
+                            <td class="content_value">427,125,000</td>
+                            <td class="content_value">116,300</td>
+                            <td class="content_value">1,713,360,000</td>
+                            <td class="content_value">-87,500</td>
+                            <td class="content_value">-1,286,235,000</td>
+                            <td class="content_room">139,453,566</td>
+                            <td class="content_room">15.73</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HQC-cngatyacaphnatavnthngamidchavaaacahongaqun.chn" rel="HQC">HQC</a></td>
+                            <td class="content_value">27,200</td>
+                            <td class="content_value">53,352,000</td>
+                            <td class="content_value">126,100</td>
+                            <td class="content_value">247,674,000</td>
+                            <td class="content_value">-98,900</td>
+                            <td class="content_value">-194,322,000</td>
+                            <td class="content_room">303,368,440</td>
+                            <td class="content_room">1.58</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HHP-cngatyacaphnagiyahongahahiaphng.chn" rel="HHP">HHP</a></td>
+                            <td class="content_value">300</td>
+                            <td class="content_value">4,980,000</td>
+                            <td class="content_value">103,600</td>
+                            <td class="content_value">1,742,310,000</td>
+                            <td class="content_value">-103,300</td>
+                            <td class="content_value">-1,737,330,000</td>
+                            <td class="content_room">39,060,016</td>
+                            <td class="content_room">6.63</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/EIB-ngnahngathngamiacaphnaxutanhpakhuavitanam.chn" rel="EIB">EIB</a></td>
+                            <td class="content_value">149,300</td>
+                            <td class="content_value">2,425,325,000</td>
+                            <td class="content_value">255,300</td>
+                            <td class="content_value">4,147,295,000</td>
+                            <td class="content_value">-106,000</td>
+                            <td class="content_value">-1,721,970,000</td>
+                            <td class="content_room">541,886,940</td>
+                            <td class="content_room">0.97</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MZG-cngatyacaphnamiza.chn" rel="MZG">MZG</a></td>
+                            <td class="content_value">10,100</td>
+                            <td class="content_value">115,140,000</td>
+                            <td class="content_value">121,200</td>
+                            <td class="content_value">1,417,140,000</td>
+                            <td class="content_value">-111,100</td>
+                            <td class="content_value">-1,302,000,000</td>
+                            <td class="content_room">61,310,670</td>
+                            <td class="content_room">2.16</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DXG-cngatyacaphnabluemarqagroup.chn" rel="DXG">DXG</a></td>
+                            <td class="content_value">91,700</td>
+                            <td class="content_value">931,235,000</td>
+                            <td class="content_value">209,200</td>
+                            <td class="content_value">2,147,405,000</td>
+                            <td class="content_value">-117,500</td>
+                            <td class="content_value">-1,216,170,000</td>
+                            <td class="content_room">437,892,505</td>
+                            <td class="content_room">15.52</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DXS-cngatyacaphnadchavabtangasnataxanh.chn" rel="DXS">DXS</a></td>
+                            <td class="content_value">17,200</td>
+                            <td class="content_value">84,287,000</td>
+                            <td class="content_value">135,300</td>
+                            <td class="content_value">663,804,000</td>
+                            <td class="content_value">-118,100</td>
+                            <td class="content_value">-579,517,000</td>
+                            <td class="content_room">258,346,934</td>
+                            <td class="content_room">5.39</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/HCM-cngatyacaphnachngakhoanathnhaphahachaminh.chn" rel="HCM">HCM</a></td>
+                            <td class="content_value">17,200</td>
+                            <td class="content_value">411,585,000</td>
+                            <td class="content_value">137,200</td>
+                            <td class="content_value">3,289,625,000</td>
+                            <td class="content_value">-120,000</td>
+                            <td class="content_value">-2,878,040,000</td>
+                            <td class="content_room">200,573,421</td>
+                            <td class="content_room">34.39</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GEE-cngatyacaphnainalcagelex.chn" rel="GEE">GEE</a></td>
+                            <td class="content_value">600</td>
+                            <td class="content_value">39,770,000</td>
+                            <td class="content_value">121,800</td>
+                            <td class="content_value">8,085,650,000</td>
+                            <td class="content_value">-121,200</td>
+                            <td class="content_value">-8,045,880,000</td>
+                            <td class="content_room">315,787,625</td>
+                            <td class="content_room">0.7</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BVB-ngnahngathngamiacaphnabnavit.chn" rel="BVB">BVB</a></td>
+                            <td class="content_value">7,000</td>
+                            <td class="content_value">72,225,000</td>
+                            <td class="content_value">136,000</td>
+                            <td class="content_value">1,405,960,000</td>
+                            <td class="content_value">-129,000</td>
+                            <td class="content_value">-1,333,735,000</td>
+                            <td class="content_room">31,141,566</td>
+                            <td class="content_room">0.14</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CRE-cngatyacaphnabtangasnathak.chn" rel="CRE">CRE</a></td>
+                            <td class="content_value">2,000</td>
+                            <td class="content_value">9,960,000</td>
+                            <td class="content_value">168,300</td>
+                            <td class="content_value">851,566,000</td>
+                            <td class="content_value">-166,300</td>
+                            <td class="content_value">-841,606,000</td>
+                            <td class="content_room">215,785,764</td>
+                            <td class="content_room">3.46</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DGW-cngatyacaphnathagiias.chn" rel="DGW">DGW</a></td>
+                            <td class="content_value">251,100</td>
+                            <td class="content_value">11,436,465,000</td>
+                            <td class="content_value">480,300</td>
+                            <td class="content_value">21,887,085,000</td>
+                            <td class="content_value">-229,200</td>
+                            <td class="content_value">-10,450,620,000</td>
+                            <td class="content_room">44,734,188</td>
+                            <td class="content_room">28.99</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/LPB-ngnahngathngamiacaphnalcaphatavitanam.chn" rel="LPB">LPB</a></td>
+                            <td class="content_value">98,100</td>
+                            <td class="content_value">3,720,650,000</td>
+                            <td class="content_value">356,900</td>
+                            <td class="content_value">13,558,380,000</td>
+                            <td class="content_value">-258,800</td>
+                            <td class="content_value">-9,837,730,000</td>
+                            <td class="content_room">104,183,841</td>
+                            <td class="content_room">1.51</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ANV-cngatyacaphnanamavit.chn" rel="ANV">ANV</a></td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">0</td>
+                            <td class="content_value">302,100</td>
+                            <td class="content_value">5,761,120,000</td>
+                            <td class="content_value">-302,100</td>
+                            <td class="content_value">-5,761,120,000</td>
+                            <td class="content_room">125,039,725</td>
+                            <td class="content_room">2.11</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/FPT-cngatyacaphnafpt.chn" rel="FPT">FPT</a></td>
+                            <td class="content_value">529,000</td>
+                            <td class="content_value">30,252,030,000</td>
+                            <td class="content_value">840,700</td>
+                            <td class="content_value">48,086,340,000</td>
+                            <td class="content_value">-311,700</td>
+                            <td class="content_value">-17,834,310,000</td>
+                            <td class="content_room">361,306,609</td>
+                            <td class="content_room">27.92</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BSR-cngatyacaphnaatngacngatyalcahaaduavitanam.chn" rel="BSR">BSR</a></td>
+                            <td class="content_value">52,900</td>
+                            <td class="content_value">1,512,250,000</td>
+                            <td class="content_value">400,900</td>
+                            <td class="content_value">11,496,070,000</td>
+                            <td class="content_value">-348,000</td>
+                            <td class="content_value">-9,983,820,000</td>
+                            <td class="content_room">2,374,952,220</td>
+                            <td class="content_room">1.57</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BID-ngnahngathngamiacaphnauatavaphatatrinavitanam.chn" rel="BID">BID</a></td>
+                            <td class="content_value">57,900</td>
+                            <td class="content_value">1,939,750,000</td>
+                            <td class="content_value">591,300</td>
+                            <td class="content_value">19,797,345,000</td>
+                            <td class="content_value">-533,400</td>
+                            <td class="content_value">-17,857,595,000</td>
+                            <td class="content_room">978,165,722</td>
+                            <td class="content_room">17.42</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GMD-cngatyacaphnatpaonagemadept.chn" rel="GMD">GMD</a></td>
+                            <td class="content_value">604,900</td>
+                            <td class="content_value">32,909,780,000</td>
+                            <td class="content_value">1,208,000</td>
+                            <td class="content_value">65,635,280,000</td>
+                            <td class="content_value">-603,100</td>
+                            <td class="content_value">-32,725,500,000</td>
+                            <td class="content_room">44,477,812</td>
+                            <td class="content_room">38.73</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/KDH-cngatyacaphnauatavakinhadoanhanhakhangain.chn" rel="KDH">KDH</a></td>
+                            <td class="content_value">150,400</td>
+                            <td class="content_value">2,126,820,000</td>
+                            <td class="content_value">793,200</td>
+                            <td class="content_value">11,139,545,000</td>
+                            <td class="content_value">-642,800</td>
+                            <td class="content_value">-9,012,725,000</td>
+                            <td class="content_room">297,382,401</td>
+                            <td class="content_room">23.5</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/BAF-cngatyacaphnannganghipabafavitanam.chn" rel="BAF">BAF</a></td>
+                            <td class="content_value">42,900</td>
+                            <td class="content_value">1,323,260,000</td>
+                            <td class="content_value">980,400</td>
+                            <td class="content_value">30,185,035,000</td>
+                            <td class="content_value">-937,500</td>
+                            <td class="content_value">-28,861,775,000</td>
+                            <td class="content_room">168,695,037</td>
+                            <td class="content_room">3.76</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ASM-cngatyacaphnatpaonasaoamai.chn" rel="ASM">ASM</a></td>
+                            <td class="content_value">15,100</td>
+                            <td class="content_value">67,655,000</td>
+                            <td class="content_value">1,013,700</td>
+                            <td class="content_value">4,568,341,000</td>
+                            <td class="content_value">-998,600</td>
+                            <td class="content_value">-4,500,686,000</td>
+                            <td class="content_room">150,604,039</td>
+                            <td class="content_room">12.01</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/GEX-cngatyacaphnatpaonagelex.chn" rel="GEX">GEX</a></td>
+                            <td class="content_value">222,000</td>
+                            <td class="content_value">5,007,610,000</td>
+                            <td class="content_value">1,309,400</td>
+                            <td class="content_value">29,611,765,000</td>
+                            <td class="content_value">-1,087,400</td>
+                            <td class="content_value">-24,604,155,000</td>
+                            <td class="content_room">569,930,323</td>
+                            <td class="content_room">6.44</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/DSE-cngatyacaphnachngakhoanadnse.chn" rel="DSE">DSE</a></td>
+                            <td class="content_value">87,500</td>
+                            <td class="content_value">1,755,410,000</td>
+                            <td class="content_value">1,226,500</td>
+                            <td class="content_value">24,415,645,000</td>
+                            <td class="content_value">-1,139,000</td>
+                            <td class="content_value">-22,660,235,000</td>
+                            <td class="content_room">385,594,096</td>
+                            <td class="content_room">9.96</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MBB-ngnahngathngamiacaphnaqunai.chn" rel="MBB">MBB</a></td>
+                            <td class="content_value">1,272,200</td>
+                            <td class="content_value">24,996,965,000</td>
+                            <td class="content_value">2,582,400</td>
+                            <td class="content_value">50,662,550,000</td>
+                            <td class="content_value">-1,310,200</td>
+                            <td class="content_value">-25,665,585,000</td>
+                            <td class="content_room">79,008,976</td>
+                            <td class="content_room">22.38</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/MSB-ngnahngathngamiacaphnahngahiavitanam.chn" rel="MSB">MSB</a></td>
+                            <td class="content_value">1,088,100</td>
+                            <td class="content_value">16,303,300,000</td>
+                            <td class="content_value">2,517,400</td>
+                            <td class="content_value">37,627,695,000</td>
+                            <td class="content_value">-1,429,300</td>
+                            <td class="content_value">-21,324,395,000</td>
+                            <td class="content_room">873,646,382</td>
+                            <td class="content_room">6.67</td>
+                        </tr>
+                        
+                        <tr class="even">
+                            <td class="content_symbol"><a href="/du-lieu/hose/CII-cngatyacaphnauatahatngakathutatpahachaminh.chn" rel="CII">CII</a></td>
+                            <td class="content_value">45,600</td>
+                            <td class="content_value">615,000,000</td>
+                            <td class="content_value">1,594,000</td>
+                            <td class="content_value">21,454,395,000</td>
+                            <td class="content_value">-1,548,400</td>
+                            <td class="content_value">-20,839,395,000</td>
+                            <td class="content_room">241,033,617</td>
+                            <td class="content_room">4.13</td>
+                        </tr>
+                        
+                        <tr class="odd">
+                            <td class="content_symbol"><a href="/du-lieu/hose/ACB-ngnahngathngamiacaphnaaachu.chn" rel="ACB">ACB</a></td>
+                            <td class="content_value">930,800</td>
+                            <td class="content_value">18,880,185,000</td>
+                            <td class="content_value">2,673,000</td>
+                            <td class="content_value">54,180,050,000</td>
+                            <td class="content_value">-1,742,200</td>
+                            <td class="content_value">-35,299,865,000</td>
+                            <td class="content_room">398,489,671</td>
+                            <td class="content_room">23.13</td>
+                        </tr>
+                        </tbody>
+        </table></body></html>
