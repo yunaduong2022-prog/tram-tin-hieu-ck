@@ -97,7 +97,7 @@ def _features(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
         "hi20": float(h.tail(20).max()), "hi10": float(h.tail(10).max()),
         "lo10": float(l.tail(10).min()), "lo10_prev": float(l.iloc[-20:-10].min()) if len(g) >= 20 else np.nan,
         "lo20": float(l.tail(20).min()), "lo5": float(l.tail(5).min()),
-        "hi60": float(h.tail(60).max()),
+        "hi60": float(h.tail(60).max()), "hi52": _f(r.get("Hi52")),
         "rng5": _f(g["Range_%"].tail(5).mean()),
         "band10": (float(h.tail(10).max()) - float(l.tail(10).min())) / c * 100,
         "gain10": (c / float(c_s.iat[-11]) - 1) * 100 if len(g) > 11 else np.nan,
@@ -127,19 +127,51 @@ def _features(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
 
 def _levels(f: dict, support: float, entry_lo: float | None = None, entry_hi: float | None = None,
             stop: float | None = None) -> dict:
-    """Vùng mua, cắt lỗ, mục tiêu, R:R. Mục tiêu = kháng cự gần nhất phía trên; không có thì đo bằng 2R."""
+    """Vùng mua, giá vào tham chiếu, cắt lỗ, Mục tiêu 1/2, R:R (tính trên Mục tiêu 1).
+
+    Giá vào tham chiếu = giá hiện tại nếu đang trong vùng mua; chưa tới vùng thì lấy cạnh dưới, đã vượt vùng thì lấy cạnh trên.
+    Mục tiêu 1/2 = hai mức cản gần nhất phía trên (đỉnh 20 phiên, đỉnh 60 phiên, đỉnh 52 tuần); không có mức cản nào
+    thì Mục tiêu 1 đo bằng 2R và không có Mục tiêu 2.
+    """
     c = f["c"]
     lo = entry_lo if entry_lo is not None else support
     hi = entry_hi if entry_hi is not None else support * (1 + CFG["support_touch"] / 100)
     sl = stop if stop is not None else support * (1 - CFG["stop_buffer"] / 100)
     entry = min(max(c, lo), hi) if hi > lo else c
     risk = entry - sl
-    tgt = f["res_far"]
-    if np.isnan(tgt) or tgt <= entry:
-        tgt = entry + 2 * risk if risk > 0 else np.nan
-    rr = (tgt - entry) / risk if risk > 0 and not np.isnan(tgt) else np.nan
-    return {"Vùng mua từ": lo, "Vùng mua đến": hi, "Cắt lỗ": sl, "Mục tiêu": tgt, "R:R": rr,
+    base = max(c, entry)
+    above = sorted({round(x, 4) for x in (f["res"], f["hi60"], f["hi52"]) if not np.isnan(x) and x > base * 1.01})
+    t1 = above[0] if above else (entry + 2 * risk if risk > 0 else np.nan)
+    t2 = next((x for x in above[1:] if x > t1 * 1.01), np.nan)
+    rr = (t1 - entry) / risk if risk > 0 and not np.isnan(t1) else np.nan
+    pct = lambda x: (x / entry - 1) * 100 if not np.isnan(x) and entry > 0 else np.nan
+    return {"Vùng mua từ": lo, "Vùng mua đến": hi, "Giá vào": entry, "Cắt lỗ": sl, "Cắt lỗ %": pct(sl),
+            "Mục tiêu 1": t1, "Lời 1 %": pct(t1), "Mục tiêu 2": t2, "Lời 2 %": pct(t2), "R:R": rr,
             "Cách vùng mua %": (c / hi - 1) * 100 if c > hi else (c / lo - 1) * 100 if c < lo else 0.0}
+
+
+# Hành động theo trạng thái: lúc giá ĐANG trong vùng mua, trạng thái nào được vào ngay, trạng thái nào còn phải chờ gì
+ACT_NOW = {BUY_SIGNAL, GOOD_ENTRY}
+ACT_WAIT_NOTE = {NEAR_ZONE: "chờ 1 phiên bứt phá có khối lượng hoặc phiên đảo chiều rõ ràng",
+                 EARLY_UP: "chờ giá bứt khỏi nền kèm khối lượng",
+                 ACCUM: "chờ giá phá khỏi biên độ nền kèm khối lượng",
+                 WATCH: "chờ giá điều chỉnh về sát vùng mua",
+                 IMPROVING: "chỉ theo dõi, chưa nên giải ngân",
+                 WAIT_CONFIRM: "chờ MA và thanh khoản xác nhận đảo chiều",
+                 MARGINAL: "chỉ theo dõi, chưa nên giải ngân"}
+
+
+def action_of(state: str, gap: float) -> tuple[str, str]:
+    """(Hành động, ghi chú). Hành động là "Vào ngay" hoặc "Chờ mua"; gap = % giá hiện tại lệch khỏi vùng mua."""
+    if pd.isna(gap):
+        return "Chờ mua", ACT_WAIT_NOTE.get(state, "")
+    if abs(gap) < 0.05:
+        if state in ACT_NOW:
+            return "Vào ngay", "giá đang trong vùng mua, có thể giải ngân (nên chia lệnh)"
+        return "Chờ mua", "giá đang trong vùng mua nhưng " + ACT_WAIT_NOTE.get(state, "cần thêm xác nhận")
+    if gap > 0:
+        return "Chờ mua", f"giá cao hơn vùng mua {gap:.1f}%, không mua đuổi, chờ điều chỉnh về vùng mua"
+    return "Chờ mua", f"giá còn thấp hơn vùng mua {abs(gap):.1f}%, chờ giá lên tới vùng kích hoạt"
 
 
 def _recent_buy_signal(g: pd.DataFrame, n: int):
@@ -276,9 +308,14 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
             res = classify(g.reset_index(drop=True), wg.get(code), r)
         except Exception as e:     # một mã lỗi dữ liệu không được làm sập cả trang
             res = {"Trạng thái": NO_BUY, "Danh sách": L_NONE, "Lý do": f"Lỗi khi phân loại: {e}"}
+        res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"], res.get("Cách vùng mua %", np.nan))
+        rr_ = res.get("R:R", np.nan)
+        if res["Hành động"] == "Vào ngay" and pd.notna(rr_) and rr_ < 1.5:
+            res["Ghi chú hành động"] += f"; lưu ý R:R thấp ({rr_:.1f}), cản phía trên rất gần"
         rows.append({"Mã": code, "Giá": r["Giá"], "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
-    cols = ["Mã", "Giá", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do",
-            "Vùng mua từ", "Vùng mua đến", "Cắt lỗ", "Mục tiêu", "R:R", "Cách vùng mua %"]
+    cols = ["Mã", "Giá", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Ghi chú hành động",
+            "Vùng mua từ", "Vùng mua đến", "Giá vào", "Cắt lỗ", "Cắt lỗ %", "Mục tiêu 1", "Lời 1 %", "Mục tiêu 2", "Lời 2 %",
+            "R:R", "Cách vùng mua %"]
     out = pd.DataFrame(rows)
     for col in cols:
         if col not in out:
