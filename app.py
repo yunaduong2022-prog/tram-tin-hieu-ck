@@ -976,11 +976,43 @@ def _wb_table() -> pd.DataFrame:
     return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb1")
 
 
+@st.cache_data(show_spinner=False)
+def _wb_meta_maps(key: str) -> tuple[dict, dict]:
+    """Vốn hóa (data/stock_metadata.csv), tên/P/B/ROE (data/fundamentals.csv) và số nhập tay - cùng nguồn với thẻ ở Bộ lọc."""
+    cap_map, fund_map = {}, {}
+    if os.path.exists("data/stock_metadata.csv"):
+        try:
+            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
+            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
+        except Exception: pass
+    if os.path.exists("data/fundamentals.csv"):
+        try:
+            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
+            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
+            fund_map = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
+        except Exception: pass
+    apply_manual_overrides(fund_map, cap_map)
+    return cap_map, fund_map
+
+
+def _wb_meta(code: str) -> dict:
+    cap_map, fund_map = _wb_meta_maps(WY_KEY)
+    groups = MEMBER.get(code, [])
+    sectors = [g for g in groups if g != WL.VN30]
+    fd = fund_map.get(code.upper(), {})
+    def fmt(v, f_):
+        try: return f_.format(float(v)) if pd.notna(v) else "Chưa có"
+        except (TypeError, ValueError): return "Chưa có"
+    return {"Ngành": ", ".join(sectors) if sectors else "Khác / chưa phân loại",
+            "Vốn hóa": fmt(cap_map.get(code.upper()), "{:,.0f} tỷ"),
+            "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%")}
+
+
 def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
-        st.markdown(WB.card_html(r, group), unsafe_allow_html=True)
-        if st.button("📈 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
+        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"]))), unsafe_allow_html=True)
+        if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = r["Mã"]

@@ -353,7 +353,7 @@ def card_css(dark: bool) -> str:
     return """
 [class*="st-key-wbcard-"]{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
   box-shadow:0 2px 12px var(--shadow);gap:14px!important}
-.wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 .wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
 .wb-px{font-size:20px;font-weight:700;line-height:1.1}
@@ -364,9 +364,11 @@ def card_css(dark: bool) -> str:
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
-.wb-pill{background:var(--tag-gray-bg);color:var(--muted);border-radius:12px;padding:9px 14px;font-size:13.5px;font-weight:500}
+.wb-pill{background:transparent;color:var(--muted);padding:0;font-size:13.5px;font-weight:500;margin-bottom:12px}
+.wb-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;color:var(--muted);margin-bottom:12px}
+.wb-metrics b{color:var(--txt2)}
 .wb-pill i{font-style:normal;margin:0 7px;opacity:.7}
-.wb-note{font-size:13.5px;line-height:1.55;color:var(--txt)}
+.wb-note{font-size:13.5px;line-height:1.55;color:var(--txt);margin-bottom:12px}
 .wb-box{background:BOXBG;border-radius:14px;padding:4px 16px 12px}
 .wb-sec{padding:12px 0}
 .wb-sec+.wb-sec{border-top:1px solid var(--line)}
@@ -382,25 +384,41 @@ def card_css(dark: bool) -> str:
 .wb-sub{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:7px}
 .wb-red{color:var(--red);font-size:15px}.wb-grn{color:var(--green);font-size:15px}
 .wb-foot{font-size:11.5px;line-height:1.45;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
-[class*="st-key-wbcard-"] button{background:var(--txt2)!important;border:none!important;border-radius:12px!important;
-  padding:.65rem 1rem!important;box-shadow:none!important;transition:opacity .15s}
-[class*="st-key-wbcard-"] button:hover{opacity:.88}
-[class*="st-key-wbcard-"] button,[class*="st-key-wbcard-"] button *{color:var(--bg)!important;font-weight:700!important}
 """.replace("BOXBG", box)
 
 
-def card_html(r: pd.Series, group: str) -> str:
-    """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới)."""
+def _sentence(t: str) -> str:
+    """Viết hoa đầu câu và thêm dấu chấm cuối câu."""
+    t = str(t).strip()
+    if not t:
+        return t
+    t = t[0].upper() + t[1:]
+    return t if t[-1] in ".!?" else t + "."
+
+
+BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
+
+
+def card_html(r: pd.Series, group: str, meta: dict | None = None) -> str:
+    """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
+
+    meta = {"Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
+    """
     esc = _html.escape
+    state = str(r["Trạng thái"])
     px = lambda x: "-" if pd.isna(x) else f"{x:,.2f}"
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
     cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
     html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
-            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(str(r["Trạng thái"]))}</span></div>'
-            f'<div class="wb-pill">Giá: {px(r["Giá"])}<i>•</i>Score: {r["Score"]:.1f}<i>•</i>RS: {px(r["RS20"])}</div>'
-            f'<div class="wb-note">{esc(str(r["Lý do"]))}</div>')
+            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
+            f'<div class="wb-pill">Score: {r["Score"]:.1f}<i>•</i>RS: {px(r["RS20"])}</div>')
+    if meta:
+        html += ('<div class="wb-metrics">'
+                 f'<div>Ngành: <b>{esc(str(meta["Ngành"]))}</b></div><div>Vốn hóa: <b>{esc(str(meta["Vốn hóa"]))}</b></div>'
+                 f'<div>P/B: <b>{esc(str(meta["P/B"]))}</b></div><div>ROE: <b>{esc(str(meta["ROE"]))}</b></div></div>')
+    html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
     if pd.isna(r.get("Vùng mua từ")):
         return html
     go = r.get("Hành động") == "Vào ngay"
@@ -409,7 +427,7 @@ def card_html(r: pd.Series, group: str) -> str:
         '<div class="wb-box">'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
         f'<span class="wb-zone"><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b>{badge}</span></div>'
-        f'<div class="wb-sub">{esc(str(r["Ghi chú hành động"]))}</div></div>'
+        f'<div class="wb-sub">{esc(_sentence(r["Ghi chú hành động"]))}</div></div>'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
         f'<b class="wb-red">{px(r["Cắt lỗ"])}{sg(r["Cắt lỗ %"])}</b></div></div>'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu 1<small>R:R 1:2</small></span>'
