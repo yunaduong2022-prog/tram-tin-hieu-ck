@@ -121,7 +121,7 @@ def read_eod_meta() -> dict:
 
 
 @st.cache_data(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...")
-def build_frames(raw: pd.DataFrame) -> dict:
+def build_frames(raw: pd.DataFrame, ver: str = "") -> dict:
     parts = {"D": [], "W": [], "M": []}
     for _, g in raw.groupby("Mã"):
         base = g[["Mã", "Ngày"] + E.NUMERIC_COLS]
@@ -254,7 +254,7 @@ else:
 
 try:
     raw = E.clean_raw(raw)
-    frames = build_frames(raw)
+    frames = build_frames(raw, E.ENGINE_VERSION)
 except Exception as e:
     st.error(f"Lỗi khi xử lý dữ liệu: {e}")
     st.stop()
@@ -285,7 +285,7 @@ def screener_cached(_frames: dict, mkt: pd.Series, key: str) -> pd.DataFrame:
 
 
 mkt, mkt_src = market_cached(raw, WY_KEY)
-res_df = screener_cached(frames, mkt, WY_KEY).copy()
+res_df = screener_cached(frames, mkt, WY_KEY + "|" + E.ENGINE_VERSION).copy()
 res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
 res_df["_wy"] = res_df["Mã"].map(WY_TABLE.get)
 res_df["Wyckoff"] = res_df["_wy"].map(WYK.label)

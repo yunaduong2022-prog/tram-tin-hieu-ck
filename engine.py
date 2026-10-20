@@ -56,6 +56,8 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
+ENGINE_VERSION = "swing-v7"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
 
@@ -387,7 +389,7 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
             pts.append((n - 1, "P", float(price)))
         else:
             pts[-1] = (n - 1, "P", float(price))
-    seq, wave_highs = [], []                       # các nhịp theo thời gian; đỉnh của các sóng hồi giữa đỉnh và đáy
+    seq, wave_highs, wave_lows = [], [], []                       # các nhịp theo thời gian; đỉnh của các sóng hồi giữa đỉnh và đáy
     for (ia, ta, pa), (ib, tb, pb) in zip(pts[:-1], pts[1:]):
         cur = tb == "P"                            # nhịp cuối, đi tới giá hiện tại
         if ta == "H" and pb < pa:
@@ -396,7 +398,7 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
                 piv_in, _ = zigzag_pct(h[ia:ib + 1], l[ia:ib + 1], wave)
                 for (j1, t1, q1), (j2, t2, q2) in zip(piv_in[:-1], piv_in[1:]):
                     if t1 == "L" and t2 == "H":
-                        wave_highs.append((ia + j2, q2))
+                        wave_highs.append((ia + j2, q2)); wave_lows.append((ia + j1, q1))
                         seq.append({"dir": "up", "pct": (q2 / q1 - 1) * 100, "ref": q1,
                                     "date": pd.Timestamp(dts[ia + j1]), "cur": False})
         elif ta == "L" and pb > pa:
@@ -419,14 +421,16 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
     #  - chỉ có đỉnh lớn: giá chưa hồi được nửa nhịp giảm.
     bearish, tref = False, float("nan")
     if any(t == "H" and i == ih for i, t, _ in pts):
-        highs = sorted(set([(ih, hi)] + wave_highs + [(i, p) for i, t, p in pts if t == "H" and i > ih]))
-        if len(highs) >= 2:
-            if all(b[1] < a[1] * 0.97 for a, b in zip(highs[:-1], highs[1:])):
-                (i1, p1), (i2, p2) = highs[0], highs[-1]
-                tref = p1 + (p2 - p1) / (i2 - i1) * (n - 1 - i1)
-                bearish = bool(price < tref)
+        highs = sorted(set(wave_highs + [(i, p) for i, t, p in pts if t == "H" and i > ih]))
+        trough = float(l[ih:].min())
+        if highs:
+            # Đường xu hướng giảm: từ đỉnh lớn tiếp tuyến với các đỉnh sau đó (độ dốc ít dốc nhất => mọi đỉnh khác nằm dưới đường)
+            i2, p2 = max(highs, key=lambda x: (x[1] - hi) / (x[0] - ih))
+            tref = hi + (p2 - hi) / (i2 - ih) * (n - 1 - ih)
+            first_low = wave_lows[0][1] if wave_lows else trough
+            lower_low = trough <= first_low * 0.97            # đáy mới thấp hơn hẳn đáy đầu tiên (không phải đáy đôi/đi ngang)
+            bearish = bool(price < tref and lower_low)
         else:
-            trough = float(l[ih:].min())
             bearish = bool(trough < hi * (1 - dev) and price < (hi + trough) / 2)
     return {"kind": last["dir"], "pct": last["pct"], "ref": last["ref"], "date": last["date"], "legs": legs,
             "bearish": bearish, "trend_ref": tref,
