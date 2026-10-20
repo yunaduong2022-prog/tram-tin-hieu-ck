@@ -344,40 +344,97 @@ def zigzag_pct(h: np.ndarray, l: np.ndarray, dev: float):
     return piv, trend
 
 
-def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int = 52) -> dict:
-    """Ô % trên thẻ mã, tính so với ĐỈNH LỚN / ĐÁY LỚN trong `weeks` tuần gần nhất (khung Tuần).
+def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int = 52,
+                  tail: float = 0.10, max_legs: int = 3, wave: float = 0.20) -> dict:
+    """Chuỗi các NHỊP gần nhất (giảm/tăng) trong `weeks` tuần, trên khung Tuần.
 
-    - Chiều (giảm hay đã đảo chiều/tăng) xác định bằng ZigZag biên độ `dev` trong cửa sổ đó:
-      đã hồi >= dev từ đáy thì là 'up', ngược lại 'down'.
-    - down: Đã giảm X% từ đỉnh 52 tuần.   up: Đã tăng X% từ đáy 52 tuần.
-    - Luôn trả thêm đỉnh/đáy 52 tuần để hiển thị.
+    - Nhịp chính: từ đỉnh lớn xuống đáy lớn 52 tuần (hoặc ngược lại). Sau đó lấy lần lượt đáy thấp nhất / đỉnh cao nhất kế tiếp (nhịp >= `dev`), nên đáy đôi hay đỉnh phụ được gộp thành một.
+    - Nhịp cuối đi đến giá hiện tại. Nếu giá đã lùi/hồi >= `tail` so với đỉnh/đáy gần nhất thì tách thành một nhịp riêng
+      (ví dụ tăng 44% từ đáy rồi giảm 14%); nhỏ hơn thì coi là nhiễu và gộp vào nhịp trước.
+    - Giữ tối đa `max_legs` nhịp cuối. Luôn trả thêm đỉnh/đáy 52 tuần để hiển thị.
     """
     if w is None or len(w) < 10 or not price or pd.isna(price):
         return {}
     w = w.tail(weeks)
     h, l, dts = w["Giá cao nhất"].values.astype(float), w["Giá thấp nhất"].values.astype(float), w["Ngày"].values
+    n = len(h)
     ih, il = int(np.argmax(h)), int(np.argmin(l))
     hi, lo = float(h[ih]), float(l[il])
-    piv, trend = zigzag_pct(h, l, dev)
-    kind = trend if trend in ("up", "down") else ("down" if ih > il else "up")
-    ref, i0 = (hi, ih) if kind == "down" else (lo, il)
-    out = {"kind": kind, "pct": abs(price / ref - 1) * 100, "ref": ref, "date": pd.Timestamp(dts[i0]),
-           "hi52": hi, "hi52_date": pd.Timestamp(dts[ih]), "lo52": lo, "lo52_date": pd.Timestamp(dts[il]),
-           "peak_first": ih < il}
-    if ih < il:                                   # đỉnh trước, đáy sau: nhịp giảm tối đa rồi phục hồi từ đáy
-        out["drop"] = (1 - lo / hi) * 100
-        out["rec"] = max(price / lo - 1, 0) * 100
-    return out
+    # Neo vào đỉnh lớn / đáy lớn 52 tuần, rồi đi tiếp theo kiểu "cực trị sâu nhất": từ đỉnh lấy ĐÁY THẤP NHẤT sau đó,
+    # từ đáy lấy ĐỈNH CAO NHẤT sau đó (nhịp phải >= dev). Nhờ vậy nhiều đáy/đỉnh phụ (đáy đôi...) được gộp thành một.
+    (i1, t1, p1), (i2, t2, p2) = sorted([(ih, "H", hi), (il, "L", lo)])
+    pts = [(i1, t1, p1), (i2, t2, p2)]
+    while pts[-1][0] < n - 1:
+        ci, ct, cp = pts[-1]
+        if ct == "H":
+            j = ci + 1 + int(np.argmin(l[ci + 1:]))
+            if l[j] <= cp * (1 - dev):
+                pts.append((j, "L", float(l[j]))); continue
+        else:
+            j = ci + 1 + int(np.argmax(h[ci + 1:]))
+            if h[j] >= cp * (1 + dev):
+                pts.append((j, "H", float(h[j]))); continue
+        break
+    last_t = pts[-1][1]
+    ei, et, ep = pts[-1]
+    if last_t == "H":
+        if price <= ep * (1 - tail):
+            pts.append((n - 1, "P", float(price)))            # đã lùi đáng kể khỏi đỉnh gần nhất: nhịp giảm riêng
+        else:
+            pts[-1] = (n - 1, "P", float(price))              # lùi nhỏ: coi là nhiễu, nhịp tăng chạy tới giá hiện tại
+    else:
+        if price >= ep * (1 + tail):
+            pts.append((n - 1, "P", float(price)))
+        else:
+            pts[-1] = (n - 1, "P", float(price))
+    seq = []                                       # các nhịp theo thời gian
+    for (ia, ta, pa), (ib, tb, pb) in zip(pts[:-1], pts[1:]):
+        cur = tb == "P"                            # nhịp cuối, đi tới giá hiện tại
+        if ta == "H" and pb < pa:
+            seq.append({"dir": "down", "pct": (1 - pb / pa) * 100, "ref": pa, "date": pd.Timestamp(dts[ia]), "cur": cur})
+            if tb == "L":                          # sóng tăng >= `wave` nằm GIỮA đỉnh và đáy (hồi rồi lại giảm tiếp)
+                piv_in, _ = zigzag_pct(h[ia:ib + 1], l[ia:ib + 1], wave)
+                for (j1, t1, q1), (j2, t2, q2) in zip(piv_in[:-1], piv_in[1:]):
+                    if t1 == "L" and t2 == "H":
+                        seq.append({"dir": "up", "pct": (q2 / q1 - 1) * 100, "ref": q1,
+                                    "date": pd.Timestamp(dts[ia + j1]), "cur": False})
+        elif ta == "L" and pb > pa:
+            seq.append({"dir": "up", "pct": (pb / pa - 1) * 100, "ref": pa, "date": pd.Timestamp(dts[ia]), "cur": cur})
+    legs = []
+    for g in seq:                                  # các sóng tăng liên tiếp (chưa phải nhịp cuối) gộp thành một nhóm
+        if g["dir"] == "up" and not g["cur"]:
+            if legs and legs[-1]["dir"] == "up" and not legs[-1]["cur"]:
+                legs[-1]["pcts"].append(g["pct"]); legs[-1]["pct"] = g["pct"]; legs[-1]["ref"] = g["ref"]; legs[-1]["date"] = g["date"]
+                continue
+            g = dict(g, pcts=[g["pct"]])
+        legs.append(g)
+    if not legs:
+        return {}
+    legs = legs[-max_legs:]
+    last = legs[-1]
+    return {"kind": last["dir"], "pct": last["pct"], "ref": last["ref"], "date": last["date"], "legs": legs,
+            "hi52": hi, "hi52_date": pd.Timestamp(dts[ih]), "lo52": lo, "lo52_date": pd.Timestamp(dts[il])}
 
 
 def swing_label(sw: dict) -> str:
-    """Ví dụ: 'Đã giảm 32% từ đỉnh, phục hồi 20%' · 'Đã giảm 60% từ đỉnh' · 'Đã tăng 35% từ đáy'."""
-    if not sw or pd.isna(sw.get("pct")):
+    """Ví dụ: 'Đã giảm 40% từ đỉnh → 2 sóng tăng 45% → giảm 15%' · 'Đã giảm 32% từ đỉnh → phục hồi 20%'."""
+    legs = (sw or {}).get("legs")
+    if not legs:
         return "—"
-    if sw.get("peak_first") and sw.get("drop", 0) >= 1:
-        rec = sw.get("rec", 0)
-        return f"Đã giảm {sw['drop']:.0f}% từ đỉnh" + (f", phục hồi {rec:.0f}%" if rec >= 1 else "")
-    return f"Đã giảm {sw['pct']:.0f}% từ đỉnh" if sw["kind"] == "down" else f"Đã tăng {sw['pct']:.0f}% từ đáy"
+    parts = []
+    for i, g in enumerate(legs):
+        if g["dir"] == "down":
+            parts.append(f"Đã giảm {g['pct']:.0f}% từ đỉnh" if i == 0 else f"giảm {g['pct']:.0f}%")
+        elif g.get("cur"):
+            parts.append(f"Đã tăng {g['pct']:.0f}% từ đáy" if i == 0 else f"phục hồi {g['pct']:.0f}%")
+        else:
+            ps = [round(x) for x in g["pcts"]]
+            rng_ = f"{min(ps)}%" if min(ps) == max(ps) else f"{min(ps)}–{max(ps)}%"
+            if len(ps) == 1:
+                parts.append(f"Đã tăng {rng_} từ đáy" if i == 0 else f"sóng tăng {rng_}")
+            else:
+                parts.append(("Đã có " if i == 0 else "") + f"{len(ps)} sóng tăng {rng_}")
+    return " → ".join(parts)
 
 
 def fib_eval(prev, last, price):

@@ -451,7 +451,7 @@ def swing_view(r):
     if kind not in ("down", "up") or text == "—":
         return "—", "#374151", day, ""
     ref, dt = r.get("Swing_ref", np.nan), r.get("Swing_date", pd.NaT)
-    nm = "Đỉnh 52 tuần" if kind == "down" else "Đáy 52 tuần"
+    nm = "Đỉnh gần nhất" if kind == "down" else "Đáy gần nhất"
     tip = f"{nm} {ref:,.2f}" + (f" ({dt:%d/%m/%Y})" if pd.notna(dt) else "") + f" · {day}"
     hi52, lo52 = r.get("Hi52", np.nan), r.get("Lo52", np.nan)
     sub = f"Đỉnh 52 tuần {hi52:,.2f} · Đáy 52 tuần {lo52:,.2f}" if pd.notna(hi52) and pd.notna(lo52) else ""
@@ -714,7 +714,7 @@ def page_filter():
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
                         f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div></div>'
-                        f'<div class="price-box"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
+                        f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub)}</div>' if chg_sub else "") +
                         f'<div class="metrics-grid">'
