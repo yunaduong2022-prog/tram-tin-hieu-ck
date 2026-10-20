@@ -7,7 +7,7 @@ MENU = {
     "Thị trường": ["VNINDEX", "Nhóm ngành", "Kết quả kinh doanh"],
     "Ngành": ["Tổng quan ngành", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
-                 "Thanh khoản", "Chỉ báo kỹ thuật", "Ghi chú", "Tin tức"],
+                 "Thanh khoản", "Chỉ báo kỹ thuật", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Bộ lọc Realtime", "Khung cấu trúc MA", "Backtest chiến lược"],
     "Biểu đồ": [],
 }
@@ -40,14 +40,22 @@ def _reset_sub():
 
 
 def goto(main: str, sub: str | None = None):
-    """Chuyển trang bằng code (thay cho st.switch_page)."""
-    st.session_state["nav_main"] = main
-    st.session_state["nav_sub"] = sub or (MENU[main] or [None])[0]
+    """Chuyển trang bằng code (thay cho st.switch_page).
+
+    Không được gán thẳng st.session_state["nav_main"] ở đây: lúc này widget segmented_control
+    cùng key đã được tạo trong lượt chạy hiện tại (render_nav chạy đầu route) nên Streamlit báo
+    StreamlitWidgetAlreadyInstantiatedError. Ta chỉ ghi "yêu cầu chuyển trang", rồi rerun;
+    render_nav() ở đầu lượt sau sẽ áp dụng TRƯỚC khi tạo widget.
+    """
+    st.session_state["_nav_pending"] = (main, sub or (MENU[main] or [None])[0])
     st.rerun()
 
 
 def render_nav():
     st.markdown(DARK_CSS, unsafe_allow_html=True)
+    pending = st.session_state.pop("_nav_pending", None)  # áp dụng yêu cầu goto() trước khi tạo widget
+    if pending:
+        st.session_state["nav_main"], st.session_state["nav_sub"] = pending
     st.session_state.setdefault("nav_main", "Bộ lọc & Backtest")
     if st.session_state.get("nav_main") not in MENU:
         st.session_state["nav_main"] = "Bộ lọc & Backtest"

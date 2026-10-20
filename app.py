@@ -737,6 +737,9 @@ def page_filter():
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
                         st.session_state["selected_code"] = code
+                        # các selectbox có key riêng giữ giá trị cũ -> đồng bộ luôn để mở đúng mã vừa bấm
+                        for _k in ("mtf_code", "tab_code"):
+                            st.session_state[_k] = code
                         NAV.goto("Cổ phiếu", "Tổng quát")
 
 # ------------------------------------------------------------------ TRANG: KHUNG CẤU TRÚC MA (cards)
