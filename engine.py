@@ -387,7 +387,7 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
             pts.append((n - 1, "P", float(price)))
         else:
             pts[-1] = (n - 1, "P", float(price))
-    seq = []                                       # các nhịp theo thời gian
+    seq, wave_highs = [], []                       # các nhịp theo thời gian; đỉnh của các sóng hồi giữa đỉnh và đáy
     for (ia, ta, pa), (ib, tb, pb) in zip(pts[:-1], pts[1:]):
         cur = tb == "P"                            # nhịp cuối, đi tới giá hiện tại
         if ta == "H" and pb < pa:
@@ -396,6 +396,7 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
                 piv_in, _ = zigzag_pct(h[ia:ib + 1], l[ia:ib + 1], wave)
                 for (j1, t1, q1), (j2, t2, q2) in zip(piv_in[:-1], piv_in[1:]):
                     if t1 == "L" and t2 == "H":
+                        wave_highs.append((ia + j2, q2))
                         seq.append({"dir": "up", "pct": (q2 / q1 - 1) * 100, "ref": q1,
                                     "date": pd.Timestamp(dts[ia + j1]), "cur": False})
         elif ta == "L" and pb > pa:
@@ -412,28 +413,50 @@ def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int =
         return {}
     legs = legs[-max_legs:]
     last = legs[-1]
+    # Còn trong xu hướng giảm? (các nhịp hồi chưa đủ để xác nhận đảo chiều)
+    #  - có nhiều đỉnh: các đỉnh thấp dần (mỗi đỉnh thấp hơn đỉnh trước >= 3%) và giá còn DƯỚI đường xu hướng giảm
+    #    nối đỉnh lớn với đỉnh thấp dần gần nhất, chiếu tới hôm nay;
+    #  - chỉ có đỉnh lớn: giá chưa hồi được nửa nhịp giảm.
+    bearish, tref = False, float("nan")
+    if any(t == "H" and i == ih for i, t, _ in pts):
+        highs = sorted(set([(ih, hi)] + wave_highs + [(i, p) for i, t, p in pts if t == "H" and i > ih]))
+        if len(highs) >= 2:
+            if all(b[1] < a[1] * 0.97 for a, b in zip(highs[:-1], highs[1:])):
+                (i1, p1), (i2, p2) = highs[0], highs[-1]
+                tref = p1 + (p2 - p1) / (i2 - i1) * (n - 1 - i1)
+                bearish = bool(price < tref)
+        else:
+            trough = float(l[ih:].min())
+            bearish = bool(trough < hi * (1 - dev) and price < (hi + trough) / 2)
     return {"kind": last["dir"], "pct": last["pct"], "ref": last["ref"], "date": last["date"], "legs": legs,
+            "bearish": bearish, "trend_ref": tref,
             "hi52": hi, "hi52_date": pd.Timestamp(dts[ih]), "lo52": lo, "lo52_date": pd.Timestamp(dts[il])}
 
 
 def swing_label(sw: dict) -> str:
-    """Ví dụ: 'Đã giảm 40% từ đỉnh → 2 sóng tăng 45% → giảm 15%' · 'Đã giảm 32% từ đỉnh → phục hồi 20%'."""
+    """Ví dụ: 'Đã giảm 40% từ đỉnh → 2 sóng tăng 45% → giảm 15%'.
+    Khi còn trong xu hướng giảm: 'Đã giảm 60% từ đỉnh → 3 sóng hồi 20–38% → hồi 16%' (không dùng chữ 'tăng/phục hồi')."""
     legs = (sw or {}).get("legs")
     if not legs:
         return "—"
+    bear = bool(sw.get("bearish"))
+    wv = "sóng hồi" if bear else "sóng tăng"
     parts = []
     for i, g in enumerate(legs):
         if g["dir"] == "down":
             parts.append(f"Đã giảm {g['pct']:.0f}% từ đỉnh" if i == 0 else f"giảm {g['pct']:.0f}%")
         elif g.get("cur"):
-            parts.append(f"Đã tăng {g['pct']:.0f}% từ đáy" if i == 0 else f"phục hồi {g['pct']:.0f}%")
+            if i == 0:
+                parts.append(f"Đã tăng {g['pct']:.0f}% từ đáy")
+            else:
+                parts.append(f"hồi {g['pct']:.0f}%" if bear else f"phục hồi {g['pct']:.0f}%")
         else:
             ps = [round(x) for x in g["pcts"]]
             rng_ = f"{min(ps)}%" if min(ps) == max(ps) else f"{min(ps)}–{max(ps)}%"
             if len(ps) == 1:
-                parts.append(f"Đã tăng {rng_} từ đáy" if i == 0 else f"sóng tăng {rng_}")
+                parts.append(f"Đã tăng {rng_} từ đáy" if i == 0 else f"{wv} {rng_}")
             else:
-                parts.append(("Đã có " if i == 0 else "") + f"{len(ps)} sóng tăng {rng_}")
+                parts.append(("Đã có " if i == 0 else "") + f"{len(ps)} {wv} {rng_}")
     return " → ".join(parts)
 
 
@@ -853,6 +876,7 @@ def build_screener(frames: dict, mkt: pd.Series) -> pd.DataFrame:
             "Swing_text": swing_label(sw), "Swing_kind": sw.get("kind", ""), "Swing_%": sw.get("pct", np.nan),
             "Swing_ref": sw.get("ref", np.nan), "Swing_date": sw.get("date", pd.NaT),
             "Hi52": sw.get("hi52", np.nan), "Lo52": sw.get("lo52", np.nan),
+            "Swing_bear": bool(sw.get("bearish", False)), "Swing_trend_ref": sw.get("trend_ref", np.nan),
             "RS20": rs20, "RS50": rs50, "RS vs VNI": rs20,
             "MACD D": macd_d, "MACD W": ws("MACD", "MACD_sig"), "Fisher D": fish_d, "Fisher W": ws("FISH", "FISH_T"),
             "Dist_High_52W": dh, "Dist_Low_52W": dl, "Bars52": len(t52),

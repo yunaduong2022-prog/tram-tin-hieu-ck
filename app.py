@@ -455,6 +455,12 @@ def swing_view(r):
     tip = f"{nm} {ref:,.2f}" + (f" ({dt:%d/%m/%Y})" if pd.notna(dt) else "") + f" · {day}"
     hi52, lo52 = r.get("Hi52", np.nan), r.get("Lo52", np.nan)
     sub = f"Đỉnh 52 tuần {hi52:,.2f} · Đáy 52 tuần {lo52:,.2f}" if pd.notna(hi52) and pd.notna(lo52) else ""
+    if r.get("Swing_bear", False):                 # hồi kỹ thuật trong xu hướng giảm: không dùng màu xanh của "đảo chiều"
+        tr = r.get("Swing_trend_ref", np.nan)
+        note = "⚠ Đang hồi trong xu hướng giảm, chưa xác nhận đảo chiều" + (
+            f" (đường xu hướng giảm ~{tr:,.2f})" if pd.notna(tr) else "")
+        sub = note + ("\n" + sub if sub else "")
+        return text, ("#C02645" if kind == "down" else "#B45309"), tip, sub
     return text, ("#C02645" if kind == "down" else "#08785E"), tip, sub
 
 
@@ -716,7 +722,7 @@ def page_filter():
                         f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div></div>'
                         f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
-                        + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub)}</div>' if chg_sub else "") +
+                        + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
                         f'<div class="metrics-grid">'
                         f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
                         f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
@@ -1115,7 +1121,7 @@ def page_stock():
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
     _sw_text, _, _sw_tip, _ = swing_view(info)
     m1.metric("Giá", f"{info['Giá']:,.2f}", _sw_text if _sw_text != "—" else None,
-              delta_color="inverse" if info.get("Swing_kind") == "down" else "normal", help=_sw_tip)
+              delta_color="inverse" if info.get("Swing_kind") == "down" else ("off" if info.get("Swing_bear", False) else "normal"), help=_sw_tip)
     m2.metric("Vol vs MA10", f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-")
     m3.metric("Position %", f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-")
     m4.metric("Cảnh báo (phiên mới nhất)", info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có")
