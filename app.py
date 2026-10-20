@@ -751,12 +751,13 @@ def mtf_block(res: dict) -> str:
 
 # ------------------------------------------------------------------ KẾT QUẢ LỌC: thống kê · tìm kiếm · lọc thời hạn · sắp xếp · bảng
 KQ_TERMS = {"Tất cả": None, "Ngắn hạn": "Trend_NganHan", "Trung hạn": "Trend_TrungHan", "Dài hạn": "Trend_DaiHan"}
-KQ_SORTS = ["Mã A → Z", "Mã Z → A", "Score cao → thấp"]
+KQ_SORTS = ["Mã A → Z", "Mã Z → A", "Score cao → thấp", "Gần hỗ trợ nhất", "Gần kháng cự nhất"]
 KQ_PER_PAGE = {"Thẻ": 12, "Bảng": 50}
 
 
-def kq_apply(a: pd.DataFrame, query: str, term: str, sort_by: str) -> pd.DataFrame:
-    """Tập B = Tập A (kết quả lọc nâng cao) + tìm mã + lọc thời hạn + sắp xếp. Không đụng tới Tập A."""
+def kq_apply(a: pd.DataFrame, query: str, term: str, sort_by: str, _frames=None, data_key: str = "") -> pd.DataFrame:
+    """Tập B = Tập A + tìm mã + lọc thời hạn + sắp xếp; không thay đổi Tập A.
+    Khoảng cách hỗ trợ/kháng cự tính theo % so với giá đóng cửa của đúng khung D/W/M."""
     b = a
     toks = [t for t in re.split(r"[,\s;]+", str(query or "").upper()) if t]
     if toks:
@@ -769,6 +770,29 @@ def kq_apply(a: pd.DataFrame, query: str, term: str, sort_by: str) -> pd.DataFra
         b = b.sort_values("Mã", key=lambda x: x.astype(str).str.upper(), ascending=False)
     elif sort_by == "Score cao → thấp" and "Score" in b.columns:
         b = b.sort_values("Score", ascending=False, kind="stable")
+    elif sort_by in ("Gần hỗ trợ nhất", "Gần kháng cự nhất") and _frames is not None:
+        # Tất cả/Ngắn hạn dùng hỗ trợ-kháng cự Ngày; Trung hạn dùng Tuần; Dài hạn dùng Tháng.
+        tf = {"Tất cả": "D", "Ngắn hạn": "D", "Trung hạn": "W", "Dài hạn": "M"}.get(term, "D")
+        distances = {}
+        for code in b["Mã"].astype(str).unique():
+            try:
+                levels = mtf_cached(_frames, code, data_key)[tf]
+                close = levels.get("close")
+                if not levels.get("ok") or close is None or float(close) <= 0:
+                    distances[code] = np.nan
+                    continue
+                if sort_by == "Gần hỗ trợ nhất":
+                    # Khi hỗ trợ là một vùng mây, lấy mép trên (gần giá nhất).
+                    level = levels.get("sup_hi") if levels.get("sup_hi") is not None else levels.get("sup")
+                    distance = (float(close) - float(level)) / float(close) * 100 if level is not None else np.nan
+                else:
+                    level = levels.get("res")
+                    distance = (float(level) - float(close)) / float(close) * 100 if level is not None else np.nan
+                distances[code] = distance if pd.notna(distance) and distance >= 0 else np.nan
+            except Exception:
+                distances[code] = np.nan
+        b = b.assign(_level_distance=b["Mã"].astype(str).map(distances))
+        b = b.sort_values("_level_distance", ascending=True, na_position="last", kind="stable").drop(columns=["_level_distance"])
     else:
         b = b.sort_values("Mã", key=lambda x: x.astype(str).str.upper())
     return b.reset_index(drop=True)
@@ -816,7 +840,7 @@ def page_filter():
     st.subheader("📋 Kết quả lọc")
     # ---- Tập B = Tập A + tìm mã + lọc thời hạn + sắp xếp (đọc trạng thái từ session_state để thẻ thống kê hiện đúng ngay lượt này)
     ss = st.session_state
-    b = kq_apply(f, ss.get("kq_search", ""), ss.get("kq_term") or "Tất cả", ss.get("kq_sort", KQ_SORTS[0]))
+    b = kq_apply(f, ss.get("kq_search", ""), ss.get("kq_term") or "Tất cả", ss.get("kq_sort", KQ_SORTS[0]), frames, DATA_KEY)
     view = ss.get("kq_view") or "Thẻ"
     per_page = KQ_PER_PAGE.get(view, 12)
     n_pages = max(1, math.ceil(len(b) / per_page))
