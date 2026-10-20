@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v10"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v11"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -346,9 +346,9 @@ def zigzag_pct(h: np.ndarray, l: np.ndarray, dev: float):
     return piv, trend
 
 
-def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int = 104,
+def swing_context(w: pd.DataFrame, price: float, dev: float = 0.15, weeks: int = 78,
                   tail: float = 0.10, max_legs: int = 3, wave: float = 0.20) -> dict:
-    """Chuỗi các NHỊP gần nhất (giảm/tăng) trong `weeks` tuần (mặc định 104 = 2 năm, đủ để lấy đúng đỉnh lớn), trên khung Tuần.
+    """Chuỗi các NHỊP gần nhất (giảm/tăng) trong `weeks` tuần (mặc định 78 tuần ≈ 1,5 năm, đủ để lấy đúng đỉnh lớn), trên khung Tuần.
 
     - Nhịp chính: từ đỉnh lớn xuống đáy lớn trong cửa sổ (hoặc ngược lại). Sau đó lấy lần lượt đáy thấp nhất / đỉnh cao nhất kế tiếp (nhịp >= `dev`), nên đáy đôi hay đỉnh phụ được gộp thành một.
     - Nhịp cuối đi đến giá hiện tại. Nếu giá đã lùi/hồi >= `tail` so với đỉnh/đáy gần nhất thì tách thành một nhịp riêng
