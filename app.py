@@ -2,7 +2,9 @@ import glob
 import html as htmllib
 import inspect
 import json
+import math
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -97,6 +99,12 @@ st.markdown("""
 .badge-forecast{padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap}
 .tag-container{display:flex;flex-wrap:wrap;gap:4px;padding-top:10px;border-top:1px solid var(--line2)}
 .tag-chip{background:var(--tag-green-bg);color:var(--tag-green-fg);font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:12px}
+/* Thẻ thống kê khu vực Kết quả lọc */
+.kq-stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 18px;box-shadow:0 2px 8px var(--shadow);height:100%}
+.kq-l{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--muted);text-transform:uppercase}
+.kq-v{font-size:30px;font-weight:800;color:var(--txt2);line-height:1.2;margin:4px 0 2px}
+.kq-v.up{color:var(--green)}
+.kq-s{font-size:12px;color:var(--muted)}
 </style>
 """, unsafe_allow_html=True)
 
@@ -741,14 +749,106 @@ def mtf_block(res: dict) -> str:
             f'<div class="multi-tf-container">{"".join(subs)}</div>{strat}')
 
 
+# ------------------------------------------------------------------ KẾT QUẢ LỌC: thống kê · tìm kiếm · lọc thời hạn · sắp xếp · bảng
+KQ_TERMS = {"Tất cả": None, "Ngắn hạn": "Trend_NganHan", "Trung hạn": "Trend_TrungHan", "Dài hạn": "Trend_DaiHan"}
+KQ_SORTS = ["Mã A → Z", "Mã Z → A", "Score cao → thấp"]
+KQ_PER_PAGE = {"Thẻ": 12, "Bảng": 50}
+
+
+def kq_apply(a: pd.DataFrame, query: str, term: str, sort_by: str) -> pd.DataFrame:
+    """Tập B = Tập A (kết quả lọc nâng cao) + tìm mã + lọc thời hạn + sắp xếp. Không đụng tới Tập A."""
+    b = a
+    toks = [t for t in re.split(r"[,\s;]+", str(query or "").upper()) if t]
+    if toks:
+        up = b["Mã"].astype(str).str.upper()
+        b = b[up.apply(lambda c: any(t in c for t in toks))]
+    col = KQ_TERMS.get(term)
+    if col and col in b.columns:
+        b = b[b[col] == "TĂNG"]
+    if sort_by == "Mã Z → A":
+        b = b.sort_values("Mã", key=lambda x: x.astype(str).str.upper(), ascending=False)
+    elif sort_by == "Score cao → thấp" and "Score" in b.columns:
+        b = b.sort_values("Score", ascending=False, kind="stable")
+    else:
+        b = b.sort_values("Mã", key=lambda x: x.astype(str).str.upper())
+    return b.reset_index(drop=True)
+
+
+def kq_stat_card(label: str, value, sub: str, up: bool = False) -> str:
+    return (f'<div class="kq-stat"><div class="kq-l">{htmllib.escape(label)}</div>'
+            f'<div class="kq-v{" up" if up else ""}">{value}</div><div class="kq-s">{htmllib.escape(sub)}</div></div>')
+
+
+def kq_table(b: pd.DataFrame):
+    """Bảng dữ liệu thật từ kết quả lọc; cột nào dự án không có thì bỏ qua, ô thiếu hiện —."""
+    names = {"Mã": "Mã CK", "Giá": "Giá", "Chg_%": "Thay đổi (%)", "RS vs VNI": "RS",
+             "MA10": "MA10", "MA20": "MA20", "MA50": "MA50", "MA100": "MA100", "MA200": "MA200",
+             "Trend_NganHan": "Ngắn hạn", "Trend_TrungHan": "Trung hạn", "Trend_DaiHan": "Dài hạn"}
+    t = b[[c for c in names if c in b.columns]].rename(columns=names).copy()
+    trend_cols = [c for c in ("Ngắn hạn", "Trung hạn", "Dài hạn") if c in t.columns]
+    for c in trend_cols:
+        t[c] = t[c].map({"TĂNG": "Tăng", "GIẢM": "Giảm", "LẪN LỘN": "Lẫn lộn"}).fillna("Chưa đủ dữ liệu")
+    fmt = {c: "{:,.2f}" for c in ("Giá", "MA10", "MA20", "MA50", "MA100", "MA200") if c in t.columns}
+    if "Thay đổi (%)" in t.columns: fmt["Thay đổi (%)"] = "{:+.2f}%"
+    if "RS" in t.columns: fmt["RS"] = "{:.2f}"
+    sty = t.style.format(fmt, na_rep="—")
+    ap = lambda x: x.map if hasattr(x, "map") else x.applymap
+    sty = ap(sty)(lambda v: "font-weight:800", subset=["Mã CK"])
+    tcolor = {"Tăng": "color:#0E8A6D;font-weight:700", "Giảm": "color:#C93A52;font-weight:700",
+              "Lẫn lộn": "color:#B7791F;font-weight:600", "Chưa đủ dữ liệu": "color:#8A93A0"}
+    if trend_cols:
+        sty = ap(sty)(lambda v: tcolor.get(v, ""), subset=trend_cols)
+    if "Thay đổi (%)" in t.columns:
+        sty = ap(sty)(lambda v: "color:#0E8A6D" if pd.notna(v) and v > 0 else "color:#C93A52" if pd.notna(v) and v < 0 else "", subset=["Thay đổi (%)"])
+    return sty
+
+
+def _kq_reset_page():
+    st.session_state["kq_page"] = 1
+
+
 def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
     st.caption("Giữ nguyên các điều kiện lọc hiện tại. Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
-    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).reset_index(drop=True)
+    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
     st.divider()
     st.subheader("📋 Kết quả lọc")
-    st.caption(f"{len(f)} mã phù hợp với điều kiện lọc hiện tại.")
+    # ---- Tập B = Tập A + tìm mã + lọc thời hạn + sắp xếp (đọc trạng thái từ session_state để thẻ thống kê hiện đúng ngay lượt này)
+    ss = st.session_state
+    b = kq_apply(f, ss.get("kq_search", ""), ss.get("kq_term") or "Tất cả", ss.get("kq_sort", KQ_SORTS[0]))
+    view = ss.get("kq_view") or "Thẻ"
+    per_page = KQ_PER_PAGE.get(view, 12)
+    n_pages = max(1, math.ceil(len(b) / per_page))
+    ss["kq_page"] = min(max(int(ss.get("kq_page", 1) or 1), 1), n_pages)      # gán TRƯỚC khi tạo widget nên không gây StreamlitWidgetAlreadyInstantiatedError
+    cnt = lambda col: int((f[col] == "TĂNG").sum()) if col in f.columns else 0   # thẻ xu hướng đếm trên Tập A, không đổi theo ô tìm kiếm / tab
+    sc = st.columns(4)
+    sc[0].markdown(kq_stat_card("Tổng số mã", f"{len(f)}", f"Đang hiển thị {len(b)} mã"), unsafe_allow_html=True)
+    sc[1].markdown(kq_stat_card("Ngắn hạn · Tăng", cnt("Trend_NganHan"), "MA10 > MA20", True), unsafe_allow_html=True)
+    sc[2].markdown(kq_stat_card("Trung hạn · Tăng", cnt("Trend_TrungHan"), "MA20 > MA50 > MA100", True), unsafe_allow_html=True)
+    sc[3].markdown(kq_stat_card("Dài hạn · Tăng", cnt("Trend_DaiHan"), "MA50 > MA100 > MA200", True), unsafe_allow_html=True)
+    if f.empty:
+        st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
+        return
+    t1, t2, t3 = st.columns([2, 3.6, 1.8])
+    t1.text_input("Tìm mã", placeholder="🔍 Tìm mã...", key="kq_search", label_visibility="collapsed", on_change=_kq_reset_page)
+    with t2:
+        st.segmented_control("Lọc theo thời hạn", list(KQ_TERMS), default="Tất cả", key="kq_term", label_visibility="collapsed", on_change=_kq_reset_page)
+    t3.selectbox("Sắp xếp", KQ_SORTS, key="kq_sort", label_visibility="collapsed", on_change=_kq_reset_page)
+    v1, v2, v3 = st.columns([2, 3.6, 1.8])
+    with v1:
+        st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], default="Thẻ", key="kq_view", label_visibility="collapsed", on_change=_kq_reset_page)
+    with v3:
+        st.number_input("Trang", min_value=1, max_value=n_pages, step=1, key="kq_page", label_visibility="collapsed", disabled=n_pages == 1)
+    lo, hi = (ss["kq_page"] - 1) * per_page, min(ss["kq_page"] * per_page, len(b))
+    v2.caption(f"Hiển thị {lo + 1 if len(b) else 0}–{hi} / {len(b)} mã · trang {ss['kq_page']}/{n_pages}")
+    if b.empty:
+        st.info("Không có mã nào khớp tìm kiếm / bộ lọc thời hạn. Chọn \"Tất cả\" hoặc xóa từ khóa để xem lại toàn bộ kết quả lọc.")
+        return
+    page_df = b.iloc[lo:hi]
+    if view == "Bảng":
+        st.dataframe(kq_table(page_df), hide_index=True, use_container_width=True)
+        return
     show_mtf = st.toggle("Hiện phân tích đa khung (D · W · M) và chiến lược trong từng thẻ", value=True, key="show_mtf")
     # Có thể bổ sung vốn hóa thực tế qua data/stock_metadata.csv (cột Mã,Vốn hóa TT; đơn vị tỷ đồng).
     cap_map = {}
@@ -778,7 +878,7 @@ def page_filter():
         return
     CHIP_ONLY_GOOD = False                        # True: chỉ chip xanh "Tốt"; False: đủ 3 màu Tốt/Xấu/Chưa rõ
     per_row = 3                                   # số thẻ trên một hàng (màn hình hẹp Streamlit tự xếp thành 1 cột)
-    rows = [f.iloc[i:i + per_row] for i in range(0, len(f), per_row)]
+    rows = [page_df.iloc[i:i + per_row] for i in range(0, len(page_df), per_row)]
     for chunk in rows:
         cols = st.columns(per_row)
         for col, (_, r) in zip(cols, chunk.iterrows()):
