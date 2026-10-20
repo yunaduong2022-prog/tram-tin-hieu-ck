@@ -1087,6 +1087,7 @@ def page_wait_buy():
         st.info("Hiện chưa có mã nào đạt điều kiện chờ mua.")
         return
     buy = _wb_filters(buy, [s for g_ in WB.BUY_GROUPS for s in WB.STATES_BY_GROUP[g_]])
+    view = st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], default="Thẻ", key="wb_view") or "Thẻ"
     for grp in WB.BUY_GROUPS:
         d = WB.sort_group(buy[buy["Danh sách"] == grp], grp)
         st.divider()
@@ -1094,6 +1095,12 @@ def page_wait_buy():
         st.caption(WB_HELP[grp])
         if d.empty:
             st.caption("Không có mã nào.")
+            continue
+        if view == "Bảng":
+            _sec = lambda c_: ", ".join(g_ for g_ in MEMBER.get(c_, []) if g_ != WL.VN30) or "Khác"
+            st.markdown(WB.table_html(d, grp, _sec), unsafe_allow_html=True)
+            st.caption("Giá, vùng mua, cắt lỗ, mục tiêu tính theo ATR (đơn vị nghìn đồng), % so với giá vào. "
+                       "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
             continue
         show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key=f"wb_all_{grp}")
         cols = st.columns(3)

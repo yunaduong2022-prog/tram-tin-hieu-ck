@@ -493,7 +493,61 @@ def card_css(dark: bool) -> str:
 .wb-sub{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:7px}
 .wb-red{color:var(--red);font-size:15px}.wb-grn{color:var(--green);font-size:15px}
 .wb-foot{font-size:11.5px;line-height:1.45;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+/* Bảng kết quả */
+.wbt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.wbt{border-collapse:collapse;width:100%;min-width:1180px;font-size:13.5px;color:var(--txt)}
+.wbt th{position:sticky;top:0;background:var(--bg2);color:var(--txt2);font-weight:700;text-align:center;padding:11px 8px;
+  border:1px solid var(--line);line-height:1.3;white-space:normal}
+.wbt td{padding:11px 8px;border:1px solid var(--line);text-align:center;vertical-align:middle}
+.wbt tbody tr:hover td{background:var(--line2)}
+.wbt .code{font-weight:800;color:var(--accent);white-space:nowrap}
+.wbt .note{text-align:left;min-width:280px;line-height:1.45;font-size:12.5px}
+.wbt .note small{display:block;color:var(--muted);margin-top:3px}
+.wbt .st{white-space:nowrap;font-weight:700;text-align:left}
+.wbt .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
+.wbt .dot.g{background:var(--green)}.wbt .dot.a{background:#E5B34C}.wbt .dot.n{background:var(--muted)}
+.wbt td.sl{background:rgba(224,82,96,.16);color:var(--red);font-weight:700}
+.wbt td.tp{background:rgba(37,168,121,.16);color:var(--green);font-weight:700}
+.wbt td small{display:block;font-weight:600;font-size:11.5px;opacity:.9}
+.wbt .up{color:var(--green);font-weight:700}.wbt .down{color:var(--red);font-weight:700}
+.wbt .go{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin-top:2px}
 """.replace("BOXBG", box)
+
+
+def table_html(d: pd.DataFrame, group: str, sector_of=None) -> str:
+    """Bảng kết quả của một nhóm (cùng nội dung với thẻ). sector_of(mã) -> tên ngành."""
+    esc = _html.escape
+    px = lambda x: "—" if pd.isna(x) else f"{x:,.2f}"
+    pc = lambda x: "" if pd.isna(x) else f"{x:+.1f}%"
+    heads = ["Mã CP", "Ngành", "Vùng mua", "Giá hiện tại", "Trạng thái", "Hướng xử lý / Ghi chú", "Cắt lỗ",
+             "Giá mục tiêu 1", "Giá mục tiêu 2", "% Lợi nhuận kỳ vọng"]
+    out = ['<div class="wbt-wrap"><table class="wbt"><thead><tr>' + "".join(f"<th>{h}</th>" for h in heads) + "</tr></thead><tbody>"]
+    for _, r in d.iterrows():
+        state = str(r["Trạng thái"])
+        chg = r.get("Chg %", np.nan)
+        cc = "up" if pd.notna(chg) and chg > 0 else "down" if pd.notna(chg) and chg < 0 else ""
+        zone = "—" if pd.isna(r.get("Vùng mua từ")) else f'{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}'
+        act = r.get("Hành động")
+        act_html = f'<span class="go">{"✔ Vào được ngay" if act == "Vào ngay" else "⏳ Chờ mua"}</span>' if pd.notna(r.get("Vùng mua từ")) else ""
+        note = esc(_sentence(r["Lý do"]))
+        sub = r.get("Ghi chú hành động")
+        if isinstance(sub, str) and sub.strip():
+            note += f"<small>{esc(_sentence(sub))}</small>"
+        l1, l2 = r.get("Lời 1 %", np.nan), r.get("Lời 2 %", np.nan)
+        gain = "—" if pd.isna(l1) and pd.isna(l2) else " / ".join(f"{x:.1f}%" for x in (l1, l2) if pd.notna(x))
+        out.append(
+            f'<tr><td class="code">{esc(str(r["Mã"]))}</td>'
+            f'<td>{esc(str(sector_of(str(r["Mã"])) if sector_of else r.get("Nhóm", "")))}</td>'
+            f'<td>{zone}{act_html}</td>'
+            f'<td><b>{px(r["Giá"])}</b>' + (f'<small class="{cc}">{chg:+.2f}%</small>' if pd.notna(chg) else "") + '</td>'
+            f'<td class="st"><span class="dot {_BADGE.get(group, "n")}"></span>{esc(BADGE_TEXT.get(state, state))}</td>'
+            f'<td class="note">{note}</td>'
+            f'<td class="sl">{px(r["Cắt lỗ"])}<small>{pc(r["Cắt lỗ %"])}</small></td>'
+            f'<td class="tp">{px(r["Mục tiêu 1"])}<small>{pc(r["Lời 1 %"])}</small></td>'
+            f'<td class="tp">{px(r["Mục tiêu 2"])}<small>{pc(r["Lời 2 %"])}</small></td>'
+            f'<td class="up">{gain}</td></tr>')
+    out.append("</tbody></table></div>")
+    return "".join(out)
 
 
 def _sentence(t: str) -> str:
