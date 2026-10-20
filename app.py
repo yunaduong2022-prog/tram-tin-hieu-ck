@@ -901,6 +901,10 @@ def page_filter():
     if f.empty:
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
+    try:     # trạng thái chờ mua / cảnh báo của từng mã -> tag ở góc phải thẻ
+        _wb_map = _wb_table().set_index("Mã")[["Trạng thái", "Lý do"]].to_dict("index")
+    except Exception:
+        _wb_map = {}
     CHIP_ONLY_GOOD = False                        # True: chỉ chip xanh "Tốt"; False: đủ 3 màu Tốt/Xấu/Chưa rõ
     per_row = 3                                   # số thẻ trên một hàng (màn hình hẹp Streamlit tự xếp thành 1 cột)
     rows = [page_df.iloc[i:i + per_row] for i in range(0, len(page_df), per_row)]
@@ -936,10 +940,17 @@ def page_filter():
                 else:
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
                 mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
+                _wb = _wb_map.get(code)
+                if _wb:
+                    _tl, _tbg, _tfg = WB.status_tag(_wb["Trạng thái"], _wb["Lý do"])
+                    status_html = (f'<div style="flex-shrink:0;margin-left:8px"><span class="badge-forecast" title="{htmllib.escape(str(_wb["Lý do"]))}" '
+                                   f'style="background:{_tbg};color:{_tfg}">{htmllib.escape(_tl)}</span></div>')
+                else:
+                    status_html = ""
                 html = (f'<div class="stock-card in-box">'
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
-                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div></div>'
+                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div>{status_html}</div>'
                         f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +

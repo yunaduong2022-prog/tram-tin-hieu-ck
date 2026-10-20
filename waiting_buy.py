@@ -61,6 +61,41 @@ STATE_GROUP = {BUY_SIGNAL: G1, GOOD_ENTRY: G1, WATCH: G2, NEAR_ZONE: G2, EARLY_U
                IMPROVING: G3, WAIT_CONFIRM: G3, MARGINAL: G3,
                RECOVERING: L_RECOVER, OVERBOUGHT: L_OVERBOUGHT, WEAKENING: L_RISK, NO_BUY: L_NONE}
 BUY_GROUPS = (G1, G2, G3)
+
+# ------------------------------------------------------------------ TAG TRẠNG THÁI TRÊN THẺ BỘ LỌC REALTIME
+# 13 trạng thái chi tiết -> 9 tag hiển thị (nhãn, màu nền, màu chữ). Muốn đổi cách gom tag chỉ cần sửa TAG_OF_STATE.
+TAG_STYLE = {
+    "Điểm mua đẹp":            ("#DDF1EB", "#08785E"),
+    "Chớm tăng giá":           ("#D9F0F4", "#0E7490"),
+    "Theo dõi điểm mua":       ("#FDE6D6", "#C2570C"),
+    "Tích lũy / Siết nền giá": ("#E0EAFB", "#2F5FC4"),
+    "Đang phục hồi":           ("#ECE5FB", "#6B46C1"),
+    "Tăng quá đà / Qua điểm mua": ("#FFF1C9", "#8A5A00"),
+    "Xu hướng suy yếu":        ("#FCE4E8", "#C02645"),
+    "Hạ tỷ trọng":             ("#F8CBD3", "#A3152F"),
+    "Không có điểm mua":       ("#EEF1F5", "#626B78"),
+}
+TAG_OF_STATE = {
+    "Đã có tín hiệu mua theo chiến lược": "Điểm mua đẹp", "Điểm mua đẹp": "Điểm mua đẹp",
+    "Theo dõi điểm mua": "Theo dõi điểm mua", "Gần vùng mua, cần thêm xác nhận": "Theo dõi điểm mua",
+    "Chỉ đưa vào khi xu hướng không quá yếu": "Theo dõi điểm mua",
+    "Chớm tăng giá": "Chớm tăng giá", "Tích lũy / Siết nền giá": "Tích lũy / Siết nền giá",
+    "Có dấu hiệu cải thiện": "Đang phục hồi", "Chờ xác nhận": "Đang phục hồi", "Đang phục hồi": "Đang phục hồi",
+    "Tăng quá đà": "Tăng quá đà / Qua điểm mua",
+    "Hạ tỷ trọng / Xu hướng suy yếu": "Xu hướng suy yếu",     # đổi thành "Hạ tỷ trọng" khi có tín hiệu bán (xem status_tag)
+    "Không có điểm mua / Đứng ngoài": "Không có điểm mua",
+}
+
+
+def status_tag(state: str, reason: str = "") -> tuple[str, str, str]:
+    """(nhãn, màu nền, màu chữ) của tag trạng thái. Trạng thái \"Hạ tỷ trọng / Xu hướng suy yếu\" được tách đôi:
+    có tín hiệu bán trong 3 phiên (UPTHRUST, BREAKDOWN...) -> \"Hạ tỷ trọng\"; còn lại -> \"Xu hướng suy yếu\"."""
+    label = TAG_OF_STATE.get(state, "Không có điểm mua")
+    if state == WEAKENING and "tín hiệu bán" in (reason or ""):
+        label = "Hạ tỷ trọng"
+    bg, fg = TAG_STYLE[label]
+    return label, bg, fg
+
 STATES_BY_GROUP = {G1: [GOOD_ENTRY, BUY_SIGNAL], G2: [WATCH, NEAR_ZONE, EARLY_UP, ACCUM],
                    G3: [IMPROVING, WAIT_CONFIRM, MARGINAL]}
 BEARISH_PV = {"BREAKDOWN", "UPTHRUST", "CLIMAX", "SELLOFF"}
