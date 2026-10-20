@@ -17,14 +17,13 @@ import watchlist as WL
 import wyckoff as WYK
 import nav as NAV
 import theme as TH
+import brand as BR
 import stock_tabs as ST
 import mtf_levels as ML
 import waiting_buy as WB
 
-st.set_page_config(page_title="Trạm Tín Hiệu Chứng Khoán Việt Nam", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
-with st.sidebar:
-    TH.toggle()
 TH.inject()
 
 st.markdown("""
@@ -1572,6 +1571,7 @@ def page_mtf_levels():
 
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
 def route():
+    BR.render_header(f"Dữ liệu EOD · {latest_date:%d/%m/%Y}")
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
