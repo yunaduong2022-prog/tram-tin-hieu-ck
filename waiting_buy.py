@@ -251,14 +251,20 @@ def _rsi_confirms_uptrend(g: pd.DataFrame, w: pd.DataFrame | None) -> dict | Non
     return None
 
 
-def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
-    """Trả về {state, group, reason, + vùng mua/cắt lỗ/mục tiêu} cho một mã."""
+def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
+    """Phân loại theo 9 trạng thái chờ mua (chưa xét RSI). Kết quả có thêm khóa _zone = vùng mua theo cấu trúc (hỗ trợ / kháng cự)."""
     ctx: dict = {}
 
-    def out(state, reason, **lv):
+    def out(state, reason, alt=None, **lv):
+        """alt = vùng mua dự phòng (dict từ _levels) cho trạng thái không có vùng mua riêng: chỉ dùng khi được nâng lên Điểm mua đẹp."""
+        zone = (lv["Vùng mua từ"], lv["Vùng mua đến"]) if lv else None
         if lv and ctx.get("fc"):
             lv = _chart_levels(lv, ctx["fc"])
-        return {"Trạng thái": state, "Danh sách": STATE_GROUP[state], "Lý do": reason, **lv}
+        extra = {}
+        if alt is not None:
+            zone = (alt["Vùng mua từ"], alt["Vùng mua đến"])
+            extra["_alt"] = _chart_levels(alt, ctx["fc"]) if ctx.get("fc") else alt
+        return {"Trạng thái": state, "Danh sách": STATE_GROUP[state], "Lý do": reason, "_zone": zone, **extra, **lv}
 
     if len(g) < CFG["min_bars"] or pd.isna(g["MA50"].iat[-1]):
         return out(NO_BUY, f"Chưa đủ dữ liệu (cần ≥ {CFG['min_bars']} phiên để tính MA50)")
@@ -288,7 +294,9 @@ def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
 
     lo20_bounce = (c / f["lo20"] - 1) * 100
     if (c < f["ma50"] and lo20_bounce >= CFG["recover_bounce"] and c > f["ema10"]):
-        return out(RECOVERING, f"Hồi {lo20_bounce:.1f}% từ đáy 20 phiên nhưng chưa vượt MA50 ({f['ma50']:.2f}): chờ xác nhận phá MA/kháng cự")
+        near = [x for x in _support_candidates(f) if 0 <= (c / x[1] - 1) * 100 <= CFG["support_touch"]]
+        alt = _levels(f, max(near, key=lambda x: x[1])[1]) if near else None
+        return out(RECOVERING, f"Hồi {lo20_bounce:.1f}% từ đáy 20 phiên nhưng chưa vượt MA50 ({f['ma50']:.2f}): chờ xác nhận phá MA/kháng cự", alt=alt)
 
     # ---------- NHÓM 1
     sig = _recent_buy_signal(g, CFG["buy_lookback"])
@@ -316,12 +324,6 @@ def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
         near = [(n, s) for n, s in _support_candidates(f) if s < c and (c / s - 1) * 100 <= 8.0]
         if CFG["pullback_min"] <= pull <= CFG["pullback_max"] and near and f["vol5"] < 1.0:
             n, s = max(near, key=lambda x: x[1])
-            # RSI xác nhận tiếp diễn xu hướng tăng + giá đã vào vùng mua (cách hỗ trợ <= support_touch %) -> nâng lên "Điểm mua đẹp"
-            dv = _rsi_confirms_uptrend(g, w)
-            if dv is not None and (c / s - 1) * 100 <= CFG["support_touch"]:
-                tfn = "ngày" if dv["tf"] == "D" else "tuần"
-                return out(GOOD_ENTRY, f"Uptrend, điều chỉnh {pull:.1f}% từ đỉnh 20 phiên về sát {n} ({s:.2f}, cách {(c / s - 1) * 100:.1f}%), "
-                                       f"khối lượng co lại; RSI phân kỳ ẩn tăng khung {tfn} xác nhận tiếp diễn xu hướng tăng", **_levels(f, s))
             return out(WATCH, f"Uptrend, điều chỉnh {pull:.1f}% từ đỉnh 20 phiên, còn cách {n} ({s:.2f}) {(c / s - 1) * 100:.1f}%, khối lượng co lại", **_levels(f, s))
 
     res = f["res"]
@@ -362,6 +364,33 @@ def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
         return out(MARGINAL, "Xu hướng không quá yếu, dòng tiền (A/D, MFI) hỗ trợ, nền giá có khả năng tạo điểm mua", **_levels(f, min(f["ema20"], c)))
 
     return out(NO_BUY, "Không thỏa điều kiện của trạng thái chờ mua nào, dòng tiền chưa hỗ trợ")
+
+
+# Các trạng thái được phép nâng lên Điểm mua đẹp
+UPGRADABLE = tuple(STATES_BY_GROUP[G2]) + tuple(STATES_BY_GROUP[G3]) + (RECOVERING,)   # Tăng quá đà / Suy yếu / Không có điểm mua: giữ nguyên (cảnh báo rủi ro)
+
+
+def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
+    """Trả về {state, group, reason, + vùng mua/cắt lỗ/mục tiêu} cho một mã.
+
+    Quy tắc nâng cấp: mã đang ở bất kỳ trạng thái chờ mua nào thuộc nhóm "Sắp có điểm mua" / "Theo dõi thêm" mà
+    (1) RSI có phân kỳ ẩn tăng (\"Xác nhận tiếp diễn · XU HƯỚNG TĂNG\") còn hiệu lực và (2) giá đang nằm trong vùng mua
+    (theo hỗ trợ / kháng cự của trạng thái đó, cho phép lệch 1.5% bên dưới như quy tắc test hỗ trợ) -> \"Điểm mua đẹp\"."""
+    res = _classify_base(g, w, r)
+    zone, alt = res.pop("_zone", None), res.pop("_alt", None)
+    if res["Trạng thái"] in UPGRADABLE and zone is not None:
+        lo, hi = zone
+        c = float(g["Giá đóng cửa"].iat[-1])
+        if pd.notna(lo) and pd.notna(hi) and lo * 0.985 <= c <= hi:
+            dv = _rsi_confirms_uptrend(g, w)
+            if dv is not None:
+                tfn = "ngày" if dv["tf"] == "D" else "tuần"
+                res["Lý do"] = (f"{str(res['Lý do']).rstrip('.')}; giá đang trong vùng mua ({lo:.2f} – {hi:.2f}) và RSI phân kỳ ẩn tăng "
+                                f"khung {tfn} xác nhận tiếp diễn xu hướng tăng")
+                res["Trạng thái"], res["Danh sách"] = GOOD_ENTRY, STATE_GROUP[GOOD_ENTRY]
+                if alt:
+                    res.update(alt)
+    return res
 
 
 def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:

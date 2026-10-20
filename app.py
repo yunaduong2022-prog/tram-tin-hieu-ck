@@ -993,7 +993,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb2")
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb4")
 
 
 @st.cache_data(show_spinner=False)
@@ -1072,8 +1072,8 @@ def page_wait_buy():
             "- **Điểm mua đã xác nhận**: *Đã có tín hiệu mua* (thuật toán chính phát tín hiệu trong "
             f"{WB.CFG['buy_lookback']} phiên, giá chưa cao hơn {WB.CFG['buy_max_chase']:.0f}% so với giá phát tín hiệu) · "
             f"*Điểm mua đẹp* (uptrend, giá test EMA20 / MA50 / MA10-20 tuần / đáy nền trong {WB.CFG['support_touch']:.0f}%, "
-            f"Vol 5 phiên ≤ {WB.CFG['dry_vol']:.1f} lần MA20 Vol, R:R ≥ {WB.CFG['min_rr']:.0f}; hoặc mã đang *Theo dõi điểm mua* mà giá đã vào vùng mua "
-            f"(cách hỗ trợ ≤ {WB.CFG['support_touch']:.0f}%) và RSI có phân kỳ ẩn tăng \"Xác nhận tiếp diễn\").\n"
+            f"Vol 5 phiên ≤ {WB.CFG['dry_vol']:.1f} lần MA20 Vol, R:R ≥ {WB.CFG['min_rr']:.0f}; hoặc **bất kỳ mã nào ở nhóm Sắp có điểm mua / Theo dõi thêm** mà giá đã vào vùng mua "
+            f"và RSI có phân kỳ ẩn tăng \"Xác nhận tiếp diễn\" thì tự nâng lên *Điểm mua đẹp*).\n"
             "- **Sắp có điểm mua**: *Theo dõi điểm mua* (uptrend, điều chỉnh lành mạnh) · *Gần vùng mua, cần thêm xác nhận* "
             "(sát kháng cự / hỗ trợ, cần 1 phiên bứt phá hoặc đảo chiều) · *Chớm tăng giá* (dòng tiền sớm, chưa bứt nền) · "
             "*Tích lũy / Siết nền giá* (biên độ hẹp, Vol cạn, MA hội tụ).\n"
