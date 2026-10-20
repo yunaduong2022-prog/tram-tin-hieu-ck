@@ -23,11 +23,14 @@ GROUPS: dict[str, list[str]] = {
                     "VFS", "APG", "DSC", "BMS", "BVS", "IVS", "SBS", "PSI", "VPX", "LPS", "APS", "DSE", "AAS", "VIG", "VCK"],
     "Bất động sản": ["VHM", "VIC", "VRE", "NVL", "KDH", "DXG", "DIG", "CEO", "PDR", "NLG", "KBC", "IDC", "SZC", "BCM", "TCH",
                      "HDG", "AGG", "IJC", "HTN", "NTL", "HQC", "DXS", "SGR", "HHS", "HPX", "HDC", "LDG", "NBB", "SCR", "QCG",
-                     "VPI", "CRE"],
+                     "VPI", "CRE", "VGC"],
     "Khoáng sản": ["MSR", "KSV", "BMC", "DHM", "KSB", "NNC", "BKC"],
     "Thép": ["HPG", "HSG", "NKG", "SMC", "TLH", "POM", "VGS", "TVN", "HMC"],
     "Thủy sản": ["VHC", "ANV", "FMC", "IDI", "MPC", "CMX", "ACL", "ABT"],
     "Dược phẩm": ["DCL", "DHG", "IMP", "TRA", "DBD"],
+    "Thực phẩm - Đồ uống": ["MCH"],
+    "Hạ tầng giao thông": ["CII"],
+    "Vật liệu xây dựng": ["HT1", "VGC"],
 }
 
 # Danh mục cũ của người dùng (giữ lại để chọn khi cần)
