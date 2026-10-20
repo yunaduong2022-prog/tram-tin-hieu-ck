@@ -1024,7 +1024,8 @@ def _wb_meta(code: str) -> dict:
     def fmt(v, f_):
         try: return f_.format(float(v)) if pd.notna(v) else "Chưa có"
         except (TypeError, ValueError): return "Chưa có"
-    return {"Ngành": ", ".join(sectors) if sectors else "Khác / chưa phân loại",
+    return {"Tên": (str(fd["Tên công ty"]).strip() if isinstance(fd.get("Tên công ty"), str) else ""),
+            "Ngành": ", ".join(sectors) if sectors else "Khác / chưa phân loại",
             "Vốn hóa": fmt(cap_map.get(code.upper()), "{:,.0f} tỷ"),
             "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%")}
 

@@ -473,16 +473,10 @@ def card_css(dark: bool) -> str:
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
 .wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:-6px 0 14px;line-height:1.4}
-.wb-kv{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
+.wb-kv{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
 .wb-kv span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
-.wb-kv b{display:block;font-size:17px;font-weight:800;color:var(--txt2)}
-.wb-kv .r{text-align:left;min-width:30%}
-.wb-kv3{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px 16px;margin:-2px 0 14px}
-.wb-kv3 span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
-.wb-kv3 b{display:block;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere}
-.wb-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;color:var(--muted);margin-bottom:12px}
-.wb-metrics b{color:var(--txt2)}
-.wb-pill i{font-style:normal;margin:0 7px;opacity:.7}
+.wb-kv b{display:block;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere}
+.wb-kv .wide{grid-column:1 / span 2}
 .wb-note{font-size:13.5px;line-height:1.55;color:var(--txt);margin-bottom:12px}
 .wb-box{background:BOXBG;border-radius:14px;padding:4px 16px 12px}
 .wb-sec{padding:12px 0}
@@ -528,14 +522,13 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
             f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
-            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or ""))}</div>'
-            f'<div class="wb-kv"><div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
-            f'<div class="r"><span>ROE</span><b>{esc(str((meta or {}).get("ROE", "Chưa có")))}</b></div></div>')
-    if meta:
-        html += ('<div class="wb-kv3">'
-                 f'<div><span>Ngành</span><b>{esc(str(meta["Ngành"]))}</b></div>'
-                 f'<div><span>Vốn hóa</span><b>{esc(str(meta["Vốn hóa"]))}</b></div>'
-                 f'<div><span>P/B</span><b>{esc(str(meta["P/B"]))}</b></div></div>')
+            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
+            f'<div class="wb-kv">'
+            f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
+            f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
+            f'<div><span>ROE</span><b>{esc(str((meta or {}).get("ROE", "Chưa có")))}</b></div>'
+            f'<div class="wide"><span>Ngành</span><b>{esc(str((meta or {}).get("Ngành", "Chưa có")))}</b></div>'
+            f'<div><span>Vốn hóa</span><b>{esc(str((meta or {}).get("Vốn hóa", "Chưa có")))}</b></div></div>')
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     if pd.isna(r.get("Vùng mua từ")):
