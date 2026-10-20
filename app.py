@@ -80,8 +80,14 @@ st.markdown("""
 .ma-value{font-size:13px;font-weight:800;color:var(--txt2);margin:2px 0;white-space:nowrap}
 .ma-state{font-size:10px;font-weight:650;line-height:1.25;overflow-wrap:anywhere}
 .ma-up{color:var(--green)}.ma-down{color:var(--red)}.ma-unknown{color:var(--muted)}
-.ma-overview{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:-3px 0 10px;padding:7px 9px;border-radius:7px;background:var(--card2);font-size:12px;font-weight:650}
-.ma-overview .ma-positive{color:var(--green)}.ma-overview .ma-caution{color:#B7791F}.ma-overview .ma-negative{color:var(--red)}.ma-overview .ma-neutral{color:var(--muted)}
+.ma-overview{margin:-3px 0 10px;padding:2px 0}
+.ma-overview .ma-pills{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.ma-overview .ma-pill{display:inline-block;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;line-height:1.3}
+.ma-overview .ma-pill.ma-positive{background:#DDF1EB;color:#08785E}
+.ma-overview .ma-pill.ma-caution{background:#FDE6D6;color:#C2570C}
+.ma-overview .ma-pill.ma-negative{background:#FCE4E8;color:#C02645}
+.ma-overview .ma-pill.ma-neutral{background:#EEF1F5;color:#626B78}
+.ma-overview .ma-note{margin-top:7px;font-size:13px;font-weight:500;color:var(--muted);line-height:1.4}
 .stock-card.in-box{border:none;box-shadow:none;padding:2px 2px 0;background:transparent;transform:none}
 .stock-title{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px}
 .stock-card .price-box{margin:8px 0 10px}
@@ -592,11 +598,12 @@ def _ma_summary_html(code: str) -> str:
                      f'<div class="ma-value">{value}</div><div class="ma-state {cls}">{status}</div></div>')
     # Tóm tắt trạng thái dựa trên vị trí giá đóng cửa so với MA ngày.
     # Đây chỉ là mô tả xu hướng, không phải tín hiệu mua/bán.
-    summary = []
+    pills, note = [], ""
     if any(pd.isna(mas[n]) for n in (20, 50, 200)) or pd.isna(close):
-        summary.append('<span class="ma-neutral">Trạng thái MA tổng hợp: Chưa đủ dữ liệu</span>')
+        pills.append('<span class="ma-pill ma-neutral">Trạng thái MA tổng hợp: Chưa đủ dữ liệu</span>')
     else:
-        above20, above50, above200 = (float(close) >= float(mas[n]) for n in (20, 50, 200))
+        above = {n: float(close) >= float(mas[n]) for n in (20, 50, 200)}
+        above20, above50, above200 = above[20], above[50], above[200]
         if not above20 and above50:
             short_text, short_cls = 'Ngắn hạn điều chỉnh', 'ma-caution'
         elif above20:
@@ -610,10 +617,22 @@ def _ma_summary_html(code: str) -> str:
             medium_text, medium_cls = 'Trung hạn suy yếu', 'ma-negative'
         else:
             medium_text, medium_cls = 'Trung hạn hỗn hợp', 'ma-neutral'
-        summary.append(f'<span class="{medium_cls}">{medium_text}</span>')
-        summary.append('<span class="ma-neutral">·</span>')
-        summary.append(f'<span class="{short_cls}">{short_text}</span>')
-    overview_html = '<div class="ma-overview" aria-label="Trạng thái MA tổng hợp">' + ''.join(summary) + '</div>'
+        pills.append(f'<span class="ma-pill {short_cls}">{short_text}</span>')
+        pills.append(f'<span class="ma-pill {medium_cls}">{medium_text}</span>')
+
+        def _join(names):
+            return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " và " + names[-1]
+        up = [f"MA{n}" for n in (20, 50, 200) if above[n]]
+        down = [f"MA{n}" for n in (20, 50, 200) if not above[n]]
+        if not down:
+            note = f"Giá trên {_join(up)}."
+        elif not up:
+            note = f"Giá dưới {_join(down)}."
+        else:
+            note = f"Giá dưới {_join(down)} nhưng trên {_join(up)}."
+    overview_html = ('<div class="ma-overview" aria-label="Trạng thái MA tổng hợp">'
+                     '<div class="ma-pills">' + ''.join(pills) + '</div>'
+                     + (f'<div class="ma-note">{note}</div>' if note else '') + '</div>')
     return '<div class="ma-summary" aria-label="Giá trung bình động ngày">' + ''.join(items) + '</div>' + overview_html
 
 
