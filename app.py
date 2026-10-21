@@ -36,6 +36,8 @@ st.markdown("""
  .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;font-size:13px}
  .muted{color:var(--muted);font-size:12px;line-height:1.5}
  .big{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0 6px}
+ .mtf-top{display:flex;justify-content:space-between;align-items:stretch;gap:12px}
+ .mtf-code{display:flex;align-items:center;font-size:44px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--txt2)}
  .c-red{color:var(--red)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-gray{color:var(--muted)}
  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
  .tag-red{background:var(--tag-red-bg);color:var(--red)}.tag-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}
@@ -1188,12 +1190,14 @@ def dir_kind(d):
     return "green" if d > 0 else "red" if d < 0 else "gray"
 
 
-def mtf_card(conc, A):
+def mtf_card(conc, A, code=""):
+    code_html = f'<div class="mtf-code">{htmllib.escape(str(code))}</div>' if code else ""
     if conc is None:
-        return card("Kết luận đa khung", '<div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>')
+        return card("Kết luận đa khung", f'<div class="mtf-top"><div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>{code_html}</div>')
     k = conc["kind"]
-    html = [f'<div class="big c-{k}">{conc["verdict"]}</div>',
-            f'<div class="muted">{conc["text"]}</div>',
+    # Tên mã nằm bên phải, cao bằng 2 hàng: tiêu đề "Kết luận đa khung" + kết luận (ƯU TIÊN MUA...)
+    html = [f'<div class="mtf-top"><div><div class="ct">Kết luận đa khung</div><div class="big c-{k}" style="margin-bottom:0">{conc["verdict"]}</div></div>{code_html}</div>',
+            f'<div class="muted" style="margin-top:6px">{conc["text"]}</div>',
             f'<div class="box">Nếu nến đóng ngay lúc này: <b class="c-{k}">{conc["verdict"]}</b></div>',
             row("Điểm đa khung (-100 đến +100)", f'{conc["score"]:+.0f}'), "<hr style='margin:8px 0'>"]
     for t in ("M", "W", "D"):
@@ -1209,7 +1213,7 @@ def mtf_card(conc, A):
                 'chọn điểm vào. Hai khung lớn cùng giảm thì không mua; khung lớn ngược nhau thì CHỜ. ⚠ = chưa đủ nến '
                 'cho Ichimoku/EMA200 nên các chỉ báo đó chưa được tính điểm. Đây là xác suất, không phải chắc chắn: '
                 'luôn đặt cắt lỗ.</div>')
-    return card("Kết luận đa khung", "".join(html))
+    return f'<div class="card">{"".join(html)}</div>'
 
 
 def forecast_card(a, tf):
@@ -1531,7 +1535,7 @@ def page_stock():
         st.plotly_chart(make_chart(a, code, tf, layers), **_STRETCH)
 
     with col_side:
-        st.markdown(mtf_card(E.mtf_conclusion(A), A), unsafe_allow_html=True)
+        st.markdown(mtf_card(E.mtf_conclusion(A), A, code), unsafe_allow_html=True)
         if a["enough"]:
             st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
