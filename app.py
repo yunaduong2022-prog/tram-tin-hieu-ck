@@ -1374,9 +1374,9 @@ def future_date(last, tf, k):
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
 
 
-def make_chart(a, code, tf, layers, metrics=None, mobile=False):
+def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan"):
     g = a["g"]
-    t = g.tail(BARS_SHOWN[tf])
+    t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
     subs = [s for s in ("Khối lượng", "MACD", "RSI", "StochRSI") if s in layers]
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
@@ -1556,7 +1556,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False):
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    height = 540 + 180 * len(subs)
+    height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
     if metrics:
         # 5 chỉ số (Giá, Vol vs MA10, Position %, Cảnh báo, Độ nghiêng) nằm ngay trên biểu đồ, dưới hàng chú thích
         top, bot = 150, 10
@@ -1586,7 +1586,25 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False):
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=30, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
+    if mobile:
+        fig.update_layout(dragmode=drag)
+        if drag is False:                      # chế độ "Cuộn trang": khóa mọi thao tác kéo/zoom để biểu đồ không giữ cử chỉ vuốt
+            fig.update_xaxes(fixedrange=True)
+            fig.update_yaxes(fixedrange=True)
     return fig
+
+
+MOBILE_MODES = ["Cuộn trang", "Kéo & zoom"]
+
+
+def mobile_chart_opts(mode: str):
+    """Điện thoại. 'Cuộn trang': khóa kéo/zoom, vuốt trang không bị biểu đồ giữ lại (dùng thanh 'Số nến hiển thị' để phóng to).
+    'Kéo & zoom': một ngón kéo ngang để xem, có thanh công cụ phóng to / thu nhỏ / đặt lại, chạm đúp để đặt lại."""
+    if mode == "Kéo & zoom":
+        return "pan", {"displayModeBar": True, "displaylogo": False, "scrollZoom": True, "doubleClick": "reset",
+                       "modeBarButtonsToRemove": ["zoom2d", "select2d", "lasso2d", "toImage", "hoverClosestCartesian",
+                                                  "hoverCompareCartesian", "toggleSpikelines"]}
+    return False, {"displayModeBar": False, "scrollZoom": False}
 
 
 def is_mobile() -> bool:
@@ -1657,10 +1675,18 @@ def page_stock():
             st.warning(f"Khung {E.TF_NAME[tf]} chỉ có {a['n']} nến (< {E.MIN_BARS}): chưa đủ để tính điểm, dự báo "
                        "và backtest. Hãy chọn khung nhỏ hơn hoặc tải dữ liệu lịch sử dài hơn.")
         _mob = is_mobile()
+        _drag, _cfg, _bars = "pan", {"displayModeBar": True}, None
         if _mob:
             st.markdown(metrics_html(chart_metrics, code), unsafe_allow_html=True)
-        st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob),
-                        config={"displayModeBar": not _mob}, **_STRETCH)
+            _mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True, key="mob_chart_mode",
+                             help="Cuộn trang: vuốt để cuộn trang bình thường, biểu đồ không bị kéo/zoom ngoài ý muốn. "
+                                  "Kéo & zoom: kéo ngang để xem, dùng nút +/- và nút nhà (đặt lại) trên thanh công cụ; chạm đúp để đặt lại.")
+            _nmax = min(BARS_SHOWN[tf], len(a["g"]))
+            if _nmax > 30:
+                _bars = st.slider("Số nến hiển thị (ít nến = phóng to)", 30, _nmax, min(90, _nmax), key=f"mob_bars_{tf}")
+            _drag, _cfg = mobile_chart_opts(_mode)
+        st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag),
+                        config=_cfg, **_STRETCH)
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code), unsafe_allow_html=True)
