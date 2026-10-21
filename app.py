@@ -917,7 +917,8 @@ def page_filter():
     except Exception:
         _wb_map = {}
     CHIP_ONLY_GOOD = False                        # True: chỉ chip xanh "Tốt"; False: đủ 3 màu Tốt/Xấu/Chưa rõ
-    per_row = 3                                   # số thẻ trên một hàng (màn hình hẹp Streamlit tự xếp thành 1 cột)
+    # Số thẻ trên một hàng: 3; nhưng chỉ có 1–2 mã trên trang (ví dụ tìm đúng 1 mã) thì thẻ giãn ra hết khung.
+    per_row = len(page_df) if len(page_df) <= 2 else 3
     rows = [page_df.iloc[i:i + per_row] for i in range(0, len(page_df), per_row)]
     for chunk in rows:
         cols = st.columns(per_row)
