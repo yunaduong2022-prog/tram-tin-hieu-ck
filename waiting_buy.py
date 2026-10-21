@@ -559,8 +559,7 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"])
         if res.get("_ma20_zone"):      # vùng mua đã đổi về quanh MA20, giá còn cao hơn vùng nên không thể "vào ngay"
             res["Hành động"] = "Chờ mua"
-            res["Ghi chú hành động"] = (f"giá cao hơn MA20 ({res['_ma20']:.2f}) {(r['Giá'] / res['_ma20'] - 1) * 100:.1f}%: "
-                                        f"chờ giá điều chỉnh về vùng MA20 ± {CFG['ma20_zone_pad']:g} rồi mới vào")
+            res["Ghi chú hành động"] = "Dài hạn tích cực, ngắn hạn chờ điều chỉnh tham gia."
         res["Hành động bán"] = sell_action_of(res.get("Lý do"))
         try:
             res["Tăng từ đáy %"] = _leg_structure(g.reset_index(drop=True))["leg_gain"]
