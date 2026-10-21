@@ -1217,8 +1217,9 @@ def page_sell_list():
     if "Hành động bán" not in t.columns:
         st.info("Chưa có dữ liệu tín hiệu bán. Hãy tải lại trang.")
         return
-    d = t[t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
-    n_sell, n_tp = int((d["Hành động bán"] == "BÁN").sum()), int((d["Hành động bán"] == "CHỐT LỜI").sum())
+    d = t[t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])].copy()
+    n_sell = int((d["Hành động bán"] == "BÁN").sum())
+    n_tp = int((d["Hành động bán"] == "CHỐT LỜI").sum())
     m1, m2, m3 = st.columns(3)
     m1.metric("Tổng số mã", len(d))
     m2.metric("BÁN", n_sell)
@@ -1230,15 +1231,75 @@ def page_sell_list():
     if d.empty:
         st.info("Không có mã nào.")
         return
-    d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1})).sort_values(["_o", "Score"], ascending=[True, False])
-          .drop(columns="_o"))
-    st.dataframe(d[["Mã", "Hành động bán", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Lý do"]].rename(columns={"Hành động bán": "Tín hiệu"})
-                 .reset_index(drop=True), hide_index=True,
-                 column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
-                                "Chg %": st.column_config.NumberColumn(format="%.2f"),
-                                "Score": st.column_config.NumberColumn(format="%.1f"),
-                                "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
-                 **_STRETCH_DF)
+    d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1}))
+          .sort_values(["_o", "Score"], ascending=[True, False]).drop(columns="_o"))
+
+    # Thẻ gọn theo từng mã: giữ nguyên dữ liệu từ bảng tín hiệu, không tự suy diễn giá trị thiếu.
+    st.markdown("""
+    <style>
+    .sell-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));gap:10px;margin-top:12px}
+    .sell-card{min-width:0;background:var(--card);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+    .sell-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line)}
+    .sell-id{display:flex;align-items:center;gap:9px;min-width:0}
+    .sell-code{font-size:20px;font-weight:850;letter-spacing:.2px;color:var(--txt2)}
+    .sell-signal{font-size:11px;font-weight:800;letter-spacing:.3px;padding:5px 9px;border-radius:7px;white-space:nowrap}
+    .sell-signal.is-sell{background:var(--tag-red-bg);color:var(--red);border:1px solid #66303c}
+    .sell-signal.is-tp{background:var(--tag-green-bg);color:var(--tag-green-fg);border:1px solid #245c4c}
+    .sell-price{font-size:21px;font-weight:800;color:var(--txt2);white-space:nowrap;text-align:right}
+    .sell-price small{display:block;font-size:11px;font-weight:650;color:var(--muted);margin-top:1px}
+    .sell-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:9px 12px;gap:8px;border-bottom:1px solid var(--line2)}
+    .sell-metric{min-width:0}.sell-label{font-size:10px;color:var(--muted);margin-bottom:3px}.sell-value{font-size:13px;font-weight:750;color:var(--txt2);overflow-wrap:anywhere}
+    .sell-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px 5px;font-size:11px;color:var(--muted)}
+    .sell-sector{color:var(--txt);font-weight:650;text-align:right}
+    .sell-reason{padding:3px 12px 12px;font-size:12px;line-height:1.5;color:var(--txt);overflow-wrap:anywhere}
+    .sell-reason b{color:var(--muted);font-size:10px;letter-spacing:.35px;text-transform:uppercase;margin-right:5px}
+    @media(max-width:480px){.sell-card-top{padding:9px 10px}.sell-code{font-size:18px}.sell-price{font-size:19px}.sell-metrics{padding:8px 10px;gap:5px}.sell-value{font-size:12px}.sell-reason{padding:3px 10px 10px}}
+    </style>
+    """, unsafe_allow_html=True)
+
+    def safe_text(value, fallback="—"):
+        if pd.isna(value) or value is None or str(value).strip() == "":
+            return fallback
+        return htmllib.escape(str(value))
+
+    cards = []
+    for _, r in d.iterrows():
+        code = safe_text(r.get("Mã"))
+        signal = safe_text(r.get("Hành động bán"))
+        is_sell = signal == "BÁN"
+        badge_cls = "is-sell" if is_sell else "is-tp"
+        change = r.get("Chg %")
+        try:
+            change_txt = f"{float(change):+.2f}%" if pd.notna(change) else "—"
+        except (TypeError, ValueError):
+            change_txt = safe_text(change)
+        try:
+            price_txt = f"{float(r.get('Giá')):,.2f}" if pd.notna(r.get("Giá")) else "—"
+        except (TypeError, ValueError):
+            price_txt = safe_text(r.get("Giá"))
+        try:
+            score_txt = f"{float(r.get('Score')):.1f}" if pd.notna(r.get("Score")) else "—"
+        except (TypeError, ValueError):
+            score_txt = safe_text(r.get("Score"))
+        try:
+            rs_val = r.get("RS20")
+            rs_txt = f"{float(rs_val):.2f}" if pd.notna(rs_val) else "—"
+        except (TypeError, ValueError):
+            rs_txt = safe_text(r.get("RS20"))
+        reason = safe_text(r.get("Lý do"), "Chưa có mô tả lý do.")
+        sector = safe_text(r.get("Nhóm"))
+        cards.append(f"""<article class="sell-card">
+          <div class="sell-card-top"><div class="sell-id"><span class="sell-code">{code}</span><span class="sell-signal {badge_cls}">{signal}</span></div>
+          <div class="sell-price">{price_txt}<small>Giá</small></div></div>
+          <div class="sell-metrics">
+            <div class="sell-metric"><div class="sell-label">Chg %</div><div class="sell-value">{htmllib.escape(change_txt)}</div></div>
+            <div class="sell-metric"><div class="sell-label">Score</div><div class="sell-value">{htmllib.escape(score_txt)}</div></div>
+            <div class="sell-metric"><div class="sell-label">RS vs VNI</div><div class="sell-value">{htmllib.escape(rs_txt)}</div></div>
+          </div>
+          <div class="sell-meta"><span>Nhóm</span><span class="sell-sector">{sector}</span></div>
+          <div class="sell-reason"><b>Lý do</b>{reason}</div>
+        </article>""")
+    st.markdown('<div class="sell-card-grid">' + ''.join(cards) + '</div>', unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ HTML CARDS
