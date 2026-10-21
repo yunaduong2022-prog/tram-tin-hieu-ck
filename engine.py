@@ -1,7 +1,7 @@
 """Lõi tính toán của Trạm Tín Hiệu (không phụ thuộc Streamlit).
 
 - Gộp nến Ngày -> Tuần -> Tháng từ chính dữ liệu người dùng đưa vào
-- Chỉ báo: MA/EMA, Ichimoku, Bollinger, MACD, KDJ, StochRSI, ATR
+- Chỉ báo: MA/EMA, Ichimoku, Bollinger, MACD, RSI, StochRSI, ATR
 - Chấm điểm đa chỉ báo (thang -6.5 .. +6.5), dự báo, backtest, vùng giá, Fibonacci, Elliott
 """
 from __future__ import annotations
@@ -23,9 +23,9 @@ PIVOT_K = {"D": 5, "W": 3, "M": 2}
 MIN_BARS = 35          # tối thiểu để chấm điểm (MACD cần ~34 nến)
 FULL_BARS = 80         # đủ cho Ichimoku (52 + 26)
 SIG_TH = 2.0           # ngưỡng điểm sinh tín hiệu Mua/Bán
-MAX_SCORE = 6.5
+MAX_SCORE = 6.5   # = tổng MAX_PTS (đã bỏ KDJ, thêm RSI)
 HORIZON = 10           # số nến của kịch bản dự báo
-MAX_PTS = {"Ichimoku": 1.5, "MACD": 1.0, "KDJ": 0.5, "StochRSI": 0.5,
+MAX_PTS = {"Ichimoku": 1.5, "MACD": 1.0, "RSI": 0.5, "StochRSI": 0.5,
            "Bollinger": 0.5, "Fibonacci": 1.0, "Xu hướng": 1.5}
 
 
@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v12"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v14"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -111,17 +111,12 @@ def add_indicators(g: pd.DataFrame) -> pd.DataFrame:
     g["MACD_sig"] = macd.ewm(span=9, adjust=False, min_periods=9).mean()
     g["MACD_hist"] = g["MACD"] - g["MACD_sig"]
 
-    # KDJ 9-3-3
-    rsv = (c - l.rolling(9).min()) / (h.rolling(9).max() - l.rolling(9).min()).replace(0, np.nan) * 100
-    k = rsv.ewm(alpha=1 / 3, adjust=False).mean()
-    d = k.ewm(alpha=1 / 3, adjust=False).mean()
-    g["KDJ_K"], g["KDJ_D"], g["KDJ_J"] = k, d, 3 * k - 2 * d
-
     # StochRSI 14-3-3-3
     delta = c.diff()
     ag = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
     al = (-delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
     rsi = (100 - 100 / (1 + ag / al.replace(0, np.nan))).where(al != 0, 100.0).where(ag.notna())
+    g["RSI"] = rsi   # RSI(14) Wilder, dùng cho chấm điểm và khung RSI trên biểu đồ
     st = (rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min()).replace(0, np.nan) * 100
     g["SRSI_K"] = st.rolling(3).mean()
     g["SRSI_D"] = g["SRSI_K"].rolling(3).mean()
@@ -593,7 +588,13 @@ def score_frame(g: pd.DataFrame, tf: str):
     rising = hist > hist.shift(1)
     g["S_MACD"] = np.select([(hist > 0) & rising, (hist > 0) & ~rising, (hist < 0) & rising, (hist < 0) & ~rising],
                             [1.0, 0.5, 0.0, -1.0], 0.0)
-    for name, a, b in (("KDJ", "KDJ_K", "KDJ_D"), ("StochRSI", "SRSI_K", "SRSI_D")):
+    # RSI(14): vùng 50-70 và đang tăng là thuận lợi nhất; dưới 50 và đang giảm là yếu nhất.
+    # Quá mua (> 70) và quá bán (< 30) không cộng/trừ thêm vì dễ điều chỉnh / dễ hồi.
+    rs_, rs_up = g["RSI"], g["RSI"] > g["RSI"].shift(1)
+    g["S_RSI"] = np.select([(rs_ >= 50) & (rs_ <= 70) & rs_up, (rs_ >= 50) & (rs_ <= 70),
+                            (rs_ >= 30) & (rs_ < 50) & rs_up, (rs_ >= 30) & (rs_ < 50)],
+                           [0.5, 0.25, -0.25, -0.5], 0.0)
+    for name, a, b in (("StochRSI", "SRSI_K", "SRSI_D"),):
         k, d = g[a], g[b]
         g[f"S_{name}"] = np.select([(k > d) & (k < 80), (k > d), (k < d) & (k > 20), (k < d)],
                                    [0.5, 0.0, -0.5, 0.0], 0.0)
@@ -644,6 +645,15 @@ def describe_items(g, fib_text):
         s = f"{name}: K {k:.0f} {'trên' if k > d else 'dưới'} D {d:.0f}"
         return s + (", vùng quá bán, dễ hồi" if k < 20 else ", vùng quá mua, dễ điều chỉnh" if k >= 80 else "")
 
+    rv = r["RSI"]
+    if pd.isna(rv):
+        t_rsi = "Chưa đủ nến để tính RSI(14)"
+    else:
+        t_rsi = (f"RSI(14) {rv:.0f}: " + ("vùng quá mua, dễ điều chỉnh" if rv > 70 else "vùng quá bán, dễ hồi" if rv < 30
+                 else "vùng mạnh (50-70)" if rv >= 50 else "vùng yếu (30-50)")
+                 + (", đang tăng" if rv > g["RSI"].iat[-2] else ", đang giảm" if rv < g["RSI"].iat[-2] else "")
+                 if len(g) > 1 else f"RSI(14) {rv:.0f}")
+
     if pd.isna(r["BB_mid"]):
         t_bb = "Chưa đủ nến để tính Bollinger"
     else:
@@ -657,7 +667,7 @@ def describe_items(g, fib_text):
         t_tr = ("EMA50/EMA200 chưa cho xu hướng chính rõ ràng" if abs(d) <= 0.01 else
                 f"EMA50 {'trên' if d > 0 else 'dưới'} EMA200 và giá {'trên' if c > r['EMA50'] else 'dưới'} EMA50: "
                 f"xu hướng {'tăng' if d > 0 else 'giảm'}")
-    texts = {"Ichimoku": t_ichi, "MACD": t_macd, "KDJ": osc("KDJ", r["KDJ_K"], r["KDJ_D"]),
+    texts = {"Ichimoku": t_ichi, "MACD": t_macd, "RSI": t_rsi,
              "StochRSI": osc("StochRSI", r["SRSI_K"], r["SRSI_D"]), "Bollinger": t_bb,
              "Fibonacci": fib_text, "Xu hướng": t_tr}
     return [(k, float(r[f"S_{k}"]), MAX_PTS[k], texts[k]) for k in MAX_PTS]

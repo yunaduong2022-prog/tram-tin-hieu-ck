@@ -1378,7 +1378,7 @@ def make_chart(a, code, tf, layers):
     g = a["g"]
     t = g.tail(BARS_SHOWN[tf])
     x = t["Ngày"]
-    subs = [s for s in ("Khối lượng", "MACD", "RSI", "KDJ", "StochRSI") if s in layers]
+    subs = [s for s in ("Khối lượng", "MACD", "RSI", "StochRSI") if s in layers]
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=0.025, row_heights=heights)
@@ -1515,13 +1515,6 @@ def make_chart(a, code, tf, layers):
                                          line=dict(width=1.4, dash="dot", color=cl_), marker=dict(size=5, color=cl_),
                                          hovertext=s_["name"], hoverinfo="text"), row=1, col=1)
         fig.update_yaxes(title_text="RSI 14", title_font_size=10, range=[0, 100], row=r, col=1)
-        r += 1
-    if "KDJ" in subs:
-        for col, nm, cl in (("KDJ_K", "K", "#F59E0B"), ("KDJ_D", "D", "#3B82F6"), ("KDJ_J", "J", "#8B5CF6")):
-            fig.add_trace(line(col, nm, cl, 1), row=r, col=1)
-        for y in (20, 80):
-            fig.add_hline(y=y, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
-        fig.update_yaxes(title_text="KDJ 9-3-3", title_font_size=10, row=r, col=1)
         r += 1
     if "StochRSI" in subs:
         fig.add_trace(line("SRSI_K", "%K", "#F59E0B", 1), row=r, col=1)
