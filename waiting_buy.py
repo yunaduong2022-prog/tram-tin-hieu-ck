@@ -597,8 +597,7 @@ def card_css(dark: bool) -> str:
     return """
 [class*="st-key-wbcard-"]{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
   box-shadow:0 2px 12px var(--shadow);gap:14px!important}
-.wb-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:14px;margin-bottom:16px}
-.wb-left{min-width:0}
+.wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 .wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
 .wb-px{font-size:20px;font-weight:700;line-height:1.1}
@@ -609,10 +608,7 @@ def card_css(dark: bool) -> str:
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
-.wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:4px 0 0;line-height:1.4}
-.wb-buy{grid-column:2;grid-row:1;align-self:stretch;display:flex;align-items:center;justify-content:center;
-  color:#00D49A;font-size:clamp(28px,5vw,42px);font-weight:900;line-height:1;letter-spacing:-1px;padding-left:8px}
-@media(max-width:420px){.wb-buy{font-size:28px}}
+.wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:-6px 0 14px;line-height:1.4}
 .wb-kv{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
 .wb-kv span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
 .wb-kv b{display:block;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere}
@@ -720,12 +716,10 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
     cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
-    is_buy_card = pd.notna(r.get("Vùng mua từ")) and r.get("Hành động") in ("Vào ngay", "Chờ mua")
-    badge_html = '<span class="wb-buy">MUA</span>' if is_buy_card else f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span>'
-    html = (f'<div class="wb-head"><div class="wb-left"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
+    html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
-            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div></div>'
-            f'{badge_html}'
+            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
+            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
             f'<div class="wb-kv">'
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
             f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
@@ -737,10 +731,12 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     if pd.isna(r.get("Vùng mua từ")):
         return html
+    go = r.get("Hành động") == "Vào ngay"
+    badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
     html += (
         '<div class="wb-box">'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
-        f'<span class="wb-zone"><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b></span></div>'
+        f'<span class="wb-zone"><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b>{badge}</span></div>'
         f'<div class="wb-sub">{esc(_sentence(r["Ghi chú hành động"]))}</div></div>'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
         f'<b class="wb-red">{px(r["Cắt lỗ"])}{sg(r["Cắt lỗ %"])}</b></div></div>'
