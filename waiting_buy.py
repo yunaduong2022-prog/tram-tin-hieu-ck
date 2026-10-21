@@ -43,6 +43,20 @@ CFG = {
     "ob_ext_soft": 7.0,         # hoặc > x% kèm StochRSI >= 90
     "recover_bounce": 8.0,      # đang phục hồi: đã hồi >= x% từ đáy 20 phiên mà chưa lấy lại MA50
     "crash5": -7.0,             # rơi 5 phiên >= x% dưới EMA20 => cắm đầu
+    "sell_drop": -3.0,          # nến đỏ giảm >= x% trong 1 phiên mà đóng dưới EMA20 => cảnh báo bán
+    "sell_drop_vol": 1.2,       # ...kèm khối lượng >= x lần MA20 Vol (hoặc thủng EMA20 lần đầu)
+    "leg_lookback": 120,        # tìm đáy của đợt tăng trong N phiên gần nhất
+    "leg_min_gain": 30.0,       # đợt tăng từ đáy lên đỉnh tối thiểu x% mới xét nhịp chỉnh
+    "leg_max_age": 30,          # đỉnh phải nằm trong N phiên gần nhất (đợt tăng còn "nóng")
+    "leg_min_dd": 8.0,          # nhịp chỉnh từ đỉnh phải >= x% (và sâu hơn mọi nhịp chỉnh trước trong đợt tăng)
+    "sell_max_dd": 20.0,        # đã giảm >= x% từ đỉnh (leg_lookback phiên) thì bán đã quá muộn: giữ nhãn "Không có điểm mua", không ghi BÁN
+    "base_since_low": 5,        # tích lũy đáy: đã >= x phiên không thủng đáy thấp nhất 60 phiên
+    "base_bounce": 3.0,         # ...và đã hồi >= x% từ đáy đó
+    "base_upvol": 1.1,          # ...khối lượng phiên tăng / phiên giảm (10 phiên) >= x
+    "base_vol5": 1.0,           # ...khối lượng 5 phiên >= x lần MA20 Vol (vol tăng dần trở lại)
+    "base_min_signals": 3,      # cần >= x trong 4 dấu hiệu: upvol (bắt buộc), vol5, A/D tăng (hoặc MFI >= 40), giá trên EMA10
+    "take_profit_gain": 20.0,   # tín hiệu bán + đã tăng >= x% từ đáy + còn trên MA50 => nhãn "CHỐT LỜI"; còn lại => "BÁN"
+    "sell_big_drop": -4.5,      # nến đỏ giảm >= x% đóng dưới EMA20 => cảnh báo bán bất kể khối lượng
 }
 
 # ------------------------------------------------------------------ TRẠNG THÁI
@@ -74,6 +88,8 @@ TAG_STYLE = {
     "Tăng quá đà / Qua điểm mua": ("#FFF1C9", "#8A5A00"),
     "Xu hướng suy yếu":        ("#FCE4E8", "#C02645"),
     "Hạ tỷ trọng":             ("#F8CBD3", "#A3152F"),
+    "CHỐT LỜI":                ("#FFD9A0", "#7A3E00"),
+    "BÁN":                     ("#D92D4A", "#FFFFFF"),
     "Không có điểm mua":       ("#EEF1F5", "#626B78"),
 }
 TAG_OF_STATE = {
@@ -92,7 +108,12 @@ def status_tag(state: str, reason: str = "") -> tuple[str, str, str]:
     """(nhãn, màu nền, màu chữ) của tag trạng thái. Trạng thái \"Hạ tỷ trọng / Xu hướng suy yếu\" được tách đôi:
     có tín hiệu bán trong 3 phiên (UPTHRUST, BREAKDOWN...) -> \"Hạ tỷ trọng\"; còn lại -> \"Xu hướng suy yếu\"."""
     label = TAG_OF_STATE.get(state, "Không có điểm mua")
-    if state == WEAKENING and "tín hiệu bán" in (reason or ""):
+    reason = reason or ""
+    if reason.startswith("CHỐT LỜI"):          # lý do do classify ghi tiền tố "CHỐT LỜI: " / "BÁN: "
+        label = "CHỐT LỜI"
+    elif reason.startswith("BÁN"):
+        label = "BÁN"
+    elif state == WEAKENING and "tín hiệu bán" in reason:
         label = "Hạ tỷ trọng"
     bg, fg = TAG_STYLE[label]
     return label, bg, fg
@@ -112,6 +133,27 @@ def _f(x, default=np.nan) -> float:
 
 def _nz(x):
     return 0.0 if x is None or (isinstance(x, float) and np.isnan(x)) else x
+
+
+def _leg_structure(g: pd.DataFrame) -> dict:
+    """Cấu trúc đợt tăng gần nhất: đáy thấp nhất trong leg_lookback phiên -> đỉnh cao nhất sau đáy.
+    leg_gain   = % tăng từ đáy lên đỉnh.
+    leg_dd     = % chỉnh từ đỉnh (giá cao nhất) xuống giá đóng cửa hiện tại.
+    leg_prev_pb = nhịp chỉnh sâu nhất TRƯỚC đỉnh, trong cùng đợt tăng (đo từ đỉnh chạy xuống giá thấp nhất, như cách đo trên chart).
+    leg_age    = số phiên từ đỉnh tới nay."""
+    n = min(len(g), CFG["leg_lookback"])
+    h = g["Giá cao nhất"].to_numpy(float)[-n:]
+    l = g["Giá thấp nhất"].to_numpy(float)[-n:]
+    c = float(g["Giá đóng cửa"].iat[-1])
+    i_lo = int(np.argmin(l))
+    i_pk = i_lo + int(np.argmax(h[i_lo:]))
+    peak, low = float(h[i_pk]), float(l[i_lo])
+    run = np.maximum.accumulate(h[i_lo:i_pk + 1])
+    pbs = (run - l[i_lo:i_pk + 1]) / run * 100
+    return {"leg_gain": (peak / low - 1) * 100 if low > 0 else np.nan,
+            "leg_dd": (1 - c / peak) * 100 if peak > 0 else np.nan,
+            "leg_prev_pb": float(pbs.max()) if len(pbs) else 0.0,
+            "leg_age": n - 1 - i_pk, "leg_peak": peak, "leg_low": low}
 
 
 def _features(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
@@ -147,6 +189,15 @@ def _features(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
         "pv_recent": set(g["PV_code"].tail(3)) - {""},
     }
     f["ema20_10ago"] = float(ema20.iat[-11]) if len(g) > 11 else np.nan
+    f.update(_leg_structure(g))
+    # dấu hiệu tích lũy đáy sau đà giảm
+    low60 = g["Giá thấp nhất"].tail(60)
+    f["low60"] = float(low60.min())
+    f["since_low"] = len(low60) - 1 - int(np.argmin(low60.to_numpy(float)))
+    f["bounce_low"] = (c / f["low60"] - 1) * 100 if f["low60"] > 0 else np.nan
+    d10, v10 = c_s.diff().tail(10), v.tail(10)
+    f["upvol"] = _f(v10[d10 > 0].sum() / v10[d10 < 0].sum()) if v10[d10 < 0].sum() > 0 else (np.inf if v10[d10 > 0].sum() > 0 else np.nan)
+    f["lost_ema20"] = bool(len(g) > 2 and c < float(ema20.iat[-1]) and float(c_s.iat[-2]) >= float(ema20.iat[-2]))   # phiên này vừa đóng thủng EMA20
     f["crossed_ema20"] = bool(((c_s.tail(4) > ema20.tail(4)).values[-1]) and (c_s.tail(4).values[:-1] < ema20.tail(4).values[:-1]).any())
     f["ma_spread"] = (max(f["ema10"], f["ema20"], f["ma50"]) - min(f["ema10"], f["ema20"], f["ma50"])) / c * 100
     if w is not None and len(w) >= 20:
@@ -295,14 +346,59 @@ def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dic
     down50 = not np.isnan(f["ma50_10"]) and f["ma50"] < f["ma50_10"]
     below_w = f["has_week"] and c < f["wma20"]
     crash = not np.isnan(f["drop5"]) and f["drop5"] <= CFG["crash5"] and c < f["ema20"]
+    bearish = f["pv_recent"] & BEARISH_PV
+
+    # ---------- CẢNH BÁO BÁN cho mã còn khỏe (chưa nằm dưới MA50 đang dốc xuống). Đặt TRƯỚC nhóm "Không có điểm mua"
+    # vì nhóm đó bị loại khỏi mọi danh sách: mã đang Điểm mua đẹp mà rơi mạnh phải hiện ở Danh sách cảnh báo, không được biến mất.
+    dd_hi = (1 - c / float(g["Giá cao nhất"].tail(CFG["leg_lookback"]).max())) * 100
+    deep = dd_hi >= CFG["sell_max_dd"]          # rơi quá sâu: không báo BÁN / CHỐT LỜI nữa
+    healthy = not (c < f["ma50"] and down50) and not deep
+    # CHỐT LỜI: còn trên MA50 và đã có lãi lớn từ đáy (xu hướng chưa gãy nhưng đà đang yếu); BÁN: các trường hợp còn lại
+    act = "CHỐT LỜI" if (c >= f["ma50"] and f["leg_gain"] >= CFG["take_profit_gain"]) else "BÁN"
+    vol_now = _nz(f["vol_now"])
+    # (1) nến đỏ mạnh đóng dưới EMA20 (không cần thỏa đủ điều kiện "Xả mạnh" của engine)
+    sell_candle = (c < f["ema20"] and (
+        f["chg"] <= CFG["sell_big_drop"]
+        or (f["chg"] <= CFG["sell_drop"] and (vol_now >= CFG["sell_drop_vol"] or f["lost_ema20"]))))
+    # (2) đợt tăng >= 30% từ đáy, nhịp chỉnh từ đỉnh sâu hơn MỌI nhịp chỉnh trước trong đợt tăng và giá thủng EMA20
+    leg_break = (c < f["ema20"] and f["leg_gain"] >= CFG["leg_min_gain"] and f["leg_age"] <= CFG["leg_max_age"]
+                 and f["leg_dd"] >= CFG["leg_min_dd"] and f["leg_dd"] > f["leg_prev_pb"])
+    if healthy:
+        if bearish:
+            return out(WEAKENING, f"{act}: có tín hiệu bán trong 3 phiên ({', '.join(E.PV_LABEL[b_] for b_ in sorted(bearish))})")
+        if leg_break:
+            return out(WEAKENING, f"{act}: giá chỉnh {f['leg_dd']:.1f}% từ đỉnh {f['leg_peak']:.2f}, sâu hơn mọi nhịp chỉnh trước "
+                                  f"(tối đa {f['leg_prev_pb']:.1f}%) trong đợt tăng {f['leg_gain']:.0f}% từ đáy, đã thủng EMA20: hạ tỷ trọng / không mua mới")
+        if sell_candle:
+            return out(WEAKENING, f"{act}: nến đỏ {f['chg']:.1f}%, đóng cửa dưới EMA20 ({f['ema20']:.2f}), "
+                                  f"khối lượng {vol_now:.1f} lần MA20 Vol: hạ tỷ trọng / không mua mới")
+        if crash:
+            return out(WEAKENING, f"{act}: rơi {f['drop5']:.1f}% trong 5 phiên, đóng cửa dưới EMA20 ({f['ema20']:.2f}): hạ tỷ trọng / không mua mới")
+
+    # ---------- Rơi sâu nhưng có dấu hiệu tích lũy / phục hồi => "Đang phục hồi" (theo dõi), không xếp vào "Không có điểm mua"
+    if deep:
+        held = f["since_low"] >= CFG["base_since_low"] and not np.isnan(f["bounce_low"]) and f["bounce_low"] >= CFG["base_bounce"]
+        sig = {"upvol": bool(f["upvol"] >= CFG["base_upvol"]),
+               "vol5": bool(not np.isnan(f["vol5"]) and f["vol5"] >= CFG["base_vol5"]),
+               "flow": bool(f["ad_up"] or (not np.isnan(f["mfi"]) and f["mfi"] >= 40)),
+               "price": bool(c > f["ema10"])}
+        # bắt buộc: giữ được đáy + khối lượng phiên tăng > phiên giảm (có lực mua ròng); còn lại cần thêm tối thiểu số dấu hiệu quy định
+        if held and sig["upvol"] and sum(sig.values()) >= CFG["base_min_signals"]:
+            uv = "∞" if np.isinf(f["upvol"]) else f"{f['upvol']:.1f}"
+            return out(RECOVERING, f"Đã giảm {dd_hi:.0f}% từ đỉnh nhưng có dấu hiệu tích lũy: {f['since_low']} phiên không thủng đáy {f['low60']:.2f}, "
+                                   f"hồi {f['bounce_low']:.1f}% từ đáy, KL phiên tăng/phiên giảm {uv}, KL 5 phiên {f['vol5']:.1f} lần MA20 Vol "
+                                   f"({sum(sig.values())}/4 dấu hiệu): theo dõi, chờ vượt MA50 / kháng cự để xác nhận nhịp tăng mới")
+
+    # ---------- Không có điểm mua / Đứng ngoài (loại khỏi mọi danh sách)
     if (c < f["ma50"] and down50 and c < f["ema20"] < f["ma50"] and not f["higher_low"] and (below_w or not f["has_week"])) or crash:
         why = f"Rơi {f['drop5']:.1f}% trong 5 phiên, dưới EMA20" if crash else "Dưới EMA20 < MA50 đang dốc xuống, chưa tạo đáy sau cao hơn"
-        return out(NO_BUY, why + ": đứng ngoài")
+        if deep:
+            return out(NO_BUY, why + f" (đã giảm {dd_hi:.0f}% từ đỉnh): đứng ngoài")
+        return out(NO_BUY, "BÁN: " + why + ": không mua, cân nhắc thoát vị thế")
 
-    bearish = f["pv_recent"] & BEARISH_PV
     if (bearish or (c < f["ma50"] and f["ema10"] < f["ema20"] and not f["higher_low"])
             or (c < f["ema20"] < f["ma50"] and f["has_week"] and f["wma10"] < f["wma20"])):
-        why = (f"Có tín hiệu bán trong 3 phiên ({', '.join(E.PV_LABEL[b] for b in sorted(bearish))})" if bearish
+        why = (f"{'' if deep else 'BÁN: '}có tín hiệu bán trong 3 phiên ({', '.join(E.PV_LABEL[b] for b in sorted(bearish))})" if bearish
                else "Giá dưới MA50, EMA10 < EMA20, chưa có đáy sau cao hơn: xu hướng suy yếu")
         return out(WEAKENING, why)
 
