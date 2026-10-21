@@ -1227,7 +1227,17 @@ def page_alert_lists():
     lists = [(WB.L_RISK, "Xu hướng suy yếu", "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."),
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought).")]
     _, _fm = _wb_meta_maps(WY_KEY)
-    _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over", WB.L_RECOVER: "recover"}
+    _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over"}
+    _CHIP_COL = {WB.L_RISK: "#C8506A", WB.L_OVERBOUGHT: "#F5B942"}
+    _lst = t[t["Danh sách"].isin([k for k, _, _ in lists])]
+    f1, f2 = st.columns([1.2, 3])
+    q = f1.text_input("Tìm mã", "", key="alert_q", placeholder="🔍 Tìm mã...").upper().strip()
+    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in _lst["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                          key="alert_ind", placeholder="Tất cả nhóm")
+    if q:
+        t = t[t["Mã"].astype(str).str.contains(q, regex=False)]
+    if inds:
+        t = t[t["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
         with tab:
             st.caption(note)
@@ -1235,7 +1245,14 @@ def page_alert_lists():
             if d.empty:
                 st.info("Không có mã nào.")
                 continue
+            _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
+                               f'style="color:{_CHIP_COL[key]};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
+                               for c_ in d["Mã"])
+            st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+                        f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
+                        f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
             st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, _TONE_OF[key]), unsafe_allow_html=True)
+            _sell_jump_js()
             with st.expander("Xem dạng bảng"):
                 st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
                              column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
