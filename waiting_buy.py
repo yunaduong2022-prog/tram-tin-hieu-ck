@@ -55,6 +55,7 @@ CFG = {
     "base_upvol": 1.1,          # ...khối lượng phiên tăng / phiên giảm (10 phiên) >= x
     "base_vol5": 1.0,           # ...khối lượng 5 phiên >= x lần MA20 Vol (vol tăng dần trở lại)
     "base_min_signals": 3,      # cần >= x trong 4 dấu hiệu: upvol (bắt buộc), vol5, A/D tăng (hoặc MFI >= 40), giá trên EMA10
+    "profit_zone_gain": 50.0,   # giá hiện tại đã tăng >= x% so với đáy thấp nhất leg_lookback phiên (và còn trên MA50) => nhãn "CHỐT LỜI", không mua mới
     "take_profit_gain": 20.0,   # tín hiệu bán + đã tăng >= x% từ đáy + còn trên MA50 => nhãn "CHỐT LỜI"; còn lại => "BÁN"
     "sell_big_drop": -4.5,      # nến đỏ giảm >= x% đóng dưới EMA20 => cảnh báo bán bất kể khối lượng
 }
@@ -337,11 +338,13 @@ def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dic
     ctx["fc"] = E.forecast_levels(f["c"], _f(g["ATR"].iat[-1]), 1)
     c, wk = f["c"], ("" if f["has_week"] else " (chưa đủ dữ liệu tuần)")
     ext20 = (c / f["ema20"] - 1) * 100
+    gain_now = (c / f["leg_low"] - 1) * 100 if f["leg_low"] > 0 else 0.0      # % đã tăng từ đáy thấp nhất leg_lookback phiên tới giá hiện tại
 
     # ---------- 4 trạng thái ngoài danh sách chờ mua
     if (ext20 >= CFG["ob_ext_ema20"] or (not np.isnan(f["gain10"]) and f["gain10"] >= CFG["ob_gain10"])
             or (ext20 >= CFG["ob_ext_soft"] and f["srsi"] >= 90)):
-        return out(OVERBOUGHT, f"Giá cao hơn EMA20 {ext20:.1f}%, tăng {f['gain10']:.1f}% trong 10 phiên: không mua đuổi")
+        tp = f"CHỐT LỜI: đã tăng {gain_now:.0f}% từ đáy; " if gain_now >= CFG["profit_zone_gain"] and c >= f["ma50"] else ""
+        return out(OVERBOUGHT, tp + f"Giá cao hơn EMA20 {ext20:.1f}%, tăng {f['gain10']:.1f}% trong 10 phiên: không mua đuổi")
 
     down50 = not np.isnan(f["ma50_10"]) and f["ma50"] < f["ma50_10"]
     below_w = f["has_week"] and c < f["wma20"]
@@ -374,6 +377,11 @@ def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dic
                                   f"khối lượng {vol_now:.1f} lần MA20 Vol: hạ tỷ trọng / không mua mới")
         if crash:
             return out(WEAKENING, f"{act}: rơi {f['drop5']:.1f}% trong 5 phiên, đóng cửa dưới EMA20 ({f['ema20']:.2f}): hạ tỷ trọng / không mua mới")
+
+    # ---------- Vùng chốt lời: đã tăng >= 50% từ đáy mà xu hướng chưa gãy (còn trên MA50) => không còn là điểm mua, chuyển sang CHỐT LỜI
+    if gain_now >= CFG["profit_zone_gain"] and c >= f["ma50"] and not deep:
+        return out(OVERBOUGHT, f"CHỐT LỜI: đã tăng {gain_now:.0f}% từ đáy {f['leg_low']:.2f} (trong {CFG['leg_lookback']} phiên), giá {c:.2f} "
+                               f"cách đỉnh {f['leg_dd']:.1f}%: không mua mới, cân nhắc chốt lời từng phần và dời cắt lỗ lên")
 
     # ---------- Rơi sâu nhưng có dấu hiệu tích lũy / phục hồi => "Đang phục hồi" (theo dõi), không xếp vào "Không có điểm mua"
     if deep:
