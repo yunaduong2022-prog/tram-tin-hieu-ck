@@ -37,7 +37,7 @@ st.markdown("""
  .muted{color:var(--muted);font-size:12px;line-height:1.5}
  .big{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0 6px}
  .mtf-top{display:flex;justify-content:space-between;align-items:stretch;gap:12px}
- .mtf-code{display:flex;align-items:center;font-size:44px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--txt2)}
+ .mtf-code{display:flex;align-items:center;font-size:56px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--txt2)}
  .c-red{color:var(--red)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-gray{color:var(--muted)}
  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
  .tag-red{background:var(--tag-red-bg);color:var(--red)}.tag-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}
