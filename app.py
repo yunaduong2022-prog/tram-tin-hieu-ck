@@ -1228,22 +1228,24 @@ def page_alert_lists():
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought).")]
     _, _fm = _wb_meta_maps(WY_KEY)
     _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over"}
-    _CHIP_COL = {WB.L_RISK: "#C8506A", WB.L_OVERBOUGHT: "#F5B942"}
-    _lst = t[t["Danh sách"].isin([k for k, _, _ in lists])]
-    f1, f2 = st.columns([1.2, 3])
-    q = f1.text_input("Tìm mã", "", key="alert_q", placeholder="🔍 Tìm mã...").upper().strip()
-    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in _lst["Nhóm"] for x in str(t_).split(",") if x.strip()}),
-                          key="alert_ind", placeholder="Tất cả nhóm")
-    if q:
-        t = t[t["Mã"].astype(str).str.contains(q, regex=False)]
-    if inds:
-        t = t[t["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+    _CHIP_COL = {WB.L_RISK: "var(--txt2)", WB.L_OVERBOUGHT: "#F5B942"}
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
         with tab:
             st.caption(note)
             d = t[t["Danh sách"] == key].sort_values("Score", ascending=False)
             if d.empty:
                 st.info("Không có mã nào.")
+                continue
+            f1, f2 = st.columns([1.2, 3])      # bộ lọc nằm ngay trên Danh sách tổng hợp (mỗi tab có bộ lọc riêng)
+            q = f1.text_input("Tìm mã", "", key=f"alert_q_{key}", placeholder="🔍 Tìm mã...").upper().strip()
+            inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                                  key=f"alert_ind_{key}", placeholder="Tất cả nhóm")
+            if q:
+                d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+            if inds:
+                d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+            if d.empty:
+                st.info("Không có mã nào khớp bộ lọc.")
                 continue
             _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
                                f'style="color:{_CHIP_COL[key]};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
