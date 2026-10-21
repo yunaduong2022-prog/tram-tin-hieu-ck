@@ -1245,6 +1245,22 @@ def page_alert_lists():
     st.caption(f"{int((t_all['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
 
 
+def _sell_jump_js():
+    """Bấm mã ở Danh sách tổng hợp -> cuộn mượt tới thẻ của mã đó và viền sáng 2 giây (không tải lại trang)."""
+    import streamlit.components.v1 as components
+    components.html("""<script>
+const d=window.parent.document;
+if(!d.__scJump){d.__scJump=true;
+ d.addEventListener('click',function(e){
+  const a=e.target.closest&&e.target.closest('a.sc-jump');if(!a)return;
+  e.preventDefault();
+  const el=d.getElementById('sc-'+a.dataset.code);if(!el)return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.classList.add('sc-flash');setTimeout(()=>el.classList.remove('sc-flash'),2000);
+ });}
+</script>""", height=0)
+
+
 def page_sell_list():
     st.title("🔴 Bán / Chốt lời")
     header()
@@ -1279,7 +1295,8 @@ def page_sell_list():
         return
     d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1})).sort_values(["_o", "Score"], ascending=[True, False])
           .drop(columns="_o"))
-    _chips = ", ".join(f'<span style="color:{"var(--red)" if a_ == "BÁN" else "#F5B942"};font-weight:600">{htmllib.escape(str(c_))}</span>'
+    _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
+                       f'style="color:{"var(--red)" if a_ == "BÁN" else "#F5B942"};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
                        for c_, a_ in zip(d["Mã"], d["Hành động bán"]))
     st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
                 f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
@@ -1288,6 +1305,7 @@ def page_sell_list():
     _, _fm = _wb_meta_maps(WY_KEY)
     d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
     st.markdown(sell_card.cards_html(d, latest_date), unsafe_allow_html=True)
+    _sell_jump_js()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Hành động bán", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Lý do"]].rename(columns={"Hành động bán": "Tín hiệu"})
                      .reset_index(drop=True), hide_index=True,

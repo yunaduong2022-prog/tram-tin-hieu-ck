@@ -16,6 +16,8 @@ import pandas as pd
 _CSS = """
 .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin:8px 0 18px}
 .sc{--sc-c:#D92D4A;--sc-bg:#3A1A22;--sc-fg:#fff;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.4)}
+.sc{scroll-margin-top:110px;transition:box-shadow .3s,border-color .3s}
+.sc.sc-flash{border-color:var(--accent,#2dd4a8);box-shadow:0 0 0 3px var(--accent,#2dd4a8),0 10px 26px rgba(0,0,0,.4)}
 .sc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px 12px;
  border-left:4px solid var(--sc-c);border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--sc-bg),transparent 140%)}
 .sc-tkr{font-size:25px;font-weight:700;line-height:1.1;color:var(--txt2);letter-spacing:.01em}
@@ -154,7 +156,7 @@ def card_html(r, as_of=None, tone="sell") -> str:
     rs_note = "" if pd.isna(rs) else (
         f'<span class="sc-rsnote {"sc-up" if rs_ok else "sc-dn"}">{"Mạnh hơn" if rs_ok else "Yếu hơn"} VN-Index</span>')
     return (
-        f'<article class="sc t-{tone if tone in TONES else "sell"}">'
+        f'<article id="sc-{esc(r.get("Mã"))}" class="sc t-{tone if tone in TONES else "sell"}">'
         f'<header class="sc-head"><div><div class="sc-tkr">{esc(r.get("Mã"))}</div>{name_html}<span class="sc-grp">{esc(r.get("Nhóm"))}</span></div>'
         f'<span class="sc-badge"><i></i>{tn["label"]}</span></header>'
         f'<div class="sc-px"><span class="sc-p">{_f(r.get("Giá"))}</span>{chg_html}</div>'
