@@ -57,6 +57,9 @@ CFG = {
     "base_min_signals": 3,      # cần >= x trong 4 dấu hiệu: upvol (bắt buộc), vol5, A/D tăng (hoặc MFI >= 40), giá trên EMA10
     "profit_zone_gain": 50.0,   # giá hiện tại đã tăng >= x% so với đáy thấp nhất leg_lookback phiên (và còn trên MA50) => nhãn "CHỐT LỜI", không mua mới
     "take_profit_gain": 20.0,   # tín hiệu bán + đã tăng >= x% từ đáy + còn trên MA50 => nhãn "CHỐT LỜI"; còn lại => "BÁN"
+    "ma20_zone_gap": 4.0,       # Vùng mua ATR (cạnh dưới) cao hơn MA20 ngày (TB 20 phiên) >= x% thì đổi Vùng mua về quanh MA20
+    "ma20_zone_pad": 0.3,       # ...Vùng mua mới = MA20 ± x (đơn vị giá, vd MA20 = 33 -> 32.7 – 33.3)
+    "ma20_zone_stop": 7.0,      # ...Cắt lỗ = MA20 trừ x%
     "sell_big_drop": -4.5,      # nến đỏ giảm >= x% đóng dưới EMA20 => cảnh báo bán bất kể khối lượng
 }
 
@@ -241,15 +244,24 @@ def _levels(f: dict, support: float, entry_lo: float | None = None, entry_hi: fl
             "Cách vùng mua %": (c / hi - 1) * 100 if c > hi else (c / lo - 1) * 100 if c < lo else 0.0}
 
 
-def _chart_levels(lv: dict, fc: dict) -> dict:
+def _chart_levels(lv: dict, fc: dict, ma20: float = np.nan, f: dict | None = None) -> dict:
     """Thay vùng mua / cắt lỗ / mục tiêu bằng số của trang biểu đồ (engine.forecast_levels). Phần cấu trúc (R:R tới cản gần nhất)
-    đã dùng xong ở bước lọc "Điểm mua đẹp"; chỉ giữ lại "Cản gần" để cảnh báo."""
+    đã dùng xong ở bước lọc "Điểm mua đẹp"; chỉ giữ lại "Cản gần" để cảnh báo.
+
+    Nếu Vùng mua ATR (cạnh dưới) cao hơn MA20 ngày >= CFG["ma20_zone_gap"]% thì giá đã chạy xa trung bình 20 phiên:
+    Vùng mua = MA20 ± CFG["ma20_zone_pad"] (vd MA20 = 33 -> 32.7 – 33.3), Cắt lỗ = MA20 trừ CFG["ma20_zone_stop"]%,
+    Mục tiêu 1/2 = hai cản gần nhất phía trên và R:R tính thực tế theo giá vào (cạnh trên vùng) và cắt lỗ (hàm _levels)."""
     c = fc["entry"]
-    return {"Vùng mua từ": fc["lo"], "Vùng mua đến": fc["hi"], "Giá vào": c,
+    base = {"Vùng mua từ": fc["lo"], "Vùng mua đến": fc["hi"], "Giá vào": c,
             "Cắt lỗ": fc["sl"], "Cắt lỗ %": -fc["sl_pct"],
             "Mục tiêu 1": fc["t1"], "Lời 1 %": (fc["t1"] / c - 1) * 100,
             "Mục tiêu 2": fc["t2"], "Lời 2 %": (fc["t2"] / c - 1) * 100,
-            "R:R": 2.0, "Cản gần": lv.get("Cản gần", np.nan), "Cách vùng mua %": 0.0}
+            "R:R": 2.0, "Cản gần": lv.get("Cản gần", np.nan), "Cách vùng mua %": 0.0, "_ma20_zone": False}
+    if f is None or pd.isna(ma20) or ma20 <= 0 or fc["lo"] < ma20 * (1 + CFG["ma20_zone_gap"] / 100):
+        return base
+    z = _levels(f, ma20, ma20 - CFG["ma20_zone_pad"], ma20 + CFG["ma20_zone_pad"], ma20 * (1 - CFG["ma20_zone_stop"] / 100))
+    z.update({"_ma20_zone": True, "_ma20": ma20})
+    return z
 
 
 # Hành động theo trạng thái: vùng mua (theo trang biểu đồ) luôn quanh giá hiện tại, nên "vào ngay hay chờ" do trạng thái quyết định
@@ -331,16 +343,17 @@ def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dic
         """alt = vùng mua dự phòng (dict từ _levels) cho trạng thái không có vùng mua riêng: chỉ dùng khi được nâng lên Điểm mua đẹp."""
         zone = (lv["Vùng mua từ"], lv["Vùng mua đến"]) if lv else None
         if lv and ctx.get("fc"):
-            lv = _chart_levels(lv, ctx["fc"])
+            lv = _chart_levels(lv, ctx["fc"], ctx.get("ma20", np.nan), ctx.get("f"))
         extra = {}
         if alt is not None:
             zone = (alt["Vùng mua từ"], alt["Vùng mua đến"])
-            extra["_alt"] = _chart_levels(alt, ctx["fc"]) if ctx.get("fc") else alt
+            extra["_alt"] = _chart_levels(alt, ctx["fc"], ctx.get("ma20", np.nan), ctx.get("f")) if ctx.get("fc") else alt
         return {"Trạng thái": state, "Danh sách": STATE_GROUP[state], "Lý do": reason, "_zone": zone, **extra, **lv}
 
     if len(g) < CFG["min_bars"] or pd.isna(g["MA50"].iat[-1]):
         return out(NO_BUY, f"Chưa đủ dữ liệu (cần ≥ {CFG['min_bars']} phiên để tính MA50)")
     f = _features(g, w, r)
+    ctx["f"], ctx["ma20"] = f, _f(g["MA20"].iat[-1])      # MA20 = trung bình giá đóng cửa 20 phiên (ngày)
     ctx["fc"] = E.forecast_levels(f["c"], _f(g["ATR"].iat[-1]), 1)
     c, wk = f["c"], ("" if f["has_week"] else " (chưa đủ dữ liệu tuần)")
     ext20 = (c / f["ema20"] - 1) * 100
@@ -540,6 +553,10 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         except Exception as e:     # một mã lỗi dữ liệu không được làm sập cả trang
             res = {"Trạng thái": NO_BUY, "Danh sách": L_NONE, "Lý do": f"Lỗi khi phân loại: {e}"}
         res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"])
+        if res.get("_ma20_zone"):      # vùng mua đã đổi về quanh MA20, giá còn cao hơn vùng nên không thể "vào ngay"
+            res["Hành động"] = "Chờ mua"
+            res["Ghi chú hành động"] = (f"giá cao hơn MA20 ({res['_ma20']:.2f}) {(r['Giá'] / res['_ma20'] - 1) * 100:.1f}%: "
+                                        f"chờ giá điều chỉnh về vùng MA20 ± {CFG['ma20_zone_pad']:g} rồi mới vào")
         res["Hành động bán"] = sell_action_of(res.get("Lý do"))
         try:
             res["Tăng từ đáy %"] = _leg_structure(g.reset_index(drop=True))["leg_gain"]
