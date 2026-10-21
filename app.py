@@ -1187,11 +1187,17 @@ def page_watchlist():
 def page_alert_lists():
     st.title("⚠️ Danh sách cảnh báo")
     header()
-    st.caption("Các mã KHÔNG nằm trong **Cổ phiếu chờ mua trong tuần**: xu hướng suy yếu, tăng quá đà, đang phục hồi.")
-    t = _wb_table()
-    lists = [(WB.L_RISK, "Hạ tỷ trọng / Xu hướng suy yếu", "Cảnh báo rủi ro / cân nhắc bán."),
+    st.caption("Các mã KHÔNG nằm trong **Cổ phiếu chờ mua trong tuần**: xu hướng suy yếu, tăng quá đà, đang phục hồi. "
+               "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
+    t_all = _wb_table()
+    t = t_all
+    if "Hành động bán" in t_all.columns:      # mỗi mã chỉ nằm một nơi: có tín hiệu BÁN / CHỐT LỜI thì thuộc trang Bán / Chốt lời
+        t = t_all[~t_all["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
+    lists = [(WB.L_RISK, "Xu hướng suy yếu", "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."),
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought)."),
              (WB.L_RECOVER, "Đang phục hồi", "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng).")]
+    _, _fm = _wb_meta_maps(WY_KEY)
+    _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over", WB.L_RECOVER: "recover"}
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
         with tab:
             st.caption(note)
@@ -1199,12 +1205,14 @@ def page_alert_lists():
             if d.empty:
                 st.info("Không có mã nào.")
                 continue
-            st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
-                         column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
-                                        "Score": st.column_config.NumberColumn(format="%.1f"),
-                                        "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
-                         **_STRETCH_DF)
-    st.caption(f"{int((t['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
+            st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, _TONE_OF[key]), unsafe_allow_html=True)
+            with st.expander("Xem dạng bảng"):
+                st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
+                             column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                            "Score": st.column_config.NumberColumn(format="%.1f"),
+                                            "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
+                             **_STRETCH_DF)
+    st.caption(f"{int((t_all['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
 
 
 def page_sell_list():

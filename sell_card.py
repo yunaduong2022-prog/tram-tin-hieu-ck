@@ -15,16 +15,16 @@ import pandas as pd
 
 _CSS = """
 .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin:8px 0 18px}
-.sc{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.4)}
+.sc{--sc-c:#D92D4A;--sc-bg:#3A1A22;--sc-fg:#fff;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(0,0,0,.4)}
 .sc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px 12px;
- border-left:4px solid #D92D4A;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#3A1A22,transparent 140%)}
+ border-left:4px solid var(--sc-c);border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--sc-bg),transparent 140%)}
 .sc-tkr{font-size:25px;font-weight:700;line-height:1.1;color:var(--txt2);letter-spacing:.01em}
 .sc-name{margin-top:3px;font-size:12.5px;color:var(--muted);line-height:1.35;max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-grp{display:inline-block;margin-top:6px;padding:2px 9px;border-radius:999px;background:var(--card2);
  border:1px solid var(--line);color:var(--muted);font-size:12px}
-.sc-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:6px;background:#D92D4A;color:#fff;
+.sc-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:6px;background:var(--sc-c);color:var(--sc-fg);
  font-weight:700;font-size:13px;letter-spacing:.04em;white-space:nowrap}
-.sc-badge i{width:7px;height:7px;border-radius:50%;background:#fff;display:inline-block}
+.sc-badge i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
 .sc-px{display:flex;align-items:baseline;gap:12px;padding:14px 16px 0;font-variant-numeric:tabular-nums}
 .sc-p{font-size:32px;font-weight:600;color:var(--txt2);letter-spacing:-.01em}
 .sc-chg{font-size:15px;font-weight:600}
@@ -40,12 +40,22 @@ _CSS = """
 .sc-fill{position:absolute;top:0;bottom:0;border-radius:3px}
 .sc-mid{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--muted);border-radius:1px}
 .sc-scale{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)}
-.sc-why{margin:12px 16px 16px;padding:11px 13px;border-radius:8px;background:var(--card2);border-left:3px solid #D92D4A}
+.sc-why{margin:12px 16px 16px;padding:11px 13px;border-radius:8px;background:var(--card2);border-left:3px solid var(--sc-c)}
 .sc-why p{margin:0;color:var(--txt);font-size:13.5px;line-height:1.6}
+.sc.t-risk{--sc-c:#C8506A;--sc-bg:#33202A}
+.sc.t-over{--sc-c:#F5B942;--sc-bg:#3A2E12;--sc-fg:#3A2E12}
+.sc.t-recover{--sc-c:#8B6FE0;--sc-bg:#2A2347}
 .sc-foot{margin:-6px 16px 14px;font-size:12px;color:var(--muted);text-align:right;font-style:italic}
 .sc-why .sc-hint{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 """
 CSS = "<style>" + " ".join(_CSS.split()) + "</style>"
+
+TONES = {
+    "sell":    {"label": "BÁN / CHỐT LỜI", "hint": "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."},
+    "risk":    {"label": "THEO DÕI SUY YẾU", "hint": "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."},
+    "over":    {"label": "KHÔNG MUA ĐUỔI", "hint": "Cảnh báo không mua đuổi (Overbought)."},
+    "recover": {"label": "ĐANG PHỤC HỒI", "hint": "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng)."},
+}
 
 _PREFIX = re.compile(r"^\s*(BÁN|CHỐT LỜI)\s*:\s*", re.I)
 
@@ -105,8 +115,9 @@ def _fmt_date(x) -> str:
         return ""
 
 
-def card_html(r, as_of=None) -> str:
+def card_html(r, as_of=None, tone="sell") -> str:
     """HTML một thẻ. Viết liền một dòng: Streamlit coi dòng thụt 4 ô trở lên là code."""
+    tn = TONES.get(tone, TONES["sell"])
     esc = lambda s: html.escape(str(s if pd.notna(s) else ""))
     chg = r.get("Chg %")
     up = pd.notna(chg) and float(chg) >= 0
@@ -124,9 +135,9 @@ def card_html(r, as_of=None) -> str:
     rs_note = "" if pd.isna(rs) else (
         f'<span class="sc-rsnote {"sc-up" if rs_ok else "sc-dn"}">{"Mạnh hơn" if rs_ok else "Yếu hơn"} VN-Index</span>')
     return (
-        '<article class="sc">'
+        f'<article class="sc t-{tone if tone in TONES else "sell"}">'
         f'<header class="sc-head"><div><div class="sc-tkr">{esc(r.get("Mã"))}</div>{name_html}<span class="sc-grp">{esc(r.get("Nhóm"))}</span></div>'
-        '<span class="sc-badge"><i></i>BÁN / CHỐT LỜI</span></header>'
+        f'<span class="sc-badge"><i></i>{tn["label"]}</span></header>'
         f'<div class="sc-px"><span class="sc-p">{_f(r.get("Giá"))}</span>{chg_html}</div>'
         f'{gain_html}'
         '<div class="sc-stats">'
@@ -134,12 +145,18 @@ def card_html(r, as_of=None) -> str:
         f'<div class="sc-stat"><div class="sc-k">RS vs VNI</div><div class="sc-rsrow"><div class="sc-v">{_f(rs)}</div>{rs_note}</div>{_rs_bar(rs)}</div>'
         '</div>'
         f'<div class="sc-why"><div class="sc-k" style="margin-bottom:3px">Lý do</div><p>{esc(reason)}</p>'
-        '<p class="sc-hint">Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng.</p></div>'
+        f'<p class="sc-hint">{esc(tn["hint"])}</p></div>'
         f'{foot_html}'
         '</article>'
     )
 
 
-def cards_html(d: pd.DataFrame, as_of=None) -> str:
-    """Lưới thẻ cho toàn bộ DataFrame (kèm CSS). as_of: ngày nến cuối (vd latest_date của app) hiện ở đáy thẻ."""
-    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of) for _, r in d.iterrows()) + "</div>"
+def cards_html(d: pd.DataFrame, as_of=None, tone="sell") -> str:
+    """Lưới thẻ cho toàn bộ DataFrame (kèm CSS). as_of: ngày nến cuối (vd latest_date của app) hiện ở đáy thẻ.
+    tone: "sell" (BÁN / CHỐT LỜI), "risk" (theo dõi suy yếu), "over" (không mua đuổi), "recover" (đang phục hồi)."""
+    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of, tone) for _, r in d.iterrows()) + "</div>"
+
+
+def add_names(d: pd.DataFrame, fund_map: dict) -> pd.DataFrame:
+    """Gắn cột "Tên công ty" từ fund_map (kết quả của _wb_meta_maps trong app.py)."""
+    return d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (fund_map.get(str(c).upper()) or {}).get("Tên công ty", ""))})
