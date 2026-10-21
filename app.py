@@ -119,8 +119,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
-              "Elliott", "Wyckoff", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "MACD", "KDJ", "StochRSI"]
+              "Wyckoff", "EMA 50/200", "MACD", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "MACD", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -1030,6 +1030,33 @@ def _wb_meta(code: str) -> dict:
             "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%")}
 
 
+def _wb_ma_of(code: str) -> dict:
+    """{20|50|200: (giá trị MA ngày, % giá đóng cửa so với MA)}; thiếu lịch sử thì bỏ qua."""
+    g = df[df["Mã"].astype(str).str.upper() == str(code).upper()].sort_values("Ngày")
+    c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce").dropna()
+    out = {}
+    if c.empty:
+        return out
+    last = float(c.iloc[-1])
+    for n in (20, 50, 200):
+        if len(c) >= n and float(c.tail(n).mean()):
+            m = float(c.tail(n).mean())
+            out[n] = (m, (last / m - 1) * 100)
+    return out
+
+
+def _wb_scroll_to(code: str):
+    """Cuộn tới thẻ của mã (sau khi bấm "Xem thêm" ở dạng Bảng) và viền sáng 4 giây."""
+    import streamlit.components.v1 as components
+    components.html("""<script>
+const code=%s;let tries=0;
+function go(){const d=window.parent.document;
+ const el=[...d.querySelectorAll('[class*="st-key-wbcard-"]')].find(e=>[...e.classList].some(c=>c.startsWith('st-key-wbcard-')&&c.endsWith('-'+code)));
+ if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('wb-focus');setTimeout(()=>el.classList.remove('wb-focus'),4000);}
+ else if(tries++<24)setTimeout(go,250);}
+go();</script>""" % json.dumps(code), height=0)
+
+
 def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
@@ -1087,7 +1114,9 @@ def page_wait_buy():
         st.info("Hiện chưa có mã nào đạt điều kiện chờ mua.")
         return
     buy = _wb_filters(buy, [s for g_ in WB.BUY_GROUPS for s in WB.STATES_BY_GROUP[g_]])
-    view = st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], default="Thẻ", key="wb_view") or "Thẻ"
+    focus = st.session_state.pop("wb_focus", None)   # mã vừa bấm "Xem thêm" ở dạng Bảng
+    st.session_state.setdefault("wb_view", "Thẻ")
+    view = st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], key="wb_view") or "Thẻ"
     for grp in WB.BUY_GROUPS:
         d = WB.sort_group(buy[buy["Danh sách"] == grp], grp)
         st.divider()
@@ -1098,17 +1127,21 @@ def page_wait_buy():
             continue
         if view == "Bảng":
             _sec = lambda c_: ", ".join(g_ for g_ in MEMBER.get(c_, []) if g_ != WL.VN30) or "Khác"
-            st.markdown(WB.table_html(d, grp, _sec), unsafe_allow_html=True)
+            st.markdown(WB.table_html(d, grp, _sec, _wb_ma_of), unsafe_allow_html=True)
             st.caption("Giá, vùng mua, cắt lỗ, mục tiêu tính theo ATR (đơn vị nghìn đồng), % so với giá vào. "
                        "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
             continue
-        show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key=f"wb_all_{grp}")
+        _codes = list(d["Mã"])
+        need_all = bool(focus) and focus in _codes and _codes.index(focus) >= WB_PER_GROUP   # mã cần xem nằm ngoài 24 thẻ đầu
+        show_all = need_all or (len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key=f"wb_all_{grp}"))
         cols = st.columns(3)
         for i, (_, r) in enumerate(d.head(len(d) if show_all else WB_PER_GROUP).iterrows()):
             with cols[i % 3]:
                 _wb_card(r, grp)
         if len(d) > WB_PER_GROUP and not show_all:
             st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
+    if focus and view == "Thẻ":
+        _wb_scroll_to(focus)
 
 
 def page_alert_lists():
@@ -1503,7 +1536,6 @@ def page_stock():
             st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
         if a["enough"]:
-            st.markdown(elliott_card(a), unsafe_allow_html=True)
             st.markdown(wyckoff_card(a), unsafe_allow_html=True)
             st.markdown(zones_card(a), unsafe_allow_html=True)
         st.markdown(signals_card(a, include_short), unsafe_allow_html=True)
@@ -1593,6 +1625,12 @@ def page_mtf_levels():
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
 def route():
     BR.render_header(f"Dữ liệu EOD · {latest_date:%d/%m/%Y}")
+    _go = st.query_params.get("wbgo")      # liên kết "Xem thêm" ở bảng Cổ phiếu chờ mua -> mở thẻ của mã đó
+    if _go:
+        st.query_params.clear()
+        st.session_state["_nav_pending"] = ("Bộ lọc & Backtest", "Cổ phiếu chờ mua trong tuần")
+        st.session_state["wb_view"] = "Thẻ"
+        st.session_state["wb_focus"] = str(_go).upper().strip()
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
