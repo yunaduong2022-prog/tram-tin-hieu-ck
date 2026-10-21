@@ -121,8 +121,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "StochRSI"]
+              "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "RSI", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -723,7 +723,7 @@ _TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích l�
 @st.cache_data(show_spinner=False)
 def divergence_cached(_frames: dict, code: str, key: str) -> list:
     """Phân kỳ RSI/giá khung D và W của một mã (xem rsi_divergence.py)."""
-    return DV.analyze(_frames, code, ("W", "D"))
+    return DV.analyze(_frames, code, ("M", "W", "D"))
 
 
 @st.cache_data(show_spinner=False)
@@ -1216,6 +1216,27 @@ def mtf_card(conc, A, code=""):
     return f'<div class="card">{"".join(html)}</div>'
 
 
+def rsi_card(a, tf, code):
+    """Thẻ Phân tích RSI: giá trị RSI(14) khung đang xem + phân kỳ RSI/giá khung M, W và D (cùng quy tắc thẻ ở Bộ lọc Realtime)."""
+    rsi = DV.rsi14(a["g"]["Giá đóng cửa"]).dropna()
+    if rsi.empty:
+        head = '<div class="muted">Chưa đủ dữ liệu để tính RSI(14).</div>'
+    else:
+        v, prev = float(rsi.iloc[-1]), float(rsi.iloc[-2]) if len(rsi) > 1 else float("nan")
+        zone, kind = (("Quá mua (≥ 70)", "red") if v >= 70 else ("Quá bán (≤ 30)", "green") if v <= 30
+                      else ("Vùng mạnh (50-70)", "green") if v >= 50 else ("Vùng yếu (30-50)", "amber"))
+        slope = "" if pd.isna(prev) else (" · đang tăng" if v > prev else " · đang giảm" if v < prev else "")
+        head = row(f"RSI(14) khung {E.TF_NAME[tf]}", f"<b>{v:.1f}</b>") + f'<div style="margin:6px 0 4px">{tag(zone, kind)}{slope}</div>'
+    sigs = divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1")
+    body = (DV.html(sigs) if sigs else
+            '<div class="muted" style="margin-top:6px">Chưa có tín hiệu phân kỳ RSI còn hiệu lực ở khung Tháng, Tuần và Ngày (khung Tháng cần khoảng 31 nến tháng trở lên).</div>')
+    note = ('<div class="muted" style="margin-top:8px">Quy tắc: RSI(14) Wilder; so 2 đỉnh / 2 đáy giá gần nhất (pivot) với RSI tại đúng nến đó. '
+            'Phân kỳ thường (giá HH/RSI LH, giá LL/RSI HL) và phóng đại (2 đỉnh/đáy bằng nhau) là cảnh báo đảo chiều; '
+            'phân kỳ ẩn (giá HL/RSI LL, giá LH/RSI HH) là xác nhận tiếp diễn. Tín hiệu hết hạn khi giá vượt đỉnh / thủng đáy của pivot sau; '
+            'pivot cần vài nến để xác nhận nên luôn trễ. Hiển thị cả khung M, W và D; chỉ để tham khảo, không phải khuyến nghị đầu tư.</div>')
+    return card("Phân tích RSI", head + body + note)
+
+
 def forecast_card(a, tf):
     d, bias, total, fc = a["dir"], a["bias"], a["total"], a["fc"]
     last_ts = a["g"]["Ngày"].iat[-1]
@@ -1357,7 +1378,7 @@ def make_chart(a, code, tf, layers):
     g = a["g"]
     t = g.tail(BARS_SHOWN[tf])
     x = t["Ngày"]
-    subs = [s for s in ("Khối lượng", "MACD", "KDJ", "StochRSI") if s in layers]
+    subs = [s for s in ("Khối lượng", "MACD", "RSI", "KDJ", "StochRSI") if s in layers]
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=0.025, row_heights=heights)
@@ -1475,6 +1496,26 @@ def make_chart(a, code, tf, layers):
         fig.add_trace(line("MACD_sig", "Tín hiệu", "#F59E0B", 1), row=r, col=1)
         fig.update_yaxes(title_text="MACD 12-26-9", title_font_size=10, row=r, col=1)
         r += 1
+    if "RSI" in subs:
+        rsi_t = DV.rsi14(g["Giá đóng cửa"]).loc[t.index]            # RSI(14) Wilder, cùng công thức với phân tích phân kỳ
+        fig.add_hrect(y0=30, y1=70, row=r, col=1, line_width=0, fillcolor="rgba(120,130,150,.08)")
+        fig.add_trace(go.Scatter(x=x, y=rsi_t, name="RSI(14)", line=dict(width=1.4, color="#8B5CF6")), row=r, col=1)
+        for y in (30, 70):
+            fig.add_hline(y=y, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
+        # nối 2 pivot của tín hiệu phân kỳ (cùng quy tắc thẻ Phân tích RSI) trên RSI và trên giá
+        if tf in ("D", "W", "M"):
+            for s_ in DV.detect(g, tf):
+                if pd.Timestamp(s_["d2"]) < x.iloc[0]:
+                    continue
+                cl_ = "#0E8A6D" if s_["dir"] == "up" else "#C93A52"
+                fig.add_trace(go.Scatter(x=[s_["d1"], s_["d2"]], y=[s_["r1"], s_["r2"]], mode="lines+markers", showlegend=False,
+                                         line=dict(width=1.6, color=cl_), marker=dict(size=6, color=cl_),
+                                         hovertext=s_["name"], hoverinfo="text"), row=r, col=1)
+                fig.add_trace(go.Scatter(x=[s_["d1"], s_["d2"]], y=[s_["p1"], s_["p2"]], mode="lines+markers", showlegend=False,
+                                         line=dict(width=1.4, dash="dot", color=cl_), marker=dict(size=5, color=cl_),
+                                         hovertext=s_["name"], hoverinfo="text"), row=1, col=1)
+        fig.update_yaxes(title_text="RSI 14", title_font_size=10, range=[0, 100], row=r, col=1)
+        r += 1
     if "KDJ" in subs:
         for col, nm, cl in (("KDJ_K", "K", "#F59E0B"), ("KDJ_D", "D", "#3B82F6"), ("KDJ_J", "J", "#8B5CF6")):
             fig.add_trace(line(col, nm, cl, 1), row=r, col=1)
@@ -1544,6 +1585,7 @@ def page_stock():
             st.warning(f"Khung {E.TF_NAME[tf]} chỉ có {a['n']} nến (< {E.MIN_BARS}): chưa đủ để tính điểm, dự báo "
                        "và backtest. Hãy chọn khung nhỏ hơn hoặc tải dữ liệu lịch sử dài hơn.")
         st.plotly_chart(make_chart(a, code, tf, layers), **_STRETCH)
+        st.markdown(rsi_card(a, tf, code), unsafe_allow_html=True)
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code), unsafe_allow_html=True)

@@ -10,7 +10,7 @@ Cách làm:
   - Lấy 2 đỉnh gần nhất (cho phân kỳ giảm) và 2 đáy gần nhất (cho phân kỳ tăng), so giá với RSI tại đúng nến pivot.
   - Chỉ báo tín hiệu còn "tươi": pivot sau nằm trong vài nến gần nhất và giá chưa vượt / thủng pivot đó.
 
-Khung hỗ trợ: D (Ngày), W (Tuần). App hiện chưa có dữ liệu 15m / 1h / 4h nên các khung này chưa được tính;
+Khung hỗ trợ: D (Ngày), W (Tuần), M (Tháng). App hiện chưa có dữ liệu 15m / 1h / 4h nên các khung này chưa được tính;
 hàm `detect()` nhận tên khung bất kỳ có trong `PARAMS`, thêm khung mới chỉ cần thêm một dòng vào `PARAMS` và đưa DataFrame tương ứng vào.
 """
 from __future__ import annotations
@@ -29,10 +29,11 @@ PARAMS = {
     "4h":  dict(k=3, min_gap=5, max_gap=60, fresh=15, eq=0.004, lookback=250),
     "D":   dict(k=4, min_gap=5, max_gap=60, fresh=25, eq=0.005, lookback=160),
     "W":   dict(k=2, min_gap=3, max_gap=30, fresh=10, eq=0.010, lookback=104),
+    "M":   dict(k=2, min_gap=3, max_gap=24, fresh=6, eq=0.020, lookback=72),   # cần ≥ ~31 nến tháng (≈ 2,6 năm lịch sử)
 }
 RSI_MIN_DIFF = 2.0           # RSI 2 pivot phải lệch nhau ít nhất ngần này điểm mới tính là cao hơn / thấp hơn
 RSI_PERIOD = 14
-TF_NAME = {"15m": "15m", "1h": "1h", "4h": "4h", "D": "D", "W": "W"}
+TF_NAME = {"15m": "15m", "1h": "1h", "4h": "4h", "D": "D", "W": "W", "M": "M"}
 
 REVERSAL, CONTINUATION = "Cảnh báo đảo chiều", "Xác nhận tiếp diễn"
 
@@ -148,7 +149,7 @@ def detect(df: pd.DataFrame, tf: str = "D") -> list[dict]:
     return sorted(out, key=lambda x: x["bars_ago"])
 
 
-def analyze(frames: dict, code: str, tfs: tuple[str, ...] = ("D", "W")) -> list[dict]:
+def analyze(frames: dict, code: str, tfs: tuple[str, ...] = ("D", "W", "M")) -> list[dict]:
     """Chạy detect trên các khung có trong `frames` cho một mã; mới nhất / khung lớn đứng trước."""
     res = []
     for tf in tfs:
@@ -156,7 +157,7 @@ def analyze(frames: dict, code: str, tfs: tuple[str, ...] = ("D", "W")) -> list[
         if f is None or f.empty:
             continue
         res += detect(f[f["Mã"] == code], tf)
-    order = {t: i for i, t in enumerate(("W", "D", "4h", "1h", "15m"))}
+    order = {t: i for i, t in enumerate(("M", "W", "D", "4h", "1h", "15m"))}
     return sorted(res, key=lambda s: (order.get(s["tf"], 9), s["bars_ago"]))
 
 
