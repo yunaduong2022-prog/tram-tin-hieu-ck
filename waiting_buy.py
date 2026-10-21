@@ -57,7 +57,7 @@ CFG = {
     "base_min_signals": 3,      # cần >= x trong 4 dấu hiệu: upvol (bắt buộc), vol5, A/D tăng (hoặc MFI >= 40), giá trên EMA10
     "profit_zone_gain": 50.0,   # giá hiện tại đã tăng >= x% so với đáy thấp nhất leg_lookback phiên (và còn trên MA50) => nhãn "CHỐT LỜI", không mua mới
     "take_profit_gain": 20.0,   # tín hiệu bán + đã tăng >= x% từ đáy + còn trên MA50 => nhãn "CHỐT LỜI"; còn lại => "BÁN"
-    "ma20_zone_gap": 4.0,       # Vùng mua ATR (cạnh dưới) cao hơn MA20 ngày (TB 20 phiên) >= x% thì đổi Vùng mua về quanh MA20
+    "ma20_zone_gap": 2.5,      # Giá hiện tại cao hơn MA20 ngày (TB 20 phiên) >= 2,5% thì đổi Vùng mua về quanh MA20
     "ma20_zone_pad": 0.3,       # ...Vùng mua mới = MA20 ± x (đơn vị giá, vd MA20 = 33 -> 32.7 – 33.3)
     "ma20_zone_stop": 7.0,      # ...Cắt lỗ = MA20 trừ x%
     "sell_big_drop": -4.5,      # nến đỏ giảm >= x% đóng dưới EMA20 => cảnh báo bán bất kể khối lượng
@@ -258,7 +258,7 @@ def _chart_levels(lv: dict, fc: dict, ma20: float = np.nan, f: dict | None = Non
             "Mục tiêu 2": fc["t2"], "Lời 2 %": (fc["t2"] / c - 1) * 100,
             "R:R": 2.0, "Cản gần": lv.get("Cản gần", np.nan), "Cách vùng mua %": 0.0, "_ma20_zone": False}
     # Quy tắc dùng chung cho Chờ mua và Mua ngay:
-    # Nếu giá hiện tại cao hơn MA20 từ 4% trở lên, vùng mua = MA20 - 0.3 đến MA20 + 0.3.
+    # Nếu giá hiện tại cao hơn MA20 từ 2,5% trở lên, vùng mua = MA20 - 0.3 đến MA20 + 0.3.
     current_price = f.get("c", np.nan) if f is not None else np.nan
     if (f is None or pd.isna(ma20) or ma20 <= 0 or pd.isna(current_price)
             or current_price < ma20 * (1 + CFG["ma20_zone_gap"] / 100)):
