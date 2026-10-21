@@ -1533,11 +1533,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False):
         # 5 chỉ số (Giá, Vol vs MA10, Position %, Cảnh báo, Độ nghiêng) nằm ngay trên biểu đồ, dưới hàng chú thích
         top, bot = 150, 10
         ph = height - top - bot                       # chiều cao vùng vẽ (px) để đổi px -> toạ độ paper
-        step = 1 / len(metrics)
+        code_w = 0.15                                  # phần bên trái dành cho tên mã
+        step = (1 - code_w) / len(metrics)
         import textwrap
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34, showarrow=False,
+                           text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(metrics):
-            base = dict(xref="paper", yref="paper", x=i * step, y=1, xanchor="left", showarrow=False, align="left")
+            base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
             fig.add_annotation(**base, yanchor="bottom", yshift=66, text=m["label"], font=dict(size=12, color="#8B95A5"),
                                hovertext=m.get("tip"))
             fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
@@ -1567,7 +1570,7 @@ def is_mobile() -> bool:
     return any(k in ua for k in ("iphone", "android", "mobile", "ipad"))
 
 
-def metrics_html(metrics) -> str:
+def metrics_html(metrics, code="") -> str:
     """Lưới chỉ số cho điện thoại (2 cột), thay cho hàng chỉ số vẽ trong biểu đồ trên máy tính."""
     cells = []
     for m in metrics:
@@ -1576,7 +1579,9 @@ def metrics_html(metrics) -> str:
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
     return ('<style>.cm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:4px 0 6px}'
             '.cm-lab{font-size:12px;color:var(--muted)}.cm-val{font-size:24px;font-weight:800;line-height:1.25;color:var(--txt2)}'
-            '.cm-sub{font-size:11.5px;line-height:1.35}</style><div class="cm-grid">' + "".join(cells) + '</div>')
+            '.cm-sub{font-size:11.5px;line-height:1.35}.cm-code{font-size:56px;font-weight:800;line-height:1.1;color:var(--txt2);margin:2px 0 4px}</style>'
+            + (f'<div class="cm-code">{htmllib.escape(str(code))}</div>' if code else "")
+            + '<div class="cm-grid">' + "".join(cells) + '</div>')
 
 
 def pick_layers():
@@ -1625,7 +1630,7 @@ def page_stock():
                        "và backtest. Hãy chọn khung nhỏ hơn hoặc tải dữ liệu lịch sử dài hơn.")
         _mob = is_mobile()
         if _mob:
-            st.markdown(metrics_html(chart_metrics), unsafe_allow_html=True)
+            st.markdown(metrics_html(chart_metrics, code), unsafe_allow_html=True)
         st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob),
                         config={"displayModeBar": not _mob}, **_STRETCH)
 
