@@ -1090,10 +1090,10 @@ def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
 
 
 def page_wait_buy():
-    st.title("🛒 Cổ phiếu chờ mua trong tuần")
+    st.title("🛒 Chờ mua")
     header()
     st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với Bộ lọc Realtime và Backtest. "
-               "Chỉ gồm mã có xu hướng đủ khỏe; mã tăng quá đà, suy yếu, đang phục hồi hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
+               "Chỉ gồm mã có xu hướng đủ khỏe; mã đang phục hồi nằm ở mục **Đang phục hồi**; mã tăng quá đà, suy yếu hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
     buy = t[t["Danh sách"].isin(WB.BUY_GROUPS)]
@@ -1150,7 +1150,7 @@ def page_wait_buy():
 
 
 def _wl_card(r, u, ver):
-    """Thẻ Watchlist: cùng thẻ với mục Cổ phiếu chờ mua trong tuần (+ khối Vị thế của tôi, nút Xem biểu đồ / Bỏ theo dõi)."""
+    """Thẻ Watchlist: cùng thẻ với mục Chờ mua (+ khối Vị thế của tôi, nút Xem biểu đồ / Bỏ theo dõi)."""
     code = str(r["Mã"])
     with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
@@ -1184,18 +1184,41 @@ def page_watchlist():
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
 
 
+def page_recovering():
+    st.title("🌱 Đang phục hồi")
+    header()
+    st.caption("Các mã KHÔNG nằm trong **Chờ mua**: đang hồi phục hoặc có dấu hiệu tích lũy sau nhịp giảm. "
+               "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng). "
+               "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
+    t = _wb_table()
+    if "Hành động bán" in t.columns:
+        t = t[~t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
+    d = t[t["Danh sách"] == WB.L_RECOVER].sort_values("Score", ascending=False)
+    st.metric("Tổng số mã", len(d))
+    if d.empty:
+        st.info("Không có mã nào.")
+        return
+    _, _fm = _wb_meta_maps(WY_KEY)
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover"), unsafe_allow_html=True)
+    with st.expander("Xem dạng bảng"):
+        st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
+                     column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                    "Score": st.column_config.NumberColumn(format="%.1f"),
+                                    "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
+                     **_STRETCH_DF)
+
+
 def page_alert_lists():
     st.title("⚠️ Danh sách cảnh báo")
     header()
-    st.caption("Các mã KHÔNG nằm trong **Cổ phiếu chờ mua trong tuần**: xu hướng suy yếu, tăng quá đà, đang phục hồi. "
+    st.caption("Các mã KHÔNG nằm trong **Chờ mua**: xu hướng suy yếu, tăng quá đà. Mã đang phục hồi có mục riêng **Đang phục hồi**. "
                "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
     t_all = _wb_table()
     t = t_all
     if "Hành động bán" in t_all.columns:      # mỗi mã chỉ nằm một nơi: có tín hiệu BÁN / CHỐT LỜI thì thuộc trang Bán / Chốt lời
         t = t_all[~t_all["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     lists = [(WB.L_RISK, "Xu hướng suy yếu", "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."),
-             (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought)."),
-             (WB.L_RECOVER, "Đang phục hồi", "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng).")]
+             (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought).")]
     _, _fm = _wb_meta_maps(WY_KEY)
     _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over", WB.L_RECOVER: "recover"}
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
@@ -1872,7 +1895,7 @@ def route():
     _go = st.query_params.get("wbgo")      # liên kết "Xem thêm" ở bảng Cổ phiếu chờ mua -> mở thẻ của mã đó
     if _go:
         st.query_params.clear()
-        st.session_state["_nav_pending"] = ("Bộ lọc & Backtest", "Cổ phiếu chờ mua trong tuần")
+        st.session_state["_nav_pending"] = ("Bộ lọc & Backtest", "Chờ mua")
         st.session_state["wb_view"] = "Thẻ"
         st.session_state["wb_focus"] = str(_go).upper().strip()
     main, sub = NAV.render_nav()
@@ -1882,7 +1905,8 @@ def route():
         return FF.render()
     if main == "Bộ lọc & Backtest":
         if sub == "Bộ lọc Realtime": return page_filter()
-        if sub == "Cổ phiếu chờ mua trong tuần": return page_wait_buy()
+        if sub == "Chờ mua": return page_wait_buy()
+        if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
