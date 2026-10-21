@@ -19,7 +19,7 @@ streamlit run app.py
 Trên macOS/Linux, kích hoạt môi trường bằng `source .venv/bin/activate`.
 
 ## Cảnh báo phân kỳ RSI & giá (mới)
-Thẻ ở **Bộ lọc Realtime** và **Cổ phiếu chờ mua trong tuần** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
+Thẻ ở **Bộ lọc Realtime** và **Chờ mua** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
 - **Cảnh báo đảo chiều**: Phân kỳ thường giảm (giá HH, RSI LH), phân kỳ thường tăng (giá LL, RSI HL), phân kỳ phóng đại (2 đỉnh / 2 đáy giá bằng nhau, RSI đỉnh sau thấp hơn / đáy sau cao hơn) → nhãn `TẠI VÙNG CẢN`.
 - **Xác nhận tiếp diễn**: Phân kỳ ẩn tăng (giá HL, RSI LL), phân kỳ ẩn giảm (giá LH, RSI HH).
 - Ngưỡng (số nến xác nhận pivot, khoảng cách giữa 2 pivot, độ "tươi" của tín hiệu, dung sai "bằng nhau", chênh lệch RSI tối thiểu) chỉnh ở `PARAMS` và `RSI_MIN_DIFF`. Khung 15m / 1h / 4h đã có sẵn tham số nhưng app chưa có dữ liệu nến này nên chưa hiển thị.
@@ -132,7 +132,7 @@ Có thể deploy Streamlit Community Cloud nếu môi trường deploy cho phép
 - **Trang Bộ lọc** có thêm: Cảnh báo (MUA/BÁN/Crossover/Đáy KT), Score 0-10, RS vs VNI, Vol/Avg10, MA Alignment, cấu trúc MA ngắn/trung/dài, đỉnh/đáy 52 tuần, trên MA200, dòng tiền sớm (Vol tăng 3 phiên, gom ngầm, cạn cung, NR4/NR7), cùng bộ lọc Nhóm ngành và Wyckoff (Tích lũy, Phân phối, Pha C/D/E) có sẵn.
 - **Bảng** có thêm cột Score, RS vs VNI, MACD và Fisher (Ngày/Tuần), MA align, Nhận xét.
 - **Popup chi tiết**: chọn một dòng rồi bấm "Chi tiết": cảnh báo sớm kèm lời khuyên có số, MACD/Fisher đa khung, trạng thái nhóm ngành, dòng tiền nội tại.
-- **Trang "Cổ phiếu chờ mua trong tuần"** (thay cho "Khung cấu trúc MA", menu Bộ lọc & Backtest): nhận diện 9 trạng thái chờ mua chia 3 nhóm (Điểm mua đã xác nhận / Sắp có điểm mua / Theo dõi thêm) bằng EMA10, EMA20, MA50 ngày + MA10, MA20 tuần, Vol so với MA20 Vol, biên độ nền và hỗ trợ/kháng cự. Mỗi mã chỉ vào đúng một trạng thái, kèm lý do, vùng mua, cắt lỗ, mục tiêu, R:R. Logic nằm ở `waiting_buy.py`, ngưỡng chỉnh trong `CFG`.
+- **Trang "Chờ mua"** (thay cho "Khung cấu trúc MA", menu Bộ lọc & Backtest): nhận diện 9 trạng thái chờ mua chia 3 nhóm (Điểm mua đã xác nhận / Sắp có điểm mua / Theo dõi thêm) bằng EMA10, EMA20, MA50 ngày + MA10, MA20 tuần, Vol so với MA20 Vol, biên độ nền và hỗ trợ/kháng cự. Mỗi mã chỉ vào đúng một trạng thái, kèm lý do, vùng mua, cắt lỗ, mục tiêu, R:R. Logic nằm ở `waiting_buy.py`, ngưỡng chỉnh trong `CFG`.
 - **Trang "Danh sách cảnh báo"**: 3 danh sách nằm ngoài tab chờ mua: Đang phục hồi, Tăng quá đà (không mua đuổi), Hạ tỷ trọng / suy yếu (rủi ro / bán). Nhóm "Không có điểm mua" bị loại khỏi mọi danh sách.
 - **RS vs VNI**: nếu dữ liệu có mã `VNINDEX` thì dùng nó; nếu không (mặc định với rổ cổ phiếu) thì dùng trung bình cộng các mã trong dữ liệu làm "thị trường". Dòng chú thích đầu trang ghi rõ đang dùng loại nào.
 - Phần tính toán mới nằm trong `engine.py` (`build_screener`, các cột MACD/Fisher/WaveTrend/MFI trong `add_indicators`).
