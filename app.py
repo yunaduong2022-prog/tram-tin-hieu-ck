@@ -23,6 +23,7 @@ import mtf_levels as ML
 import waiting_buy as WB
 import rsi_divergence as DV
 import foreign_flow as FF
+import my_watchlist as MW
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
@@ -1147,6 +1148,19 @@ def page_wait_buy():
         _wb_scroll_to(focus)
 
 
+def page_watchlist():
+    st.title("⭐ Watchlist")
+    header()
+
+    def _open_chart(code: str):
+        st.session_state["selected_code"] = code
+        for _k in ("mtf_code", "tab_code"):
+            st.session_state[_k] = code
+        NAV.goto("Cổ phiếu", "Tổng quát")
+
+    MW.render(_wb_table(), res_df, _open_chart)
+
+
 def page_alert_lists():
     st.title("⚠️ Danh sách cảnh báo")
     header()
@@ -1799,6 +1813,7 @@ def route():
     if main == "Bộ lọc & Backtest":
         if sub == "Bộ lọc Realtime": return page_filter()
         if sub == "Cổ phiếu chờ mua trong tuần": return page_wait_buy()
+        if sub == "Watchlist": return page_watchlist()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         return NAV.placeholder("🧪 Backtest chiến lược",
                                ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",

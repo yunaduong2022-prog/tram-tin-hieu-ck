@@ -9,7 +9,8 @@ MENU = {
     "Ngành": ["Tổng quan ngành", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
                  "Thanh khoản", "Chỉ báo kỹ thuật", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
-    "Bộ lọc & Backtest": ["Bộ lọc Realtime", "Cổ phiếu chờ mua trong tuần", "Danh sách cảnh báo", "Backtest chiến lược"],
+    "Bộ lọc & Backtest": ["Bộ lọc Realtime", "Cổ phiếu chờ mua trong tuần", "Watchlist", "Danh sách cảnh báo",
+                          "Backtest chiến lược"],
     "Biểu đồ": [],
 }
 ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Biểu đồ": "📈"}
