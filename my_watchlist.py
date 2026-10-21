@@ -18,9 +18,9 @@ import pandas as pd
 
 
 def _price_display(value):
-    """Giá hiển thị tối đa 1 chữ số thập phân, bỏ số 0 thừa; không đổi dữ liệu gốc."""
+    """Giá hiển thị cố định 1 chữ số thập phân; không đổi dữ liệu gốc."""
     try:
-        return f"{round(float(value), 1):,.1f}".rstrip("0").rstrip(".")
+        return f"{round(float(value), 1):,.1f}"
     except (TypeError, ValueError):
         return "—"
 import streamlit as st

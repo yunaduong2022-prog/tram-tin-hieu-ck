@@ -651,7 +651,7 @@ def card_css(dark: bool) -> str:
 def table_html(d: pd.DataFrame, group: str, sector_of=None, ma_of=None) -> str:
     """Bảng kết quả của một nhóm (cùng nội dung với thẻ). sector_of(mã) -> tên ngành; ma_of(mã) -> {20|50|200: (giá trị MA, % giá so với MA)}."""
     esc = _html.escape
-    px = lambda x: "—" if pd.isna(x) else f"{round(float(x), 1):,.1f}".rstrip("0").rstrip(".")
+    px = lambda x: "—" if pd.isna(x) else f"{round(float(x), 1):,.1f}"
     pc = lambda x: "" if pd.isna(x) else f"{x:+.1f}%"
     heads = ["Mã CP", "Ngành", "Vùng mua", "Giá hiện tại", "Trạng thái", "MA20", "MA50", "MA200", "Cắt lỗ",
              "Giá mục tiêu 1", "Giá mục tiêu 2", "% Lợi nhuận kỳ vọng", "Xem thêm"]
@@ -708,7 +708,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     """
     esc = _html.escape
     state = str(r["Trạng thái"])
-    px = lambda x: "-" if pd.isna(x) else f"{round(float(x), 1):,.1f}".rstrip("0").rstrip(".")
+    px = lambda x: "-" if pd.isna(x) else f"{round(float(x), 1):,.1f}"
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
     cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))

@@ -1385,10 +1385,10 @@ def page_sell_list():
 
 # ------------------------------------------------------------------ HTML CARDS
 def fp(x):
-    """Giá giao dịch hiển thị tối đa 1 chữ số thập phân; bỏ .0, không đổi giá trị tính toán."""
+    """Giá giao dịch hiển thị 1 chữ số thập phân; không đổi giá trị tính toán."""
     try:
         value = round(float(x), 1)
-        return f"{value:,.1f}".rstrip("0").rstrip(".")
+        return f"{value:,.1f}"
     except (TypeError, ValueError):
         return "—"
 

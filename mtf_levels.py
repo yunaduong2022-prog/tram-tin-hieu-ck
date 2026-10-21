@@ -135,8 +135,8 @@ def _strategy(res, sl_pct, watch):
               else f"Giá đang cao hơn vùng gom {dist:.1f}%: chờ giá về vùng gom, không đuổi mua.")
     warn = [f"Khung {TF_LABEL[t]} đang giảm: vùng gom có thể bị phá, ưu tiên chờ xác nhận."
             for t in watch if res[t]["ok"] and res[t]["trend"] == "Giảm"]
-    return {"ok": True, "entry": f"{round(entry_min, 1):,.1f}".rstrip("0").rstrip(".") + " – " + f"{round(entry_max, 1):,.1f}".rstrip("0").rstrip("."), "sl": f"{round(stop_loss, 1):,.1f}".rstrip("0").rstrip("."),
-            "tp": f"{round(take_profit, 1):,.1f}".rstrip("0").rstrip("."), "rr": f"1 : {rr} ({label})", "rr_value": rr, "rr_label": label,
+    return {"ok": True, "entry": f"{round(entry_min, 1):,.1f}" + " – " + f"{round(entry_max, 1):,.1f}", "sl": f"{round(stop_loss, 1):,.1f}",
+            "tp": f"{round(take_profit, 1):,.1f}", "rr": f"1 : {rr} ({label})", "rr_value": rr, "rr_label": label,
             "status": status, "tp_note": tp_note, "warn": warn, "sl_pct": round(sl_pct * 100)}
 
 
