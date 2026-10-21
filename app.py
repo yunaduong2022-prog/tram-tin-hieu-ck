@@ -1628,13 +1628,13 @@ def page_stock():
             st.markdown(metrics_html(chart_metrics), unsafe_allow_html=True)
         st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob),
                         config={"displayModeBar": not _mob}, **_STRETCH)
-        st.markdown(rsi_card(a, tf, code), unsafe_allow_html=True)
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code), unsafe_allow_html=True)
         if a["enough"]:
             st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
+        st.markdown(rsi_card(a, tf, code), unsafe_allow_html=True)
         if a["enough"]:
             st.markdown(wyckoff_card(a), unsafe_allow_html=True)
             st.markdown(zones_card(a), unsafe_allow_html=True)
