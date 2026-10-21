@@ -1534,15 +1534,19 @@ def make_chart(a, code, tf, layers, metrics=None):
         top, bot = 150, 10
         ph = height - top - bot                       # chiều cao vùng vẽ (px) để đổi px -> toạ độ paper
         step = 1 / len(metrics)
+        import textwrap
+        # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(metrics):
-            fig.add_annotation(
-                xref="paper", yref="paper", x=i * step, y=1 + 6 / ph, xanchor="left", yanchor="bottom", showarrow=False, align="left",
-                text=(f'<span style="font-size:12px;color:#8B95A5">{m["label"]}</span><br>'
-                      f'<b style="font-size:26px">{m["value"]}</b>'
-                      + (f'<br><span style="font-size:11px;color:{m.get("color", "#8B95A5")}">{m["sub"]}</span>' if m.get("sub") else "")),
-                hovertext=m.get("tip"))
+            base = dict(xref="paper", yref="paper", x=i * step, y=1, xanchor="left", showarrow=False, align="left")
+            fig.add_annotation(**base, yanchor="bottom", yshift=66, text=m["label"], font=dict(size=12, color="#8B95A5"),
+                               hovertext=m.get("tip"))
+            fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
+                               hovertext=m.get("tip"))
+            if m.get("sub"):
+                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
+                                   font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=top, b=bot),
-                          legend=dict(orientation="h", yanchor="bottom", y=1 + 92 / ph, font=dict(size=10)))
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + 104 / ph, font=dict(size=10)))
     else:
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=30, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
