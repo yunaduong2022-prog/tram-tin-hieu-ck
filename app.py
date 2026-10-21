@@ -999,7 +999,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb7")
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb8")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 @st.cache_data(show_spinner=False)
@@ -1150,9 +1150,10 @@ def page_wait_buy():
 
 
 def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
-    """Mua ngay = mã thuộc nhóm Chờ mua có hành động "Vào ngay" (Điểm mua đẹp / Đã có tín hiệu mua, giá đang trong vùng mua)
-    và không có tín hiệu BÁN / CHỐT LỜI (mỗi mã chỉ nằm một nơi)."""
-    d = t[t["Danh sách"].isin(WB.BUY_GROUPS) & (t["Hành động"] == "Vào ngay") & t["Vùng mua từ"].notna()]
+    """Mua ngay chỉ là bộ lọc trên bảng Chờ mua; tuyệt đối không tự tính lại vùng mua.
+    Giữ nguyên Vùng mua từ/đến, Giá vào, Stop Loss và mục tiêu đã tính bởi waiting_buy.py.
+    Chỉ lấy mã có hành động Vào ngay và không có tín hiệu BÁN / CHỐT LỜI."""
+    d = t[t["Danh sách"].isin(WB.BUY_GROUPS) & (t["Hành động"] == "Vào ngay") & t["Vùng mua từ"].notna()].copy()
     if "Hành động bán" in d.columns:
         d = d[~d["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     return WB.sort_group(d, WB.G1)
