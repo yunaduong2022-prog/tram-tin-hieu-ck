@@ -557,9 +557,20 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         except Exception as e:     # một mã lỗi dữ liệu không được làm sập cả trang
             res = {"Trạng thái": NO_BUY, "Danh sách": L_NONE, "Lý do": f"Lỗi khi phân loại: {e}"}
         res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"])
-        if res.get("_ma20_zone"):      # vùng mua đã đổi về quanh MA20, giá còn cao hơn vùng nên không thể "vào ngay"
+        if res.get("_ma20_zone"):      # vùng mua đã chuyển quanh MA20; ghi chú được diễn giải theo sức mạnh tín hiệu
             res["Hành động"] = "Chờ mua"
-            res["Ghi chú hành động"] = "Dài hạn tích cực, ngắn hạn chờ điều chỉnh tham gia."
+            score = pd.to_numeric(r.get("Score", np.nan), errors="coerce")
+            rs20 = pd.to_numeric(r.get("RS20", np.nan), errors="coerce")
+            reason = str(res.get("Lý do", ""))
+            if pd.notna(score) and pd.notna(rs20) and score >= 7 and rs20 >= 1:
+                note = "Sức mạnh giá và tín hiệu đang tích cực; nên chờ nhịp điều chỉnh phù hợp để tham gia."
+            elif pd.notna(score) and pd.notna(rs20) and (score < 5 or rs20 < 0):
+                note = "Tín hiệu chưa đủ đồng thuận; nên chờ điều chỉnh và xác nhận thêm trước khi tham gia."
+            elif any(k in reason.lower() for k in ("tích lũy", "siết nền", "nền giá")):
+                note = "Cổ phiếu đang cần hoàn thiện nền giá; chờ diễn biến xác nhận trước khi tham gia."
+            else:
+                note = "Giá đang cách vùng mua phù hợp; chờ nhịp điều chỉnh rồi đánh giá lại điểm vào."
+            res["Ghi chú hành động"] = note
         res["Hành động bán"] = sell_action_of(res.get("Lý do"))
         try:
             res["Tăng từ đáy %"] = _leg_structure(g.reset_index(drop=True))["leg_gain"]
