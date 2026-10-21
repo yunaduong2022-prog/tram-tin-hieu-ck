@@ -999,7 +999,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb8")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb9")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 @st.cache_data(show_spinner=False)

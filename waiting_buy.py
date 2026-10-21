@@ -248,16 +248,20 @@ def _chart_levels(lv: dict, fc: dict, ma20: float = np.nan, f: dict | None = Non
     """Thay vùng mua / cắt lỗ / mục tiêu bằng số của trang biểu đồ (engine.forecast_levels). Phần cấu trúc (R:R tới cản gần nhất)
     đã dùng xong ở bước lọc "Điểm mua đẹp"; chỉ giữ lại "Cản gần" để cảnh báo.
 
-    Nếu Vùng mua ATR (cạnh dưới) cao hơn MA20 ngày >= CFG["ma20_zone_gap"]% thì giá đã chạy xa trung bình 20 phiên:
-    Vùng mua = MA20 ± CFG["ma20_zone_pad"] (vd MA20 = 33 -> 32.7 – 33.3), Cắt lỗ = MA20 trừ CFG["ma20_zone_stop"]%,
-    Mục tiêu 1/2 = hai cản gần nhất phía trên và R:R tính thực tế theo giá vào (cạnh trên vùng) và cắt lỗ (hàm _levels)."""
+    Nếu giá hiện tại >= MA20 ngày * (1 + CFG["ma20_zone_gap"]/100), vùng mua chuyển về MA20 ± CFG["ma20_zone_pad"]
+    (ví dụ MA20 = 33 -> 32.7–33.3), cắt lỗ = MA20 trừ CFG["ma20_zone_stop"]%, mục tiêu theo các cản gần nhất.
+    Điều kiện dựa trên GIÁ HIỆN TẠI so với MA20, không dựa trên cạnh dưới vùng mua ATR."""
     c = fc["entry"]
     base = {"Vùng mua từ": fc["lo"], "Vùng mua đến": fc["hi"], "Giá vào": c,
             "Cắt lỗ": fc["sl"], "Cắt lỗ %": -fc["sl_pct"],
             "Mục tiêu 1": fc["t1"], "Lời 1 %": (fc["t1"] / c - 1) * 100,
             "Mục tiêu 2": fc["t2"], "Lời 2 %": (fc["t2"] / c - 1) * 100,
             "R:R": 2.0, "Cản gần": lv.get("Cản gần", np.nan), "Cách vùng mua %": 0.0, "_ma20_zone": False}
-    if f is None or pd.isna(ma20) or ma20 <= 0 or fc["lo"] < ma20 * (1 + CFG["ma20_zone_gap"] / 100):
+    # Quy tắc dùng chung cho Chờ mua và Mua ngay:
+    # Nếu giá hiện tại cao hơn MA20 từ 4% trở lên, vùng mua = MA20 - 0.3 đến MA20 + 0.3.
+    current_price = f.get("c", np.nan) if f is not None else np.nan
+    if (f is None or pd.isna(ma20) or ma20 <= 0 or pd.isna(current_price)
+            or current_price < ma20 * (1 + CFG["ma20_zone_gap"] / 100)):
         return base
     z = _levels(f, ma20, ma20 - CFG["ma20_zone_pad"], ma20 + CFG["ma20_zone_pad"], ma20 * (1 - CFG["ma20_zone_stop"] / 100))
     z.update({"_ma20_zone": True, "_ma20": ma20})
