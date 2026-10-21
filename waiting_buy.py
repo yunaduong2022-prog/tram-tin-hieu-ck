@@ -595,29 +595,23 @@ def card_css(dark: bool) -> str:
     """CSS của thẻ. Màu lấy từ biến CSS của theme.py nên tự đổi theo nền Sáng / Tối; chỉ nền khối chiến lược chọn theo chế độ."""
     box = "var(--card2)" if dark else "var(--bg2)"
     return """
-/* Khóa chiều rộng theo cột Streamlit để nội dung dài không đẩy trang tràn ngang. */
-div[data-testid="column"]{min-width:0!important}
-[class*="st-key-wbcard-"]{display:block;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;
-  background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
+[class*="st-key-wbcard-"]{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
   box-shadow:0 2px 12px var(--shadow);gap:14px!important}
-[class*="st-key-wbcard-"]>div{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
-.wb-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:stretch;column-gap:12px;width:100%!important;max-width:100%;min-width:0;margin-bottom:16px;box-sizing:border-box}
-.wb-left{display:flex;flex-direction:column;justify-content:center;min-width:0;max-width:100%;width:100%;gap:4px;box-sizing:border-box}
-.wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;width:100%;min-width:0}
+.wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
 .wb-px{font-size:20px;font-weight:700;line-height:1.1}
 .wb-px.up{color:var(--green)}.wb-px.down{color:var(--red)}.wb-px.flat{color:var(--muted)}
 .wb-px small{font-size:13px;margin-left:3px}
-.wb-badge{display:flex;align-items:center;justify-content:center;justify-self:end;align-self:stretch;flex-shrink:0;min-width:76px;padding:0 14px;border-radius:12px;font-size:25px;font-weight:900;letter-spacing:.2px;
-  text-transform:uppercase;white-space:nowrap;line-height:1}
+.wb-badge{display:inline-block;padding:6px 14px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;white-space:nowrap}
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
-.wb-name{display:block;width:100%;max-width:100%;min-width:0;font-size:14px;color:var(--txt);opacity:.85;margin:0;line-height:1.4;overflow-wrap:break-word;word-break:normal;box-sizing:border-box}
-.wb-kv{display:grid!important;width:100%!important;max-width:100%;min-width:0;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px;box-sizing:border-box}
-.wb-kv>div{min-width:0;max-width:100%;box-sizing:border-box}
+.wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:-6px 0 14px;line-height:1.4}
+.wb-kv{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
 .wb-kv span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
-.wb-kv b{display:block;min-width:0;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere;word-break:normal}
+.wb-kv b{display:block;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere}
 .wb-kv .wide{grid-column:1 / span 2}
 .wb-note{font-size:13.5px;line-height:1.55;color:var(--txt);margin-bottom:12px}
 .wb-box{background:BOXBG;border-radius:14px;padding:4px 16px 12px}
@@ -708,7 +702,7 @@ def _sentence(t: str) -> str:
     return t if t[-1] in ".!?" else t + "."
 
 
-BADGE_TEXT = {BUY_SIGNAL: "MUA"}     # nhãn ngắn gọn trên thẻ; trạng thái lọc giữ nguyên
+BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
 def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "") -> str:
@@ -722,13 +716,10 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
     cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
-    go = r.get("Hành động") == "Vào ngay"
-    badge_class = "g" if go else _BADGE.get(group, "n")
-    badge_text = "MUA" if go else "CHỜ MUA"
-    html = (f'<div class="wb-head"><div class="wb-left"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
+    html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
-            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div></div>'
-            f'<span class="wb-badge {badge_class}">{esc(badge_text)}</span></div>'
+            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
+            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
             f'<div class="wb-kv">'
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
             f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
@@ -740,7 +731,8 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     if pd.isna(r.get("Vùng mua từ")):
         return html
-    badge = ''
+    go = r.get("Hành động") == "Vào ngay"
+    badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
     html += (
         '<div class="wb-box">'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
