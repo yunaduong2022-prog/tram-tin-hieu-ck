@@ -600,9 +600,9 @@ def card_css(dark: bool) -> str:
 .wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 .wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
-.wb-px{font-size:20px;font-weight:700;line-height:1.1}
-.wb-px.up{color:var(--green)}.wb-px.down{color:var(--red)}.wb-px.flat{color:var(--muted)}
-.wb-px small{font-size:13px;margin-left:3px}
+.wb-px{font-size:28px;font-weight:800;line-height:1.1;letter-spacing:-.3px}
+.wb-px.up{color:var(--green)}.wb-px.down{color:var(--red)}.wb-px.flat{color:var(--muted)}.wb-px.ref{color:#F5B942}
+.wb-px small{font-size:16px;margin-left:4px}
 .wb-badge{display:inline-block;padding:6px 14px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.4px;
   text-transform:uppercase;white-space:nowrap}
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
@@ -716,6 +716,8 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
     cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
+    if pd.notna(chg) and abs(float(chg)) < 1e-9:
+        cls = "ref"      # đứng đúng giá tham chiếu (bằng giá đóng cửa hôm trước): màu vàng
     html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
             f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
