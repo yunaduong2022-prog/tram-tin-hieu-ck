@@ -1148,9 +1148,31 @@ def page_wait_buy():
         _wb_scroll_to(focus)
 
 
+def _wl_card(r, u, ver):
+    """Thẻ Watchlist: cùng thẻ với mục Cổ phiếu chờ mua trong tuần (+ khối Vị thế của tôi, nút Xem biểu đồ / Bỏ theo dõi)."""
+    code = str(r["Mã"])
+    with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
+        div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
+        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code)), unsafe_allow_html=True)
+        pos = MW.position_html(u, r["Giá"])
+        if pos:
+            st.markdown(pos, unsafe_allow_html=True)
+        b1, b2 = st.columns([3, 2])
+        if b1.button("📊 Xem biểu đồ", key=f"wl_chart_{code}", use_container_width=True):
+            st.session_state["selected_code"] = code
+            for _k in ("mtf_code", "tab_code"):
+                st.session_state[_k] = code
+            NAV.goto("Cổ phiếu", "Tổng quát")
+        if b2.button("🗑 Bỏ theo dõi", key=f"wl_rm_{code}", use_container_width=True):
+            MW.remove_code(code)
+            st.session_state["wl_ver"] = ver + 1
+            st.rerun()
+
+
 def page_watchlist():
     st.title("⭐ Watchlist")
     header()
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
 
     def _open_chart(code: str):
         st.session_state["selected_code"] = code
@@ -1158,7 +1180,7 @@ def page_watchlist():
             st.session_state[_k] = code
         NAV.goto("Cổ phiếu", "Tổng quát")
 
-    MW.render(_wb_table(), res_df, _open_chart)
+    MW.render(_wb_table(), res_df, _open_chart, _wl_card)
 
 
 def page_alert_lists():

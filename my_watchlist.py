@@ -8,8 +8,8 @@
 """
 from __future__ import annotations
 
+import html as _html
 import inspect
-import io
 import os
 import re
 
@@ -66,6 +66,11 @@ def save(d: pd.DataFrame, path: str = PATH) -> str:
         return str(e)
 
 
+def remove_code(code: str, path: str = PATH) -> str:
+    w = load(path)
+    return save(w[w["Mã"] != str(code).upper()], path)
+
+
 def add_codes(w: pd.DataFrame, codes: list[str]) -> pd.DataFrame:
     new = [c for c in codes if c not in set(w["Mã"])]
     return _clean(pd.concat([w, pd.DataFrame({"Mã": new})], ignore_index=True)) if new else w
@@ -115,12 +120,56 @@ def summary(v: pd.DataFrame) -> dict:
 
 
 # ------------------------------------------------------------------ GIAO DIỆN
-def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart) -> None:
-    """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ mã đó (do app.py cung cấp)."""
+def position_html(u, price) -> str:
+    """Khối "Vị thế của tôi" dưới thẻ: giá vốn, lãi/lỗ, cắt lỗ / mục tiêu tự đặt, ghi chú. Rỗng nếu chưa nhập gì."""
+    gv, sl, tp = (u.get(k, np.nan) for k in ("Giá vốn", "Cắt lỗ", "Mục tiêu"))
+    note = str(u.get("Ghi chú", "") or "").strip()
+    rows = []
+    line = lambda lab, val, col="var(--txt2)": (
+        f'<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span style="color:var(--muted)">{lab}</span>'
+        f'<b style="color:{col}">{val}</b></div>')
+    ok = pd.notna(price)
+    if pd.notna(gv) and gv > 0:
+        if ok:
+            pl = (price / gv - 1) * 100
+            rows.append(line("Giá vốn", f"{gv:,.2f} ({pl:+.1f}%)", "var(--green)" if pl >= 0 else "var(--red)"))
+        else:
+            rows.append(line("Giá vốn", f"{gv:,.2f}"))
+    if pd.notna(sl) and sl > 0:
+        hit = ok and price <= sl
+        rows.append(line("Cắt lỗ của tôi", f"{sl:,.2f}" + (f" ({(price / sl - 1) * 100:+.1f}% so với giá)" if ok else "")
+                         + (" · ĐÃ CHẠM" if hit else ""), "var(--red)"))
+    if pd.notna(tp) and tp > 0:
+        hit = ok and price >= tp
+        rows.append(line("Mục tiêu của tôi", f"{tp:,.2f}" + (f" ({(tp / price - 1) * 100:+.1f}% so với giá)" if ok else "")
+                         + (" · ĐÃ ĐẠT" if hit else ""), "var(--green)"))
+    if note:
+        rows.append(f'<div style="margin-top:4px;color:var(--muted)">📝 {_html.escape(note)}</div>')
+    if not rows:
+        return ""
+    return ('<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;font-size:13px">'
+            '<div style="font-weight:700;color:var(--txt2);margin-bottom:4px">Vị thế của tôi</div>' + "".join(rows) + "</div>")
+
+
+def _empty_card(code: str, ver: int) -> None:
+    with st.container(key=f"wbcard-wl-{code}"):
+        st.markdown(f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{_html.escape(code)}</span></div>'
+                    '<span class="wb-badge n">CHƯA CÓ DỮ LIỆU</span></div>'
+                    '<div class="wb-note">App chưa có dữ liệu giá của mã này nên chưa tính được tín hiệu. '
+                    'Thêm mã vào data/extra_symbols.txt rồi chạy workflow cập nhật dữ liệu cuối phiên.</div>',
+                    unsafe_allow_html=True)
+        if st.button("🗑 Bỏ theo dõi", key=f"wl_rm_{code}", use_container_width=True):
+            remove_code(code)
+            st.session_state["wl_ver"] = ver + 1
+            st.rerun()
+
+
+def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
+    """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ; card_fn(wb_row, user_row): vẽ thẻ giống mục Chờ mua."""
     ver = st.session_state.setdefault("wl_ver", 0)
     available = set(res["Mã"].astype(str).str.upper())
-    st.caption("Danh sách mã bạn tự theo dõi, kèm giá vốn, mục tiêu, cắt lỗ và tín hiệu của hệ thống. "
-               "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    st.caption("Danh sách mã bạn tự theo dõi, hiển thị thẻ giống mục Cổ phiếu chờ mua trong tuần, kèm giá vốn, mục tiêu, cắt lỗ "
+               "và tín hiệu của hệ thống. Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
     # 1) thêm mã
     with st.form("wl_add", clear_on_submit=True):
@@ -157,47 +206,65 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart) -> None:
         m[3].metric("CHẠM CẮT LỖ / MỤC TIÊU", f"{s['sl']} / {s['tp']}")
         m[4].metric("LÃI/LỖ TB (mã có giá vốn)", "—" if np.isnan(s["avg_pl"]) else f"{s['avg_pl']:+.1f}%",
                     help="Trung bình cộng % lãi/lỗ của các mã đã nhập giá vốn." if s["win"] + s["lose"] else None)
-        cols = ["Mã", "Tín hiệu", "Trạng thái", "Giá", "Chg %", "Giá vốn", "Lãi/lỗ %", "Cắt lỗ", "Cách cắt lỗ %", "Mục tiêu",
-                "Cách mục tiêu %", "Score", "RS20", "Wyckoff", "MA align", "Nhóm", "Ghi chú"]
-        cols = [c for c in cols if c in v.columns]
-        pr = st.column_config.NumberColumn
-        st.dataframe(v[cols], hide_index=True, column_config={
-            "Giá": pr(format="%.2f"), "Chg %": pr(format="%+.2f%%"), "Giá vốn": pr(format="%.2f"),
-            "Lãi/lỗ %": pr(format="%+.1f%%"), "Cắt lỗ": pr(format="%.2f"), "Cách cắt lỗ %": pr(format="%+.1f%%"),
-            "Mục tiêu": pr(format="%.2f"), "Cách mục tiêu %": pr(format="%+.1f%%"),
-            "Score": pr(format="%.1f"), "RS20": pr("RS vs VNI", format="%.2f")}, **_DF)
-        st.caption("Sắp xếp theo mức cần chú ý: chạm cắt lỗ → cảnh báo → điểm mua đã xác nhận → sắp có điểm mua. "
-                   "“Cách cắt lỗ %” dương nghĩa là giá còn trên mức cắt lỗ bạn đặt.")
-
-        st.subheader("Chi tiết một mã")
-        pick = st.selectbox("Chọn mã", list(v["Mã"]), key="wl_pick", label_visibility="collapsed")
-        r = v[v["Mã"] == pick].iloc[0]
-        d1, d2 = st.columns([3, 2])
-        with d1:
-            st.markdown(f"**{pick}** · {r['Tín hiệu']}" + (f" · {r['Trạng thái']}" if pd.notna(r.get("Trạng thái")) else ""))
-            if pd.notna(r.get("Lý do")):
-                st.write(str(r["Lý do"]))
-            if pd.notna(r.get("Hành động")):
-                st.caption(f"Hành động gợi ý của hệ thống: {r['Hành động']}")
-            if str(r.get("Ghi chú", "")).strip():
-                st.info(f"📝 {r['Ghi chú']}")
-        with d2:
-            lines = []
-            if pd.notna(r.get("Vùng mua từ")) and pd.notna(r.get("Vùng mua đến")):
-                lines.append(f"Vùng mua hệ thống: {r['Vùng mua từ']:.2f} – {r['Vùng mua đến']:.2f}")
-            if pd.notna(r.get("SL hệ thống")):
-                lines.append(f"Cắt lỗ hệ thống: {r['SL hệ thống']:.2f}")
-            if pd.notna(r.get("MT1 hệ thống")):
-                lines.append(f"Mục tiêu 1 hệ thống: {r['MT1 hệ thống']:.2f}")
-            if str(r.get("Cảnh báo", "")).strip() not in ("", "nan", "Không có"):
-                lines.append(f"Cảnh báo kỹ thuật: {r['Cảnh báo']}")
-            for ln in lines:
-                st.markdown(f"- {ln}")
-            if st.button("📊 Xem biểu đồ", key="wl_chart", use_container_width=True):
-                on_chart(pick)
+        no_data = int(v["Giá"].isna().sum())
+        if no_data:
+            st.caption(f"⚠ {no_data} mã chưa có dữ liệu giá trong app: " + ", ".join(v.loc[v["Giá"].isna(), "Mã"])
+                       + ". Thêm vào data/extra_symbols.txt rồi chạy workflow cập nhật dữ liệu cuối phiên.")
+        st.session_state.setdefault("wl_view", "Thẻ")
+        view = st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], key="wl_view") or "Thẻ"
+        if view == "Thẻ" and card_fn is not None:
+            st.caption("Sắp xếp theo mức cần chú ý: chạm cắt lỗ → cảnh báo → điểm mua đã xác nhận → sắp có điểm mua → còn lại.")
+            wbi = wb.drop_duplicates("Mã").set_index("Mã")
+            ui = w.set_index("Mã")
+            cols3 = st.columns(3)
+            for i, code in enumerate(v["Mã"]):
+                with cols3[i % 3]:
+                    if code in wbi.index:
+                        r = wbi.loc[code].copy()
+                        r["Mã"] = code
+                        card_fn(r, ui.loc[code], ver)
+                    else:
+                        _empty_card(code, ver)
+        else:
+            cols = ["Mã", "Tín hiệu", "Trạng thái", "Giá", "Chg %", "Giá vốn", "Lãi/lỗ %", "Cắt lỗ", "Cách cắt lỗ %", "Mục tiêu",
+                    "Cách mục tiêu %", "Score", "RS20", "Wyckoff", "MA align", "Nhóm", "Ghi chú"]
+            cols = [c for c in cols if c in v.columns]
+            pr = st.column_config.NumberColumn
+            st.dataframe(v[cols], hide_index=True, column_config={
+                "Giá": pr(format="%.2f"), "Chg %": pr(format="%+.2f%%"), "Giá vốn": pr(format="%.2f"),
+                "Lãi/lỗ %": pr(format="%+.1f%%"), "Cắt lỗ": pr(format="%.2f"), "Cách cắt lỗ %": pr(format="%+.1f%%"),
+                "Mục tiêu": pr(format="%.2f"), "Cách mục tiêu %": pr(format="%+.1f%%"),
+                "Score": pr(format="%.1f"), "RS20": pr("RS vs VNI", format="%.2f")}, **_DF)
+            st.caption("“Cách cắt lỗ %” dương nghĩa là giá còn trên mức cắt lỗ bạn đặt.")
+            st.subheader("Chi tiết một mã")
+            pick = st.selectbox("Chọn mã", list(v["Mã"]), key="wl_pick", label_visibility="collapsed")
+            r = v[v["Mã"] == pick].iloc[0]
+            d1, d2 = st.columns([3, 2])
+            with d1:
+                st.markdown(f"**{pick}** · {r['Tín hiệu']}" + (f" · {r['Trạng thái']}" if pd.notna(r.get("Trạng thái")) else ""))
+                if pd.notna(r.get("Lý do")):
+                    st.write(str(r["Lý do"]))
+                if pd.notna(r.get("Hành động")):
+                    st.caption(f"Hành động gợi ý của hệ thống: {r['Hành động']}")
+                if str(r.get("Ghi chú", "")).strip():
+                    st.info(f"📝 {r['Ghi chú']}")
+            with d2:
+                lines = []
+                if pd.notna(r.get("Vùng mua từ")) and pd.notna(r.get("Vùng mua đến")):
+                    lines.append(f"Vùng mua hệ thống: {r['Vùng mua từ']:.2f} – {r['Vùng mua đến']:.2f}")
+                if pd.notna(r.get("SL hệ thống")):
+                    lines.append(f"Cắt lỗ hệ thống: {r['SL hệ thống']:.2f}")
+                if pd.notna(r.get("MT1 hệ thống")):
+                    lines.append(f"Mục tiêu 1 hệ thống: {r['MT1 hệ thống']:.2f}")
+                if str(r.get("Cảnh báo", "")).strip() not in ("", "nan", "Không có"):
+                    lines.append(f"Cảnh báo kỹ thuật: {r['Cảnh báo']}")
+                for ln in lines:
+                    st.markdown(f"- {ln}")
+                if st.button("📊 Xem biểu đồ", key="wl_chart", use_container_width=True):
+                    on_chart(pick)
 
     # 2) quản lý / sao lưu
-    with st.expander("⚙️ Quản lý danh sách: sửa giá vốn, mục tiêu, cắt lỗ, ghi chú · xóa mã · sao lưu", expanded=w.empty):
+    with st.expander("⚙️ Quản lý danh sách: sửa giá vốn, mục tiêu, cắt lỗ, ghi chú · xóa mã · sao lưu", expanded=False):
         if not w.empty:
             ed = st.data_editor(w.assign(**{"Xóa": False}), hide_index=True, key=f"wl_editor_{ver}", disabled=["Mã"],
                                 column_config={"Giá vốn": st.column_config.NumberColumn(format="%.2f", min_value=0.0),
