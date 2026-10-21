@@ -1374,7 +1374,7 @@ def future_date(last, tf, k):
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
 
 
-def make_chart(a, code, tf, layers, metrics=None):
+def make_chart(a, code, tf, layers, metrics=None, mobile=False):
     g = a["g"]
     t = g.tail(BARS_SHOWN[tf])
     x = t["Ngày"]
@@ -1547,11 +1547,36 @@ def make_chart(a, code, tf, layers, metrics=None):
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=top, b=bot),
                           legend=dict(orientation="h", yanchor="bottom", y=1 + 104 / ph, font=dict(size=10)))
+    elif mobile:
+        # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=20, b=130),
+                          legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=30, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
     return fig
+
+
+def is_mobile() -> bool:
+    """Nhận diện điện thoại qua User-Agent (Streamlit >= 1.37); không nhận diện được thì coi là máy tính."""
+    try:
+        ua = (st.context.headers.get("User-Agent") or "").lower()
+    except Exception:  # noqa: BLE001
+        return False
+    return any(k in ua for k in ("iphone", "android", "mobile", "ipad"))
+
+
+def metrics_html(metrics) -> str:
+    """Lưới chỉ số cho điện thoại (2 cột), thay cho hàng chỉ số vẽ trong biểu đồ trên máy tính."""
+    cells = []
+    for m in metrics:
+        sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"]))}</div>' if m.get("sub") else "")
+        cells.append(f'<div class="cm-item"><div class="cm-lab">{htmllib.escape(m["label"])}</div>'
+                     f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
+    return ('<style>.cm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:4px 0 6px}'
+            '.cm-lab{font-size:12px;color:var(--muted)}.cm-val{font-size:24px;font-weight:800;line-height:1.25;color:var(--txt2)}'
+            '.cm-sub{font-size:11.5px;line-height:1.35}</style><div class="cm-grid">' + "".join(cells) + '</div>')
 
 
 def pick_layers():
@@ -1598,7 +1623,11 @@ def page_stock():
         if not a["enough"]:
             st.warning(f"Khung {E.TF_NAME[tf]} chỉ có {a['n']} nến (< {E.MIN_BARS}): chưa đủ để tính điểm, dự báo "
                        "và backtest. Hãy chọn khung nhỏ hơn hoặc tải dữ liệu lịch sử dài hơn.")
-        st.plotly_chart(make_chart(a, code, tf, layers, chart_metrics), **_STRETCH)
+        _mob = is_mobile()
+        if _mob:
+            st.markdown(metrics_html(chart_metrics), unsafe_allow_html=True)
+        st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob),
+                        config={"displayModeBar": not _mob}, **_STRETCH)
         st.markdown(rsi_card(a, tf, code), unsafe_allow_html=True)
 
     with col_side:
