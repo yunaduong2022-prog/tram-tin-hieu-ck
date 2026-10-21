@@ -67,6 +67,15 @@ def short_name(name) -> str:
     return out or name.strip()
 
 
+def _tidy_sentence(text: str) -> str:
+    """Viết hoa chữ cái đầu và thêm dấu chấm cuối câu (nếu chưa có dấu kết câu)."""
+    t = str(text or "").strip().rstrip(";,: ")
+    if not t:
+        return ""
+    t = t[0].upper() + t[1:]
+    return t if t[-1] in ".!?…" else t + "."
+
+
 def _f(x, nd=2):
     """Định dạng số; thiếu dữ liệu -> dấu gạch."""
     try:
@@ -98,7 +107,7 @@ def card_html(r) -> str:
     gain_html = f'<div class="sc-gain">Đã tăng {float(gain):.0f}% từ đáy</div>' if pd.notna(gain) else ""
     nm = short_name(r.get("Tên công ty"))
     name_html = f'<div class="sc-name" title="{esc(r.get("Tên công ty"))}">{esc(nm)}</div>' if nm else ""
-    reason = _PREFIX.sub("", str(r.get("Lý do") or "")).strip()
+    reason = _tidy_sentence(_PREFIX.sub("", str(r.get("Lý do") or "")))
     chg_html = (f'<span class="sc-chg {"sc-up" if up else "sc-dn"}">{"▲" if up else "▼"} {float(chg):+.2f}%</span>'
                 if pd.notna(chg) else "")
     rs_note = "" if pd.isna(rs) else (
