@@ -1374,7 +1374,7 @@ def future_date(last, tf, k):
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
 
 
-def make_chart(a, code, tf, layers):
+def make_chart(a, code, tf, layers, metrics=None):
     g = a["g"]
     t = g.tail(BARS_SHOWN[tf])
     x = t["Ngày"]
@@ -1528,8 +1528,24 @@ def make_chart(a, code, tf, layers):
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    fig.update_layout(height=540 + 180 * len(subs), template=TH.plotly_template(), margin=dict(l=10, r=10, t=30, b=10),
-                      legend=dict(orientation="h", y=1.04, font=dict(size=10)))
+    height = 540 + 180 * len(subs)
+    if metrics:
+        # 5 chỉ số (Giá, Vol vs MA10, Position %, Cảnh báo, Độ nghiêng) nằm ngay trên biểu đồ, dưới hàng chú thích
+        top, bot = 150, 10
+        ph = height - top - bot                       # chiều cao vùng vẽ (px) để đổi px -> toạ độ paper
+        step = 1 / len(metrics)
+        for i, m in enumerate(metrics):
+            fig.add_annotation(
+                xref="paper", yref="paper", x=i * step, y=1 + 6 / ph, xanchor="left", yanchor="bottom", showarrow=False, align="left",
+                text=(f'<span style="font-size:12px;color:#8B95A5">{m["label"]}</span><br>'
+                      f'<b style="font-size:26px">{m["value"]}</b>'
+                      + (f'<br><span style="font-size:11px;color:{m.get("color", "#8B95A5")}">{m["sub"]}</span>' if m.get("sub") else "")),
+                hovertext=m.get("tip"), hoverlabel=dict(align="left"))
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=top, b=bot),
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + 92 / ph, font=dict(size=10)))
+    else:
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=30, b=10),
+                          legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
     return fig
 
@@ -1561,15 +1577,16 @@ def page_stock():
     info = res_df[res_df["Mã"] == code].iloc[0]
     a = A[tf]
 
-    m1, m2, m3, m4, m5 = st.columns(5)
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
     _sw_text, _, _sw_tip, _ = swing_view(info)
-    m1.metric("Giá", f"{info['Giá']:,.2f}", _sw_text if _sw_text != "—" else None,
-              delta_color="inverse" if info.get("Swing_kind") == "down" else ("off" if info.get("Swing_bear", False) else "normal"), help=_sw_tip)
-    m2.metric("Vol vs MA10", f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-")
-    m3.metric("Position %", f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-")
-    m4.metric("Cảnh báo (phiên mới nhất)", info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có")
-    m5.metric(f"Độ nghiêng {E.TF_NAME[tf]}", f"{a['bias']:+.0f}/100" if a["enough"] else "-")
+    _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
+    chart_metrics = [
+        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip},
+        {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
+        {"label": "Position %", "value": f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-"},
+        {"label": "Cảnh báo (phiên mới nhất)", "value": info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có"},
+        {"label": f"Độ nghiêng {E.TF_NAME[tf]}", "value": f"{a['bias']:+.0f}/100" if a["enough"] else "-"},
+    ]
 
     alert_banner(a, tf)
     col_main, col_side = st.columns([2.2, 1])
@@ -1577,7 +1594,7 @@ def page_stock():
         if not a["enough"]:
             st.warning(f"Khung {E.TF_NAME[tf]} chỉ có {a['n']} nến (< {E.MIN_BARS}): chưa đủ để tính điểm, dự báo "
                        "và backtest. Hãy chọn khung nhỏ hơn hoặc tải dữ liệu lịch sử dài hơn.")
-        st.plotly_chart(make_chart(a, code, tf, layers), **_STRETCH)
+        st.plotly_chart(make_chart(a, code, tf, layers, chart_metrics), **_STRETCH)
         st.markdown(rsi_card(a, tf, code), unsafe_allow_html=True)
 
     with col_side:
