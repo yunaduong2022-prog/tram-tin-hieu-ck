@@ -608,6 +608,8 @@ def card_css(dark: bool) -> str:
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
+.wb-badge.buy{font-size:28px;font-weight:800;line-height:1.1;letter-spacing:.5px;padding:10px 20px;border-radius:12px;
+  color:#10B981;background:rgba(16,185,129,.16);border:2px solid #10B981}
 .wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:-6px 0 14px;line-height:1.4}
 .wb-kv{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
 .wb-kv span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
@@ -702,7 +704,7 @@ def _sentence(t: str) -> str:
     return t if t[-1] in ".!?" else t + "."
 
 
-BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
+BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP", "MUA": "✔ MUA"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
 def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "") -> str:
@@ -720,7 +722,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
         cls = "ref"      # đứng đúng giá tham chiếu (bằng giá đóng cửa hôm trước): màu vàng
     html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
-            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
+            f'<span class="wb-badge {_BADGE.get(group, "n")}{" buy" if state == "MUA" else ""}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
             f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
             f'<div class="wb-kv">'
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
