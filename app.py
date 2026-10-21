@@ -121,8 +121,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "MACD", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "MACD", "StochRSI"]
+              "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -1357,8 +1357,9 @@ def make_chart(a, code, tf, layers):
     g = a["g"]
     t = g.tail(BARS_SHOWN[tf])
     x = t["Ngày"]
-    subs = [s for s in ("MACD", "KDJ", "StochRSI") if s in layers]
-    heights = [0.56] + [0.44 / len(subs)] * len(subs) if subs else [1.0]
+    subs = [s for s in ("Khối lượng", "MACD", "KDJ", "StochRSI") if s in layers]
+    _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
+    heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=0.025, row_heights=heights)
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
                                  close=t["Giá đóng cửa"], name=code, increasing_line_color="#0E8A6D",
@@ -1457,6 +1458,16 @@ def make_chart(a, code, tf, layers):
                            bgcolor=col_)
 
     r = 2
+    if "Khối lượng" in subs:
+        vol_all = pd.to_numeric(g["Khối lượng khớp lệnh"], errors="coerce")
+        vol_ma20 = vol_all.rolling(20, min_periods=1).mean().loc[t.index]     # MA20 tính trên toàn lịch sử rồi cắt theo vùng hiển thị
+        vol = vol_all.loc[t.index]
+        up_ = (t["Giá đóng cửa"] >= t["Giá mở cửa"]).to_numpy()
+        fig.add_trace(go.Bar(x=x, y=vol, name="Khối lượng", showlegend=False,
+                             marker_color=np.where(up_, "rgba(14,138,109,.75)", "rgba(201,58,82,.75)")), row=r, col=1)
+        fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
+        fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
+        r += 1
     if "MACD" in subs:
         fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
                              marker_color=np.where(t["MACD_hist"] >= 0, "#0E8A6D", "#C93A52")), row=r, col=1)
