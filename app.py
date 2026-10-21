@@ -1540,7 +1540,7 @@ def make_chart(a, code, tf, layers, metrics=None):
                 text=(f'<span style="font-size:12px;color:#8B95A5">{m["label"]}</span><br>'
                       f'<b style="font-size:26px">{m["value"]}</b>'
                       + (f'<br><span style="font-size:11px;color:{m.get("color", "#8B95A5")}">{m["sub"]}</span>' if m.get("sub") else "")),
-                hovertext=m.get("tip"), hoverlabel=dict(align="left"))
+                hovertext=m.get("tip"))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=top, b=bot),
                           legend=dict(orientation="h", yanchor="bottom", y=1 + 92 / ph, font=dict(size=10)))
     else:
