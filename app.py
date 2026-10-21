@@ -1187,7 +1187,7 @@ def page_buy_now():
     m = st.columns(3)
     m[0].metric("MÃ CÓ THỂ VÀO NGAY", f"{len(d)} mã")
     for col, stt in zip(m[1:], (WB.BUY_SIGNAL, WB.GOOD_ENTRY)):
-        col.metric(stt.upper(), int((d["Trạng thái"] == stt).sum()))
+        col.metric("MUA" if stt == WB.GOOD_ENTRY else stt.upper(), int((d["Trạng thái"] == stt).sum()))
     if d.empty:
         st.info("Hiện chưa có mã nào ở trạng thái Mua ngay. Xem mục **Chờ mua** để theo dõi các mã sắp có điểm mua.")
         return
@@ -1206,6 +1206,9 @@ def page_buy_now():
     cols = st.columns(3)
     for i, (_, r) in enumerate(d.head(len(d) if show_all else WB_PER_GROUP).iterrows()):
         with cols[i % 3]:
+            if r["Trạng thái"] in (WB.BUY_SIGNAL, WB.GOOD_ENTRY):      # nhãn trên thẻ Mua ngay: "MUA" (tên trạng thái trong dữ liệu giữ nguyên)
+                r = r.copy()
+                r["Trạng thái"] = "MUA"
             _wb_card(r, str(r["Danh sách"]))
     if len(d) > WB_PER_GROUP and not show_all:
         st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
