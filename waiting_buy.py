@@ -597,18 +597,19 @@ def card_css(dark: bool) -> str:
     return """
 [class*="st-key-wbcard-"]{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
   box-shadow:0 2px 12px var(--shadow);gap:14px!important}
-.wb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.wb-head{display:flex;justify-content:space-between;align-items:stretch;gap:12px;flex-wrap:nowrap;margin-bottom:16px}
+.wb-left{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1;gap:4px}
 .wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
 .wb-px{font-size:20px;font-weight:700;line-height:1.1}
 .wb-px.up{color:var(--green)}.wb-px.down{color:var(--red)}.wb-px.flat{color:var(--muted)}
 .wb-px small{font-size:13px;margin-left:3px}
-.wb-badge{display:inline-block;padding:6px 14px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.4px;
-  text-transform:uppercase;white-space:nowrap}
+.wb-badge{display:flex;align-items:center;justify-content:center;align-self:stretch;min-width:76px;padding:0 14px;border-radius:12px;font-size:25px;font-weight:900;letter-spacing:.2px;
+  text-transform:uppercase;white-space:nowrap;line-height:1}
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
-.wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:-6px 0 14px;line-height:1.4}
+.wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:0;line-height:1.4}
 .wb-kv{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
 .wb-kv span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
 .wb-kv b{display:block;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere}
@@ -702,7 +703,7 @@ def _sentence(t: str) -> str:
     return t if t[-1] in ".!?" else t + "."
 
 
-BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
+BADGE_TEXT = {BUY_SIGNAL: "MUA"}     # nhãn ngắn gọn trên thẻ; trạng thái lọc giữ nguyên
 
 
 def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "") -> str:
@@ -716,10 +717,13 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
     cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
-    html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
+    go = r.get("Hành động") == "Vào ngay"
+    badge_class = "g" if go else _BADGE.get(group, "n")
+    badge_text = "MUA" if go else "CHỜ MUA"
+    html = (f'<div class="wb-head"><div class="wb-left"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
-            f'<span class="wb-badge {_BADGE.get(group, "n")}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
-            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
+            f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div></div>'
+            f'<span class="wb-badge {badge_class}">{esc(badge_text)}</span></div>'
             f'<div class="wb-kv">'
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
             f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
@@ -731,8 +735,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     if pd.isna(r.get("Vùng mua từ")):
         return html
-    go = r.get("Hành động") == "Vào ngay"
-    badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
+    badge = ''
     html += (
         '<div class="wb-box">'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
