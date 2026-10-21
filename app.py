@@ -1162,27 +1162,13 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
     return WB.sort_group(d, WB.G1)
 
 
-# Thẻ Mua ngay: cùng tông thẻ với mục Bán / Chốt lời (đầu thẻ viền trái + nền chuyển màu, nhãn đặc, bo góc 10px, bóng đổ) nhưng màu xanh lá
-_BUY_NOW_CSS = """
-[class*="st-key-wbcard-"]{border-radius:10px!important;overflow:hidden;padding:0 18px 16px!important;box-shadow:0 10px 26px rgba(0,0,0,.4)!important}
-[class*="st-key-wbcard-"] .wb-head{margin:0 -18px 12px;padding:14px 18px 12px;align-items:center;border-left:4px solid #25A879;
-  border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(37,168,121,.26),transparent 140%)}
-[class*="st-key-wbcard-"] .wb-code{font-size:25px;font-weight:700;letter-spacing:.01em}
-[class*="st-key-wbcard-"] .wb-badge{background:#25A879!important;color:#fff!important;border-radius:6px;padding:6px 12px;font-size:13px;
-  font-weight:700;letter-spacing:.04em;text-transform:none}
-[class*="st-key-wbcard-"] .wb-badge::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:middle}
-[class*="st-key-wbcard-"] .wb-name{margin:0 0 12px;font-size:12.5px;color:var(--muted);opacity:1}
-[class*="st-key-wbcard-"] .wb-box{background:var(--card2);border-left:3px solid #25A879;border-radius:8px}
-"""
-
-
 def page_buy_now():
     st.title("⚡ Mua ngay")
     header()
     st.caption("Các mã có thể vào lệnh ngay: đã có tín hiệu mua hoặc đang test hỗ trợ với khối lượng cạn, và giá đang nằm trong vùng mua. "
                "Lọc từ mục **Chờ mua** (nhóm Điểm mua đã xác nhận), bỏ các mã đã có tín hiệu BÁN / CHỐT LỜI. "
                "Nên chia lệnh và tuân thủ mức cắt lỗ trên thẻ. Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}{_BUY_NOW_CSS}</style>", unsafe_allow_html=True)
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     d = _buy_now_table(_wb_table())
     m = st.columns(3)
     m[0].metric("MÃ CÓ THỂ VÀO NGAY", f"{len(d)} mã")
