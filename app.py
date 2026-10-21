@@ -1096,7 +1096,10 @@ def page_wait_buy():
                "Chỉ gồm mã có xu hướng đủ khỏe; mã đang phục hồi nằm ở mục **Đang phục hồi**; mã tăng quá đà, suy yếu hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
-    buy = t[t["Danh sách"].isin(WB.BUY_GROUPS)]
+    _now = set(_buy_now_table(t)["Mã"])      # mã "Vào được ngay" đã nằm ở mục Mua ngay, không lặp lại ở Chờ mua
+    buy = t[t["Danh sách"].isin(WB.BUY_GROUPS) & ~t["Mã"].isin(_now)]
+    if _now:
+        st.caption(f"{len(_now)} mã đang ở trạng thái **✔ Vào được ngay** đã chuyển sang mục **Mua ngay**, không hiển thị ở đây.")
     m = st.columns(4)
     m[0].metric("TỔNG SỐ MÃ CHỜ MUA", f"{len(buy)} mã")
     for col, grp in zip(m[1:], WB.BUY_GROUPS):
