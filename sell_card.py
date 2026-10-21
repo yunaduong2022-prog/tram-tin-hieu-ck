@@ -5,7 +5,7 @@ Dùng:
     st.markdown(sell_card.cards_html(d), unsafe_allow_html=True)
 
 d là DataFrame lấy từ _wb_table() đã lọc "Hành động bán", cần các cột:
-Mã, Giá, Chg %, Score, RS20, Nhóm, Lý do và (tuỳ chọn) "Tăng từ đáy %", "Tên công ty".
+Mã, Giá, Chg %, Score, RS20, Nhóm, Lý do và (tuỳ chọn) "Tăng từ đáy %", "Tên công ty"; as_of là ngày nến cuối.
 Màu lấy từ các biến CSS của theme.py (--card, --line, --txt2, --muted, --red, --green...).
 """
 import html
@@ -42,6 +42,7 @@ _CSS = """
 .sc-scale{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)}
 .sc-why{margin:12px 16px 16px;padding:11px 13px;border-radius:8px;background:var(--card2);border-left:3px solid #D92D4A}
 .sc-why p{margin:0;color:var(--txt);font-size:13.5px;line-height:1.6}
+.sc-foot{margin:-6px 16px 14px;font-size:12px;color:var(--muted);text-align:right;font-style:italic}
 .sc-why .sc-hint{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 """
 CSS = "<style>" + " ".join(_CSS.split()) + "</style>"
@@ -96,7 +97,15 @@ def _rs_bar(rs) -> str:
             '<div class="sc-scale"><span>0.5</span><span>1.0 = VN-Index</span><span>1.5</span></div>')
 
 
-def card_html(r) -> str:
+def _fmt_date(x) -> str:
+    """dd/mm/yyyy; không hiểu được ngày thì trả về rỗng."""
+    try:
+        return pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else ""
+    except (TypeError, ValueError):
+        return ""
+
+
+def card_html(r, as_of=None) -> str:
     """HTML một thẻ. Viết liền một dòng: Streamlit coi dòng thụt 4 ô trở lên là code."""
     esc = lambda s: html.escape(str(s if pd.notna(s) else ""))
     chg = r.get("Chg %")
@@ -107,6 +116,8 @@ def card_html(r) -> str:
     gain_html = f'<div class="sc-gain">Đã tăng {float(gain):.0f}% từ đáy</div>' if pd.notna(gain) else ""
     nm = short_name(r.get("Tên công ty"))
     name_html = f'<div class="sc-name" title="{esc(r.get("Tên công ty"))}">{esc(nm)}</div>' if nm else ""
+    dt = _fmt_date(as_of)
+    foot_html = f'<div class="sc-foot">Theo nến cuối phiên {dt}</div>' if dt else ""
     reason = _tidy_sentence(_PREFIX.sub("", str(r.get("Lý do") or "")))
     chg_html = (f'<span class="sc-chg {"sc-up" if up else "sc-dn"}">{"▲" if up else "▼"} {float(chg):+.2f}%</span>'
                 if pd.notna(chg) else "")
@@ -124,10 +135,11 @@ def card_html(r) -> str:
         '</div>'
         f'<div class="sc-why"><div class="sc-k" style="margin-bottom:3px">Lý do</div><p>{esc(reason)}</p>'
         '<p class="sc-hint">Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng.</p></div>'
+        f'{foot_html}'
         '</article>'
     )
 
 
-def cards_html(d: pd.DataFrame) -> str:
-    """Lưới thẻ cho toàn bộ DataFrame (kèm CSS)."""
-    return CSS + '<div class="sc-grid">' + "".join(card_html(r) for _, r in d.iterrows()) + "</div>"
+def cards_html(d: pd.DataFrame, as_of=None) -> str:
+    """Lưới thẻ cho toàn bộ DataFrame (kèm CSS). as_of: ngày nến cuối (vd latest_date của app) hiện ở đáy thẻ."""
+    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of) for _, r in d.iterrows()) + "</div>"

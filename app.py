@@ -1235,7 +1235,7 @@ def page_sell_list():
           .drop(columns="_o"))
     _, _fm = _wb_meta_maps(WY_KEY)
     d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
-    st.markdown(sell_card.cards_html(d), unsafe_allow_html=True)
+    st.markdown(sell_card.cards_html(d, latest_date), unsafe_allow_html=True)
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Hành động bán", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Lý do"]].rename(columns={"Hành động bán": "Tín hiệu"})
                      .reset_index(drop=True), hide_index=True,
