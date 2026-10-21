@@ -15,6 +15,14 @@ import re
 
 import numpy as np
 import pandas as pd
+
+
+def _price_display(value):
+    """Giá hiển thị tối đa 1 chữ số thập phân, bỏ số 0 thừa; không đổi dữ liệu gốc."""
+    try:
+        return f"{round(float(value), 1):,.1f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return "—"
 import streamlit as st
 
 import waiting_buy as WB
@@ -136,16 +144,16 @@ def position_html(u, price) -> str:
     if pd.notna(gv) and gv > 0:
         if ok:
             pl = (price / gv - 1) * 100
-            rows.append(line("Giá vốn", f"{gv:,.2f} ({pl:+.1f}%)", "var(--green)" if pl >= 0 else "var(--red)"))
+            rows.append(line("Giá vốn", f"{_price_display(gv)} ({pl:+.1f}%)", "var(--green)" if pl >= 0 else "var(--red)"))
         else:
-            rows.append(line("Giá vốn", f"{gv:,.2f}"))
+            rows.append(line("Giá vốn", f"{_price_display(gv)}"))
     if pd.notna(sl) and sl > 0:
         hit = ok and price <= sl
-        rows.append(line("Cắt lỗ của tôi", f"{sl:,.2f}" + (f" ({(price / sl - 1) * 100:+.1f}% so với giá)" if ok else "")
+        rows.append(line("Cắt lỗ của tôi", f"{_price_display(sl)}" + (f" ({(price / sl - 1) * 100:+.1f}% so với giá)" if ok else "")
                          + (" · ĐÃ CHẠM" if hit else ""), "var(--red)"))
     if pd.notna(tp) and tp > 0:
         hit = ok and price >= tp
-        rows.append(line("Mục tiêu của tôi", f"{tp:,.2f}" + (f" ({(tp / price - 1) * 100:+.1f}% so với giá)" if ok else "")
+        rows.append(line("Mục tiêu của tôi", f"{_price_display(tp)}" + (f" ({(tp / price - 1) * 100:+.1f}% so với giá)" if ok else "")
                          + (" · ĐÃ ĐẠT" if hit else ""), "var(--green)"))
     if note:
         rows.append(f'<div style="margin-top:4px;color:var(--muted)">📝 {_html.escape(note)}</div>')
@@ -235,9 +243,9 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
             cols = [c for c in cols if c in v.columns]
             pr = st.column_config.NumberColumn
             st.dataframe(v[cols], hide_index=True, column_config={
-                "Giá": pr(format="%.2f"), "Chg %": pr(format="%+.2f%%"), "Giá vốn": pr(format="%.2f"),
-                "Lãi/lỗ %": pr(format="%+.1f%%"), "Cắt lỗ": pr(format="%.2f"), "Cách cắt lỗ %": pr(format="%+.1f%%"),
-                "Mục tiêu": pr(format="%.2f"), "Cách mục tiêu %": pr(format="%+.1f%%"),
+                "Giá": pr(format="%.1f"), "Chg %": pr(format="%+.2f%%"), "Giá vốn": pr(format="%.1f"),
+                "Lãi/lỗ %": pr(format="%+.1f%%"), "Cắt lỗ": pr(format="%.1f"), "Cách cắt lỗ %": pr(format="%+.1f%%"),
+                "Mục tiêu": pr(format="%.1f"), "Cách mục tiêu %": pr(format="%+.1f%%"),
                 "Score": pr(format="%.1f"), "RS20": pr("RS vs VNI", format="%.2f")}, **_DF)
             st.caption("“Cách cắt lỗ %” dương nghĩa là giá còn trên mức cắt lỗ bạn đặt.")
             st.subheader("Chi tiết một mã")
@@ -255,11 +263,11 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
             with d2:
                 lines = []
                 if pd.notna(r.get("Vùng mua từ")) and pd.notna(r.get("Vùng mua đến")):
-                    lines.append(f"Vùng mua hệ thống: {r['Vùng mua từ']:.2f} – {r['Vùng mua đến']:.2f}")
+                    lines.append(f"Vùng mua hệ thống: {_price_display(r['Vùng mua từ'])} – {_price_display(r['Vùng mua đến'])}")
                 if pd.notna(r.get("SL hệ thống")):
-                    lines.append(f"Cắt lỗ hệ thống: {r['SL hệ thống']:.2f}")
+                    lines.append(f"Cắt lỗ hệ thống: {_price_display(r['SL hệ thống'])}")
                 if pd.notna(r.get("MT1 hệ thống")):
-                    lines.append(f"Mục tiêu 1 hệ thống: {r['MT1 hệ thống']:.2f}")
+                    lines.append(f"Mục tiêu 1 hệ thống: {_price_display(r['MT1 hệ thống'])}")
                 if str(r.get("Cảnh báo", "")).strip() not in ("", "nan", "Không có"):
                     lines.append(f"Cảnh báo kỹ thuật: {r['Cảnh báo']}")
                 for ln in lines:
@@ -271,9 +279,9 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
     with st.expander("⚙️ Quản lý danh sách: sửa giá vốn, mục tiêu, cắt lỗ, ghi chú · xóa mã · sao lưu", expanded=False):
         if not w.empty:
             ed = st.data_editor(w.assign(**{"Xóa": False}), hide_index=True, key=f"wl_editor_{ver}", disabled=["Mã"],
-                                column_config={"Giá vốn": st.column_config.NumberColumn(format="%.2f", min_value=0.0),
-                                               "Mục tiêu": st.column_config.NumberColumn(format="%.2f", min_value=0.0),
-                                               "Cắt lỗ": st.column_config.NumberColumn(format="%.2f", min_value=0.0),
+                                column_config={"Giá vốn": st.column_config.NumberColumn(format="%.1f", min_value=0.0),
+                                               "Mục tiêu": st.column_config.NumberColumn(format="%.1f", min_value=0.0),
+                                               "Cắt lỗ": st.column_config.NumberColumn(format="%.1f", min_value=0.0),
                                                "Xóa": st.column_config.CheckboxColumn("Xóa", default=False)}, **_DF)
             if st.button("💾 Lưu thay đổi", key="wl_save"):
                 keep = ed[~ed["Xóa"].astype(bool)][COLS]

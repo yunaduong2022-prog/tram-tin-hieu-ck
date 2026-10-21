@@ -1385,7 +1385,12 @@ def page_sell_list():
 
 # ------------------------------------------------------------------ HTML CARDS
 def fp(x):
-    return f"{x:,.2f}"
+    """Giá giao dịch hiển thị tối đa 1 chữ số thập phân; bỏ .0, không đổi giá trị tính toán."""
+    try:
+        value = round(float(x), 1)
+        return f"{value:,.1f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return "—"
 
 
 def card(title, inner):
@@ -1916,8 +1921,8 @@ def page_stock():
         with st.expander("📋 Thẻ lý do Wyckoff · Volume (khung Ngày)"):
             if info["Tín hiệu"] != "WAIT":
                 st.markdown(f'<div class="ticket-buy"><b>{info["Tín hiệu"]}</b> · Điểm {info["Điểm số"]}/6.0<br>'
-                            f'📍 Entry: {info["Entry"]:,.2f} · 🛑 Stoploss: {info["Stoploss"]:,.2f} · '
-                            f'🎯 TakeProfit: {info["TakeProfit"]:,.2f}</div>', unsafe_allow_html=True)
+                            f'📍 Entry: {fp(info["Entry"])} · 🛑 Stoploss: {fp(info["Stoploss"])} · '
+                            f'🎯 TakeProfit: {fp(info["TakeProfit"])}</div>', unsafe_allow_html=True)
             else:
                 st.warning("ĐỨNG NGOÀI (WAIT) – chưa đủ điểm đồng thuận")
             for cat, pts, txt in info["reasons"] or []:
