@@ -1274,10 +1274,14 @@ def page_sell_list():
         return
     d = t[t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     n_sell, n_tp = int((d["Hành động bán"] == "BÁN").sum()), int((d["Hành động bán"] == "CHỐT LỜI").sum())
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Tổng số mã", len(d))
-    m2.metric("BÁN", n_sell)
-    m3.metric("CHỐT LỜI", n_tp)
+    st.markdown(   # flex 1 hàng ngang, không bị Streamlit xếp chồng trên điện thoại (st.columns tự xuống dòng ở màn hẹp)
+        "<style>.sell-m{display:flex;flex-wrap:nowrap;gap:10px;margin:4px 0 12px}"
+        ".sell-m>div{flex:1 1 0;min-width:0}"
+        ".sell-m .k{font-size:13px;color:var(--muted);white-space:nowrap}"
+        ".sell-m .v{font-size:clamp(24px,7vw,36px);font-weight:400;line-height:1.2;color:var(--txt2)}</style>"
+        f'<div class="sell-m"><div><div class="k">Tổng số mã</div><div class="v">{len(d)}</div></div>'
+        f'<div><div class="k">BÁN</div><div class="v">{n_sell}</div></div>'
+        f'<div><div class="k">CHỐT LỜI</div><div class="v">{n_tp}</div></div></div>', unsafe_allow_html=True)
     pick = st.segmented_control("Lọc", ["Tất cả", "BÁN", "CHỐT LỜI"], default="Tất cả", key="sell_list_filter",
                                 label_visibility="collapsed") or "Tất cả"
     if pick != "Tất cả":
