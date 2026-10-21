@@ -1149,6 +1149,50 @@ def page_wait_buy():
         _wb_scroll_to(focus)
 
 
+def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
+    """Mua ngay = mã thuộc nhóm Chờ mua có hành động "Vào ngay" (Điểm mua đẹp / Đã có tín hiệu mua, giá đang trong vùng mua)
+    và không có tín hiệu BÁN / CHỐT LỜI (mỗi mã chỉ nằm một nơi)."""
+    d = t[t["Danh sách"].isin(WB.BUY_GROUPS) & (t["Hành động"] == "Vào ngay") & t["Vùng mua từ"].notna()]
+    if "Hành động bán" in d.columns:
+        d = d[~d["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
+    return WB.sort_group(d, WB.G1)
+
+
+def page_buy_now():
+    st.title("⚡ Mua ngay")
+    header()
+    st.caption("Các mã có thể vào lệnh ngay: đã có tín hiệu mua hoặc đang test hỗ trợ với khối lượng cạn, và giá đang nằm trong vùng mua. "
+               "Lọc từ mục **Chờ mua** (nhóm Điểm mua đã xác nhận), bỏ các mã đã có tín hiệu BÁN / CHỐT LỜI. "
+               "Nên chia lệnh và tuân thủ mức cắt lỗ trên thẻ. Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    d = _buy_now_table(_wb_table())
+    m = st.columns(3)
+    m[0].metric("MÃ CÓ THỂ VÀO NGAY", f"{len(d)} mã")
+    for col, stt in zip(m[1:], (WB.BUY_SIGNAL, WB.GOOD_ENTRY)):
+        col.metric(stt.upper(), int((d["Trạng thái"] == stt).sum()))
+    if d.empty:
+        st.info("Hiện chưa có mã nào ở trạng thái Mua ngay. Xem mục **Chờ mua** để theo dõi các mã sắp có điểm mua.")
+        return
+    f1, f2 = st.columns([1.2, 3])
+    q = f1.text_input("Tìm mã", "", key="bn_q", placeholder="🔍 Tìm mã...").upper().strip()
+    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                          key="bn_ind", placeholder="Tất cả nhóm")
+    if q:
+        d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+    if inds:
+        d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+    if d.empty:
+        st.info("Không có mã nào phù hợp bộ lọc.")
+        return
+    show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key="bn_all")
+    cols = st.columns(3)
+    for i, (_, r) in enumerate(d.head(len(d) if show_all else WB_PER_GROUP).iterrows()):
+        with cols[i % 3]:
+            _wb_card(r, str(r["Danh sách"]))
+    if len(d) > WB_PER_GROUP and not show_all:
+        st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
+
+
 def _wl_card(r, u, ver):
     """Thẻ Watchlist: cùng thẻ với mục Chờ mua (+ khối Vị thế của tôi, nút Xem biểu đồ / Bỏ theo dõi)."""
     code = str(r["Mã"])
@@ -1966,6 +2010,7 @@ def route():
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Bộ lọc & Backtest":
+        if sub == "Mua ngay": return page_buy_now()
         if sub == "Bộ lọc Realtime": return page_filter()
         if sub == "Chờ mua": return page_wait_buy()
         if sub == "Đang phục hồi": return page_recovering()

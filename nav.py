@@ -9,7 +9,7 @@ MENU = {
     "Ngành": ["Tổng quan ngành", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
                  "Thanh khoản", "Chỉ báo kỹ thuật", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
-    "Bộ lọc & Backtest": ["Bộ lọc Realtime", "Chờ mua", "Đang phục hồi",
+    "Bộ lọc & Backtest": ["Mua ngay", "Bộ lọc Realtime", "Chờ mua", "Đang phục hồi",
                           "Watchlist", "Danh sách cảnh báo",
                           "Bán / Chốt lời", "Backtest chiến lược"],
     "Biểu đồ": [],
