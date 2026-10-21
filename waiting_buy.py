@@ -595,24 +595,29 @@ def card_css(dark: bool) -> str:
     """CSS của thẻ. Màu lấy từ biến CSS của theme.py nên tự đổi theo nền Sáng / Tối; chỉ nền khối chiến lược chọn theo chế độ."""
     box = "var(--card2)" if dark else "var(--bg2)"
     return """
-[class*="st-key-wbcard-"]{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
+/* Khóa chiều rộng theo cột Streamlit để nội dung dài không đẩy trang tràn ngang. */
+div[data-testid="column"]{min-width:0!important}
+[class*="st-key-wbcard-"]{display:block;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important;
+  background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;
   box-shadow:0 2px 12px var(--shadow);gap:14px!important}
-.wb-head{display:flex;justify-content:space-between;align-items:stretch;gap:12px;flex-wrap:nowrap;margin-bottom:16px}
-.wb-left{display:flex;flex-direction:column;justify-content:center;min-width:0;flex:1;gap:4px}
-.wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+[class*="st-key-wbcard-"]>div{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+.wb-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:stretch;column-gap:12px;width:100%!important;max-width:100%;min-width:0;margin-bottom:16px;box-sizing:border-box}
+.wb-left{display:flex;flex-direction:column;justify-content:center;min-width:0;max-width:100%;width:100%;gap:4px;box-sizing:border-box}
+.wb-id{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;width:100%;min-width:0}
 .wb-code{font-size:28px;font-weight:800;line-height:1.1;color:var(--txt2);letter-spacing:-.3px}
 .wb-px{font-size:20px;font-weight:700;line-height:1.1}
 .wb-px.up{color:var(--green)}.wb-px.down{color:var(--red)}.wb-px.flat{color:var(--muted)}
 .wb-px small{font-size:13px;margin-left:3px}
-.wb-badge{display:flex;align-items:center;justify-content:center;align-self:stretch;min-width:76px;padding:0 14px;border-radius:12px;font-size:25px;font-weight:900;letter-spacing:.2px;
+.wb-badge{display:flex;align-items:center;justify-content:center;justify-self:end;align-self:stretch;flex-shrink:0;min-width:76px;padding:0 14px;border-radius:12px;font-size:25px;font-weight:900;letter-spacing:.2px;
   text-transform:uppercase;white-space:nowrap;line-height:1}
 .wb-badge.g{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-badge.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
-.wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:0;line-height:1.4}
-.wb-kv{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}
+.wb-name{display:block;width:100%;max-width:100%;min-width:0;font-size:14px;color:var(--txt);opacity:.85;margin:0;line-height:1.4;overflow-wrap:break-word;word-break:normal;box-sizing:border-box}
+.wb-kv{display:grid!important;width:100%!important;max-width:100%;min-width:0;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:14px 16px;border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px;box-sizing:border-box}
+.wb-kv>div{min-width:0;max-width:100%;box-sizing:border-box}
 .wb-kv span{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-bottom:5px}
-.wb-kv b{display:block;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere}
+.wb-kv b{display:block;min-width:0;font-size:17px;font-weight:800;color:var(--txt2);line-height:1.3;overflow-wrap:anywhere;word-break:normal}
 .wb-kv .wide{grid-column:1 / span 2}
 .wb-note{font-size:13.5px;line-height:1.55;color:var(--txt);margin-bottom:12px}
 .wb-box{background:BOXBG;border-radius:14px;padding:4px 16px 12px}
