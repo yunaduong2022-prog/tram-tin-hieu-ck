@@ -10,7 +10,7 @@ MENU = {
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
                  "Thanh khoản", "Chỉ báo kỹ thuật", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Bộ lọc Realtime", "Cổ phiếu chờ mua trong tuần", "Watchlist", "Danh sách cảnh báo",
-                          "Backtest chiến lược"],
+                          "Bán / Chốt lời", "Backtest chiến lược"],
     "Biểu đồ": [],
 }
 ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Biểu đồ": "📈"}

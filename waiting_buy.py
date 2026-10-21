@@ -263,6 +263,12 @@ ACT_WAIT_NOTE = {NEAR_ZONE: "chờ 1 phiên bứt phá có khối lượng hoặ
                  MARGINAL: "chỉ theo dõi, chưa nên giải ngân"}
 
 
+def sell_action_of(reason) -> str:
+    """\"BÁN\" / \"CHỐT LỜI\" nếu lý do do classify ghi tiền tố tương ứng, ngược lại rỗng. Dùng cho trang Bán / Chốt lời."""
+    r = str(reason or "")
+    return "CHỐT LỜI" if r.startswith("CHỐT LỜI") else "BÁN" if r.startswith("BÁN") else ""
+
+
 def action_of(state: str) -> tuple[str, str]:
     """(Hành động, ghi chú). Hành động là "Vào ngay" hoặc "Chờ mua"."""
     if state in ACT_NOW:
@@ -534,11 +540,12 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         except Exception as e:     # một mã lỗi dữ liệu không được làm sập cả trang
             res = {"Trạng thái": NO_BUY, "Danh sách": L_NONE, "Lý do": f"Lỗi khi phân loại: {e}"}
         res["Hành động"], res["Ghi chú hành động"] = action_of(res["Trạng thái"])
+        res["Hành động bán"] = sell_action_of(res.get("Lý do"))
         can, t1 = res.get("Cản gần", np.nan), res.get("Mục tiêu 1", np.nan)
         if res["Hành động"] == "Vào ngay" and pd.notna(can) and pd.notna(t1) and can < t1:
             res["Ghi chú hành động"] += f"; lưu ý cản gần {can:.2f} (+{(can / r['Giá'] - 1) * 100:.1f}%) thấp hơn Mục tiêu 1"
         rows.append({"Mã": code, "Giá": r["Giá"], "Chg %": r.get("Chg_%", np.nan), "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
-    cols = ["Mã", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Ghi chú hành động",
+    cols = ["Mã", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Hành động bán", "Ghi chú hành động",
             "Vùng mua từ", "Vùng mua đến", "Giá vào", "Cắt lỗ", "Cắt lỗ %", "Mục tiêu 1", "Lời 1 %", "Mục tiêu 2", "Lời 2 %",
             "R:R", "Cản gần", "Cách vùng mua %"]
     out = pd.DataFrame(rows)

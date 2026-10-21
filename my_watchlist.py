@@ -101,8 +101,12 @@ def build_view(w: pd.DataFrame, wb: pd.DataFrame, res: pd.DataFrame) -> pd.DataF
     sig = m["Danh sách"].map(_SIGNAL).fillna("Chưa có dữ liệu") if "Danh sách" in m else "Chưa có dữ liệu"
     base = pd.Series(sig, index=m.index).map({"Chờ mua": "🟢 Chờ mua", "Cảnh báo": "🟠 Cảnh báo",
                                               "Không có điểm mua": "⚪ Không có điểm mua"}).fillna("— Chưa có dữ liệu")
+    rs = m["Lý do"].fillna("").astype(str) if "Lý do" in m else pd.Series("", index=m.index)
+    is_tp, is_sell = rs.str.startswith("CHỐT LỜI"), rs.str.startswith("BÁN")      # tiền tố do waiting_buy.classify ghi
+    base = base.mask(is_tp, "🟠 CHỐT LỜI").mask(is_sell, "🔴 BÁN")
     m["Tín hiệu"] = base.mask(tp_hit, "🟢 Đạt mục tiêu").mask(sl_hit, "🔴 Chạm cắt lỗ")
     prio = m["Danh sách"].map(_PRIO).fillna(6) if "Danh sách" in m else pd.Series(6, index=m.index)
+    prio = pd.Series(np.where(is_sell | is_tp, 1, prio), index=m.index)
     m["_p"] = np.where(sl_hit, 0, np.where(tp_hit, 2.5, prio))
     sort_cols = ["_p"] + (["Score"] if "Score" in m else [])
     m = m.sort_values(sort_cols, ascending=[True] + [False] * (len(sort_cols) - 1)).drop(columns="_p")
@@ -112,7 +116,7 @@ def build_view(w: pd.DataFrame, wb: pd.DataFrame, res: pd.DataFrame) -> pd.DataF
 def summary(v: pd.DataFrame) -> dict:
     return {"n": len(v),
             "buy": int((v["Tín hiệu"] == "🟢 Chờ mua").sum()),
-            "warn": int(v["Tín hiệu"].isin(["🟠 Cảnh báo"]).sum()),
+            "warn": int(v["Tín hiệu"].isin(["🟠 Cảnh báo", "🟠 CHỐT LỜI", "🔴 BÁN"]).sum()),
             "sl": int((v["Tín hiệu"] == "🔴 Chạm cắt lỗ").sum()),
             "tp": int((v["Tín hiệu"] == "🟢 Đạt mục tiêu").sum()),
             "win": int((v["Lãi/lỗ %"] > 0).sum()), "lose": int((v["Lãi/lỗ %"] < 0).sum()),

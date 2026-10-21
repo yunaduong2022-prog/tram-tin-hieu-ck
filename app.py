@@ -998,7 +998,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb5")
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb6")
 
 
 @st.cache_data(show_spinner=False)
@@ -1186,11 +1186,11 @@ def page_watchlist():
 def page_alert_lists():
     st.title("⚠️ Danh sách cảnh báo")
     header()
-    st.caption("Các mã KHÔNG nằm trong **Cổ phiếu chờ mua trong tuần**: đang phục hồi, tăng quá đà, xu hướng suy yếu.")
+    st.caption("Các mã KHÔNG nằm trong **Cổ phiếu chờ mua trong tuần**: xu hướng suy yếu, tăng quá đà, đang phục hồi.")
     t = _wb_table()
-    lists = [(WB.L_RECOVER, "Đang phục hồi", "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng)."),
+    lists = [(WB.L_RISK, "Hạ tỷ trọng / Xu hướng suy yếu", "Cảnh báo rủi ro / cân nhắc bán."),
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought)."),
-             (WB.L_RISK, "Hạ tỷ trọng / Xu hướng suy yếu", "Cảnh báo rủi ro / cân nhắc bán.")]
+             (WB.L_RECOVER, "Đang phục hồi", "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng).")]
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
         with tab:
             st.caption(note)
@@ -1204,6 +1204,41 @@ def page_alert_lists():
                                         "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
                          **_STRETCH_DF)
     st.caption(f"{int((t['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
+
+
+def page_sell_list():
+    st.title("🔴 Bán / Chốt lời")
+    header()
+    st.caption("Các mã đang có tín hiệu **BÁN** hoặc **CHỐT LỜI** theo nến cuối phiên mới nhất. "
+               "**CHỐT LỜI**: đã có lãi lớn từ đáy (từ 20%), giá còn trên MA50 nhưng đà đang yếu đi hoặc đã tăng từ 50% từ đáy. "
+               "**BÁN**: có tín hiệu bán và xu hướng đã yếu (dưới MA50, nến xả mạnh, rơi nhanh). "
+               "Mã đã giảm từ 20% so với đỉnh không nằm ở đây vì bán lúc này đã quá muộn.")
+    t = _wb_table()
+    if "Hành động bán" not in t.columns:
+        st.info("Chưa có dữ liệu tín hiệu bán. Hãy tải lại trang.")
+        return
+    d = t[t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
+    n_sell, n_tp = int((d["Hành động bán"] == "BÁN").sum()), int((d["Hành động bán"] == "CHỐT LỜI").sum())
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Tổng số mã", len(d))
+    m2.metric("BÁN", n_sell)
+    m3.metric("CHỐT LỜI", n_tp)
+    pick = st.segmented_control("Lọc", ["Tất cả", "BÁN", "CHỐT LỜI"], default="Tất cả", key="sell_list_filter",
+                                label_visibility="collapsed") or "Tất cả"
+    if pick != "Tất cả":
+        d = d[d["Hành động bán"] == pick]
+    if d.empty:
+        st.info("Không có mã nào.")
+        return
+    d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1})).sort_values(["_o", "Score"], ascending=[True, False])
+          .drop(columns="_o"))
+    st.dataframe(d[["Mã", "Hành động bán", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Lý do"]].rename(columns={"Hành động bán": "Tín hiệu"})
+                 .reset_index(drop=True), hide_index=True,
+                 column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                "Chg %": st.column_config.NumberColumn(format="%.2f"),
+                                "Score": st.column_config.NumberColumn(format="%.1f"),
+                                "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
+                 **_STRETCH_DF)
 
 
 # ------------------------------------------------------------------ HTML CARDS
@@ -1837,6 +1872,7 @@ def route():
         if sub == "Cổ phiếu chờ mua trong tuần": return page_wait_buy()
         if sub == "Watchlist": return page_watchlist()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
+        if sub == "Bán / Chốt lời": return page_sell_list()
         return NAV.placeholder("🧪 Backtest chiến lược",
                                ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",
                                 "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])
