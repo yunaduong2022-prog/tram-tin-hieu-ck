@@ -1266,11 +1266,25 @@ def page_sell_list():
                                 label_visibility="collapsed") or "Tất cả"
     if pick != "Tất cả":
         d = d[d["Hành động bán"] == pick]
+    f1, f2 = st.columns([1.2, 3])
+    q = f1.text_input("Tìm mã", "", key="sell_q", placeholder="🔍 Tìm mã...").upper().strip()
+    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                          key="sell_ind", placeholder="Tất cả nhóm")
+    if q:
+        d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+    if inds:
+        d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
     if d.empty:
         st.info("Không có mã nào.")
         return
     d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1})).sort_values(["_o", "Score"], ascending=[True, False])
           .drop(columns="_o"))
+    _chips = ", ".join(f'<span style="color:{"var(--red)" if a_ == "BÁN" else "#F5B942"};font-weight:600">{htmllib.escape(str(c_))}</span>'
+                       for c_, a_ in zip(d["Mã"], d["Hành động bán"]))
+    st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+                f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
+                f'Danh sách tổng hợp ({len(d)} mã) · <span style="color:var(--red)">BÁN</span> · '
+                f'<span style="color:#F5B942">CHỐT LỜI</span></div>{_chips}</div>', unsafe_allow_html=True)
     _, _fm = _wb_meta_maps(WY_KEY)
     d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
     st.markdown(sell_card.cards_html(d, latest_date), unsafe_allow_html=True)
