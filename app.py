@@ -1525,6 +1525,34 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False):
 
     pad = (max(ys) - min(ys)) * 0.04
     fig.update_yaxes(range=[min(ys) - pad, max(ys) + pad], row=1, col=1)
+
+    # ---- Cột giá / chỉ số nằm bên PHẢI, thẻ giá hiện tại và giá trị mới nhất của từng khung chỉ báo (kiểu Finpath)
+    fig.update_yaxes(side="right", title_text=None)
+    last_c = float(t["Giá đóng cửa"].iloc[-1])
+    prev_c = float(t["Giá đóng cửa"].iloc[-2]) if len(t) > 1 else last_c
+    tag_col = "#0E8A6D" if last_c >= prev_c else "#C93A52"
+    fig.add_hline(y=last_c, line_dash="dot", line_color=tag_col, line_width=1, row=1, col=1)
+    fig.add_annotation(xref="paper", yref="y", x=1, y=last_c, xanchor="left", yanchor="middle", showarrow=False,
+                       text=f"<b>{last_c:,.2f}</b>", font=dict(size=11, color="#FFFFFF"), bgcolor=tag_col, borderpad=3)
+
+    def _fv(v):                                   # 8.97M / 125K / 950
+        return "-" if pd.isna(v) else (f"{v / 1e6:,.2f}M" if abs(v) >= 1e6 else f"{v / 1e3:,.1f}K" if abs(v) >= 1e4 else f"{v:,.0f}")
+
+    def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo
+        if sub in subs:
+            dom = fig.get_subplot(2 + subs.index(sub), 1).yaxis.domain
+            fig.add_annotation(xref="paper", yref="paper", x=0.004, y=dom[1], xanchor="left", yanchor="top", showarrow=False,
+                               align="left", text=html_, font=dict(size=11, color="#8B95A5"))
+    lr = t.iloc[-1]
+    if "Khối lượng" in subs:
+        _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
+    if "MACD" in subs:
+        _hdr("MACD", f'MACD(12,26,9)  DIF: <span style="color:#3B82F6">{lr["MACD"]:.2f}</span>  '
+                     f'DEA: <span style="color:#F59E0B">{lr["MACD_sig"]:.2f}</span>  MACD: <b style="color:#CBD2DC">{lr["MACD_hist"]:.2f}</b>')
+    if "RSI" in subs:
+        _hdr("RSI", f'RSI(14): <b style="color:#8B5CF6">{rsi_t.iloc[-1]:.2f}</b>')
+    if "StochRSI" in subs:
+        _hdr("StochRSI", f'StochRSI  %K: <span style="color:#F59E0B">{lr["SRSI_K"]:.1f}</span>  %D: <span style="color:#3B82F6">{lr["SRSI_D"]:.1f}</span>')
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
@@ -1548,14 +1576,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False):
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=top, b=bot),
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
                           legend=dict(orientation="h", yanchor="bottom", y=1 + 104 / ph, font=dict(size=10)))
     elif mobile:
         # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=20, b=130),
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=10, t=30, b=10),
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=30, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
     return fig
