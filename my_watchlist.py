@@ -172,7 +172,7 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
     """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ; card_fn(wb_row, user_row): vẽ thẻ giống mục Chờ mua."""
     ver = st.session_state.setdefault("wl_ver", 0)
     available = set(res["Mã"].astype(str).str.upper())
-    st.caption("Danh sách mã bạn tự theo dõi, hiển thị thẻ giống mục Cổ phiếu chờ mua trong tuần, kèm giá vốn, mục tiêu, cắt lỗ "
+    st.caption("Danh sách mã bạn tự theo dõi, hiển thị thẻ giống mục Chờ mua, kèm giá vốn, mục tiêu, cắt lỗ "
                "và tín hiệu của hệ thống. Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
     # 1) thêm mã

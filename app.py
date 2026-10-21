@@ -1199,10 +1199,17 @@ def page_recovering():
         st.info("Không có mã nào.")
         return
     _, _fm = _wb_meta_maps(WY_KEY)
+    _ma = {c_: _wb_ma_of(c_) for c_ in d["Mã"]}
+    d = d.assign(**{"MA20": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[0]),
+                    "MA20 %": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[1]),
+                    "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
+                    "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
     st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover"), unsafe_allow_html=True)
     with st.expander("Xem dạng bảng"):
-        st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
+        st.dataframe(d[["Mã", "Giá", "MA20", "MA50", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
                      column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                    "MA20": st.column_config.NumberColumn(format="%.2f"),
+                                    "MA50": st.column_config.NumberColumn(format="%.2f"),
                                     "Score": st.column_config.NumberColumn(format="%.1f"),
                                     "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
                      **_STRETCH_DF)

@@ -40,6 +40,9 @@ _CSS = """
 .sc-fill{position:absolute;top:0;bottom:0;border-radius:3px}
 .sc-mid{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--muted);border-radius:1px}
 .sc-scale{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)}
+.sc-ma{display:grid;grid-template-columns:1fr 1fr;margin:10px 16px 0;border:1px solid var(--line2);border-radius:8px;background:var(--bg2)}
+.sc-ma .sc-v{font-size:17px}
+.sc-ma small{font-size:12px;font-weight:600;margin-left:6px}
 .sc-why{margin:12px 16px 16px;padding:11px 13px;border-radius:8px;background:var(--card2);border-left:3px solid var(--sc-c)}
 .sc-why p{margin:0;color:var(--txt);font-size:13.5px;line-height:1.6}
 .sc.t-risk{--sc-c:#C8506A;--sc-bg:#33202A}
@@ -115,6 +118,22 @@ def _fmt_date(x) -> str:
         return ""
 
 
+def _ma_cell(label, ma, pct) -> str:
+    if pd.isna(ma):
+        return f'<div class="sc-stat"><div class="sc-k">{label}</div><div class="sc-v">–</div></div>'
+    cls = "" if pd.isna(pct) else ("sc-up" if float(pct) >= 0 else "sc-dn")
+    sub = "" if pd.isna(pct) else f'<small class="{cls}">{float(pct):+.1f}%</small>'
+    return f'<div class="sc-stat"><div class="sc-k">{label}</div><div class="sc-v">{_f(ma)}{sub}</div></div>'
+
+
+def _ma_html(r) -> str:
+    """Hàng MA20 / MA50 (giá trị + % giá hiện tại so với MA); chỉ hiện khi dữ liệu có cột MA20 / MA50."""
+    if "MA20" not in r.index and "MA50" not in r.index:
+        return ""
+    return ('<div class="sc-ma">' + _ma_cell("MA20", r.get("MA20"), r.get("MA20 %")) +
+            _ma_cell("MA50", r.get("MA50"), r.get("MA50 %")) + '</div>')
+
+
 def card_html(r, as_of=None, tone="sell") -> str:
     """HTML một thẻ. Viết liền một dòng: Streamlit coi dòng thụt 4 ô trở lên là code."""
     tn = TONES.get(tone, TONES["sell"])
@@ -144,6 +163,7 @@ def card_html(r, as_of=None, tone="sell") -> str:
         f'<div class="sc-stat"><div class="sc-k">Score</div><div class="sc-v">{_f(r.get("Score"), 1)}</div></div>'
         f'<div class="sc-stat"><div class="sc-k">RS vs VNI</div><div class="sc-rsrow"><div class="sc-v">{_f(rs)}</div>{rs_note}</div>{_rs_bar(rs)}</div>'
         '</div>'
+        f'{_ma_html(r)}'
         f'<div class="sc-why"><div class="sc-k" style="margin-bottom:3px">Lý do</div><p>{esc(reason)}</p>'
         f'<p class="sc-hint">{esc(tn["hint"])}</p></div>'
         f'{foot_html}'

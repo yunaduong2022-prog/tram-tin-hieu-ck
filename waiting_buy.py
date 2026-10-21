@@ -1,4 +1,4 @@
-"""Cổ phiếu chờ mua trong tuần: nhận diện 9 trạng thái chờ mua + 4 trạng thái cảnh báo / đứng ngoài.
+"""Chờ mua: nhận diện 9 trạng thái chờ mua + 4 trạng thái cảnh báo / đứng ngoài.
 
 Không phụ thuộc Streamlit. Chạy trên khung Ngày (EMA10, EMA20, MA50, Volume, nền giá, hỗ trợ/kháng cự)
 và khung Tuần (MA10 tuần, MA20 tuần) do engine.add_indicators đã tính sẵn.
@@ -10,7 +10,7 @@ Mỗi mã được xếp vào ĐÚNG MỘT trạng thái theo thứ tự ưu ti�
     4) Hạ tỷ trọng        -> danh sách cảnh báo rủi ro / bán
     5) Đang phục hồi      -> danh sách theo dõi phục hồi riêng
     6) 9 trạng thái chờ mua (nhóm 1 -> 2 -> 3)
-Chỉ nhóm 6 mới vào tab "Cổ phiếu chờ mua trong tuần".
+Chỉ nhóm 6 mới vào tab "Chờ mua".
 """
 from __future__ import annotations
 
