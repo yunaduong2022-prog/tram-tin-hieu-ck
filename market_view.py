@@ -54,15 +54,17 @@ CSS = """
 .mv-dhead{padding:18px 26px 16px;border-bottom:1px solid var(--line);background:var(--bg2)}
 .mv-dhead .mv-date{font-size:13px;margin-bottom:6px}
 .mv-dhead h1{margin:0!important;padding:0!important;font-size:26px!important;line-height:1.3;color:var(--txt2)!important}
-.mv-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;padding:16px 26px 0}
-.mv-tile{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
-.mv-tl{font-size:12px;color:var(--muted)}
-.mv-tv{font-size:21px;font-weight:800;color:var(--txt2);line-height:1.3}
-.mv-ts{font-size:12.5px;color:var(--muted);line-height:1.5}
+.mv-panel{margin:18px 26px 0;border:1px solid var(--line);border-radius:14px;background:var(--bg2);overflow:hidden}
+.mv-ph{padding:12px 20px;font-weight:800;font-size:15px;color:var(--txt2);border-bottom:1px solid var(--line)}
+.mv-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;background:var(--line)}
+.mv-tile{background:var(--bg2);padding:14px 20px}
+.mv-tl{font-size:13px;color:var(--muted);margin-bottom:2px}
+.mv-tv{font-size:27px;font-weight:800;color:var(--txt2);line-height:1.3}
+.mv-ts{font-size:13.5px;color:var(--muted);line-height:1.6}
 .mv-up{color:var(--green)!important}.mv-dn{color:var(--red)!important}
-.mv-checks{padding:12px 26px 0;font-size:13.5px;line-height:1.8;color:var(--txt)}
-.mv-tile code{font-size:11.5px}
-.mv-note{padding:6px 26px 0;font-size:12px;color:var(--muted)}
+.mv-tile code{font-size:12px}
+.mv-checks{padding:14px 20px;border-top:1px solid var(--line);font-size:15px;line-height:2;color:var(--txt);columns:2 300px}
+.mv-note{padding:0 20px 14px;font-size:12px;color:var(--muted)}
 .st-key-mv-body{padding:18px 26px 26px}
 .st-key-mv-body h2{background:linear-gradient(135deg,var(--hero),#0E5A47 160%);color:var(--cream)!important;
   padding:14px 18px!important;border-radius:10px;font-size:18px!important;margin:0 0 14px!important}
@@ -183,7 +185,7 @@ def _foreign_series(entries: list[dict]):
     return s.sort_index()
 
 
-def _stats_html(st_: dict | None, fx: dict | None = None) -> str:
+def _stats_html(st_: dict | None, fx: dict | None = None, day=None) -> str:
     """Khối số liệu (thẻ số + danh sách kiểm tra) cho một ngày. st_: số tự tính từ giá; fx: khối ngoại."""
     st_ = st_ or {}
     tiles, checks = [], []
@@ -237,7 +239,9 @@ def _stats_html(st_: dict | None, fx: dict | None = None) -> str:
     note = ("Số liệu giá tự tính từ dữ liệu cuối phiên. Thanh khoản và độ rộng chỉ tính trên rổ mã theo dõi của app, "
             "không phải toàn thị trường nên không dùng để so với con số của sàn."
             + ("" if "index" in st_ else " Chưa có VNINDEX hoặc chưa có giá ngày này nên chưa hiện số VN-Index."))
-    return (f'<div class="mv-stats">{"".join(tiles)}</div><div class="mv-checks">{chk}</div><div class="mv-note">{note}</div>')
+    head = f'Số liệu phiên {day:%d/%m/%Y}' if day is not None else 'Số liệu phiên'
+    return (f'<div class="mv-panel"><div class="mv-ph">{head}</div><div class="mv-stats">{"".join(tiles)}</div>'
+            f'<div class="mv-checks">{chk}</div><div class="mv-note">{note}</div></div>')
 
 
 def _reset_sel():
@@ -301,7 +305,7 @@ def render(raw=None, data_key: str = ""):
                     src = _load_eod(os.path.getmtime(EOD_CSV))
                 px = MS.stats_for(_daily(src, key), cur["date"]) if src is not None else None
                 fx = MS.foreign_stats(_foreign_series(entries), cur["date"])
-                st.markdown(_stats_html(px, fx), unsafe_allow_html=True)
+                st.markdown(_stats_html(px, fx, cur["date"]), unsafe_allow_html=True)
             except Exception as e:  # noqa: BLE001  số liệu tự động lỗi thì không làm hỏng cả trang
                 st.caption(f"Không tính được số liệu tự động: {type(e).__name__}")
             with st.container(key="mv-body"):
