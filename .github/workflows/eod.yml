@@ -110,3 +110,10 @@ jobs:
           done
           echo "Push thất bại sau 5 lần thử."
           exit 1
+      - name: Gửi Telegram danh sách nghiêng tăng / nghiêng giảm
+        if: ${{ inputs.probe == '' }}
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python telegram_alert.py
