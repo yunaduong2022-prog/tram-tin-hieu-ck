@@ -352,6 +352,13 @@ def _classify_base(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dic
         if alt is not None:
             zone = (alt["Vùng mua từ"], alt["Vùng mua đến"])
             extra["_alt"] = _chart_levels(alt, ctx["fc"], ctx.get("ma20", np.nan), ctx.get("f")) if ctx.get("fc") else alt
+        if state == RECOVERING and ctx.get("fc") and ctx.get("f") is not None:
+            # "Đang phục hồi" cũng có Vùng mua / Cắt lỗ / Mục tiêu, cùng công thức với Mua ngay (_chart_levels).
+            # Lưu ở khóa riêng _rv (KHÔNG đưa vào _zone) để không làm đổi việc nâng lên "Điểm mua đẹp".
+            try:
+                extra["_rv"] = _chart_levels(_levels(ctx["f"], ctx["f"]["c"]), ctx["fc"], ctx.get("ma20", np.nan), ctx.get("f"))
+            except Exception:
+                pass
         return {"Trạng thái": state, "Danh sách": STATE_GROUP[state], "Lý do": reason, "_zone": zone, **extra, **lv}
 
     if len(g) < CFG["min_bars"] or pd.isna(g["MA50"].iat[-1]):
@@ -518,6 +525,14 @@ def classify(g: pd.DataFrame, w: pd.DataFrame | None, r: pd.Series) -> dict:
     (1) RSI có phân kỳ ẩn tăng (\"Xác nhận tiếp diễn · XU HƯỚNG TĂNG\") còn hiệu lực và (2) giá đang nằm trong vùng mua
     (theo hỗ trợ / kháng cự của trạng thái đó, cho phép lệch 1.5% bên dưới như quy tắc test hỗ trợ) -> \"Điểm mua đẹp\"."""
     res = _classify_base(g, w, r)
+    rv = res.pop("_rv", None)
+    out = _classify_upgrade(g, w, res)
+    if rv and out["Trạng thái"] == RECOVERING and pd.isna(out.get("Vùng mua từ", np.nan)):
+        out.update(rv)      # mã vẫn "Đang phục hồi" mà chưa có vùng mua riêng -> dùng vùng mua theo công thức Mua ngay
+    return out
+
+
+def _classify_upgrade(g: pd.DataFrame, w: pd.DataFrame | None, res: dict) -> dict:
     zone, alt = res.pop("_zone", None), res.pop("_alt", None)
     bear = _rsi_bearish(g, w)
     tfn = lambda sg: "tuần" if sg["tf"] == "W" else "ngày"

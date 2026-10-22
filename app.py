@@ -1039,7 +1039,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb10")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb11")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 @st.cache_data(show_spinner=False)
@@ -1399,7 +1399,8 @@ def page_recovering():
                     "MA20 %": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[1]),
                     "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
                     "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
-    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover", _wy_note, _lean_html), unsafe_allow_html=True)
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua (wb-*)
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover", _wy_note, _lean_html, _min_trading()), unsafe_allow_html=True)
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "MA20", "MA50", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
                      column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
