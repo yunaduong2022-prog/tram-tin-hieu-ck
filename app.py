@@ -756,6 +756,11 @@ def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
 
 
+def _min_trading() -> str:
+    """Dòng 'Min Trading dd/mm/yyyy' cuối khung Vùng mua: ngày cập nhật dữ liệu + 1 ngày (dữ liệu cập nhật chiều, hôm sau mới gửi khách)."""
+    return f"Min Trading {(pd.Timestamp(latest_date) + pd.Timedelta(days=1)):%d/%m/%Y}"
+
+
 def mtf_strategy_box(s: dict, code: str = "") -> str:
     """Bảng Vùng mua - Cắt lỗ - Mục tiêu dạng hàng ngang, cùng kiểu khối "Mua ngay" ở Cổ phiếu chờ mua
     (class wb-* lấy từ waiting_buy.card_css). Số liệu lấy nguyên từ ML._strategy, không đổi cách tính."""
@@ -782,8 +787,7 @@ def mtf_strategy_box(s: dict, code: str = "") -> str:
             f'<b class="wb-red">{px(n["sl"])}{pct(n["sl"])}</b></div></div>'
             f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu 1</span>'
             f'<span class="wb-zone"><b class="wb-grn">{px(n["tp"])}{pct(n["tp"])}</b>{rr_badge}</span></div>{tp2_html}{extra}</div>'
-            f'<div class="wb-foot">Vùng mua = hỗ trợ đến hỗ trợ +2% · Cắt lỗ = hỗ trợ −{s["sl_pct"]}% · Mục tiêu 1 = kháng cự gần nhất, Mục tiêu 2 = đỉnh kế tiếp · '
-            f'R:R tính từ giữa vùng mua · % so với giá hiện tại {px(n["close"])}</div></div>')
+            f'<div class="wb-foot">{htmllib.escape(_min_trading())}</div></div>')
 
 
 def mtf_block(res: dict, code: str = "") -> str:
@@ -1111,7 +1115,7 @@ def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
         div_html = DV.html(divergence_cached(frames, str(r["Mã"]), DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"])), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading()), unsafe_allow_html=True)
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
@@ -1250,7 +1254,7 @@ def _wl_card(r, u, ver):
     code = str(r["Mã"])
     with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code)), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading()), unsafe_allow_html=True)
         pos = MW.position_html(u, r["Giá"])
         if pos:
             st.markdown(pos, unsafe_allow_html=True)

@@ -727,7 +727,7 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP", "MUA": "✔ MUA"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -770,6 +770,6 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
         f'<b class="wb-grn">{px(r["Mục tiêu 1"])}{sg(r["Lời 1 %"])}</b></div>'
         f'<div class="wb-line"><span class="wb-lab">Mục tiêu 2<small>R:R 1:3</small></span>'
         f'<b class="wb-grn">{px(r["Mục tiêu 2"])}{sg(r["Lời 2 %"])}</b></div></div>'
-        f'<div class="wb-foot">Vùng mua, cắt lỗ, mục tiêu tính theo ATR, khớp với trang biểu đồ · % so với giá hiện tại {px(r["Giá vào"])}</div>'
+        f'<div class="wb-foot">{esc(foot_text)}</div>'
         '</div>')
     return html
