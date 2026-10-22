@@ -22,6 +22,20 @@ MIN_BARS = 120
 OFFSETS = (0, 3, 6, 10, 15, 20, 30, 45)
 
 
+PHASE_TEXT = {
+    "dist": {"A": "Đà tăng bị chặn (BC, AR). Lực mua bắt đầu cạn nhưng chưa xác nhận đỉnh.",
+             "B": "Xây dựng nguyên nhân. Giá dao động trong biên, các nhịp ST kiểm tra lại đỉnh. Cần chờ UT hoặc SOW.",
+             "C": "Upthrust đã xuất hiện, bước thử cầu cuối cùng. Chờ SOW để xác nhận phân phối.",
+             "D": "SOW đã thủng biên dưới, giá chuyển từ đi ngang sang xu hướng giảm. LPSY là vùng hồi tham khảo.",
+             "E": "Giá đã rời biên theo hướng giảm (markdown)."},
+    "acc": {"A": "Đà giảm bị chặn (SC, AR). Cung bắt đầu cạn nhưng chưa xác nhận đáy.",
+            "B": "Xây dựng nguyên nhân. Giá dao động trong biên, các nhịp ST kiểm tra lại đáy. Cần chờ Spring hoặc SOS.",
+            "C": "Spring đã xuất hiện, bước thử cung cuối cùng. Chờ SOS để xác nhận tích lũy.",
+            "D": "SOS đã vượt biên trên, giá chuyển từ đi ngang sang xu hướng tăng. LPS là vùng lùi tham khảo.",
+            "E": "Giá đã rời biên theo hướng tăng (markup)."},
+}
+
+
 def _fmt(x: float) -> str:
     return f"{x:,.2f}"
 
@@ -324,3 +338,120 @@ def label(w) -> str:
         return "Đi ngang"
     name = ("Tái tích lũy" if w["re"] else "Tích lũy") if w["kind"] == "acc" else ("Tái phân phối" if w["re"] else "Phân phối")
     return f"{name} · Pha {w['phase']}" if w["phase"] else f"{name} · chưa rõ pha"
+
+
+# ------------------------------------------------------------------ KHỐI GHI CHÚ DÙNG TRONG CÁC THẺ
+import html as _html
+
+PHASE_NAME = {
+    "acc": {"A": "Dừng đà giảm", "B": "Xây dựng nguyên nhân", "C": "Thử cung cuối (Spring)",
+            "D": "Cầu thắng thế (SOS)", "E": "Markup, rời vùng"},
+    "dist": {"A": "Chặn đà tăng", "B": "Xây dựng nguyên nhân", "C": "Thử cầu cuối (Upthrust)",
+             "D": "Cung thắng thế (SOW)", "E": "Markdown, rời vùng"},
+}
+PHASE_HINT = {
+    "acc": {"A": "Chưa phải điểm mua: chờ đáy được kiểm tra lại bằng các nhịp ST với volume nhỏ dần.",
+            "B": "Giai đoạn đi ngang dài nhất. Quan sát, chưa vào lệnh; chờ Spring hoặc SOS.",
+            "C": "Spring là bước thử cung cuối. Nếu có Test volume thấp rồi SOS thì xác suất tích lũy tăng; thủng đáy Spring thì kịch bản hỏng.",
+            "D": "SOS đã vượt biên trên. Vùng kháng cự cũ thành hỗ trợ; nhịp lùi LPS là vùng quan sát.",
+            "E": "Giá đã rời vùng tích lũy. Đã cách xa biên, rủi ro mua đuổi cao hơn."},
+    "dist": {"A": "Chưa phải điểm bán: chờ đỉnh được kiểm tra lại bằng các nhịp ST với volume nhỏ dần.",
+             "B": "Giai đoạn đi ngang dài nhất. Quan sát; chờ UT/UTAD hoặc SOW.",
+             "C": "Upthrust là bước thử cầu cuối. Nếu có Test volume thấp rồi SOW thì xác suất phân phối tăng; đóng cửa trên đỉnh UT thì kịch bản hỏng.",
+             "D": "SOW đã thủng biên dưới. Vùng hỗ trợ cũ thành kháng cự; nhịp hồi LPSY là vùng quan sát.",
+             "E": "Giá đã rời vùng phân phối theo hướng giảm. Đã cách xa biên, rủi ro bán đáy cao hơn."},
+}
+
+CSS = "<style>" + " ".join("""
+.wy{margin:10px 0 4px;padding:11px 13px;border-radius:10px;background:var(--card2);border:1px solid var(--line);
+ border-left:3px solid var(--wy-c,#8FA89D);text-align:left;font-size:13px;line-height:1.5;color:var(--txt)}
+.wy.acc{--wy-c:#2DD4A7}.wy.dist{--wy-c:#FF6B81}.wy.unk{--wy-c:#F5B942}.wy.none{--wy-c:#8FA89D}
+.wy-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.wy-k{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.wy-tag{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;
+ background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
+.wy.acc .wy-tag{background:var(--tag-green-bg);color:var(--tag-green-fg)}
+.wy.dist .wy-tag{background:var(--tag-red-bg);color:var(--red)}
+.wy.unk .wy-tag{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
+.wy-steps{display:flex;gap:4px;margin:9px 0 7px}
+.wy-steps span{flex:1;text-align:center;padding:2px 0;border-radius:5px;font-size:11px;font-weight:700;
+ background:var(--bg2);color:var(--muted);border:1px solid var(--line2)}
+.wy-steps span.on{background:var(--wy-c);color:#0E1C18;border-color:var(--wy-c)}
+.wy-steps span.done{color:var(--txt);border-color:var(--wy-c)}
+.wy-ph{font-weight:700;color:var(--txt2);margin-bottom:2px}
+.wy-tx{color:var(--txt);font-size:12.5px}
+.wy-hint{margin-top:5px;font-size:12.5px;color:var(--muted)}
+.wy-lv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin-top:8px;padding-top:7px;border-top:1px solid var(--line);
+ font-size:12.5px;color:var(--muted)}
+.wy-lv b{color:var(--txt2);font-variant-numeric:tabular-nums;text-align:right}
+.wy-ev{margin-top:6px;font-size:12px;color:var(--muted)}
+.wy-ev b{color:var(--txt2)}
+.wy-ft{margin-top:6px;font-size:11px;color:var(--muted);font-style:italic}
+""".split()) + "</style>"
+
+
+def compact(w) -> dict | None:
+    """Rút gọn kết quả analyze() thành dict nhỏ để cache cho cả rổ mã và dựng khối ghi chú."""
+    if not w:
+        return None
+    ev = max(w["events"], key=lambda x: x["i"]) if w.get("events") else None
+    return {
+        "kind": w["kind"], "re": w["re"], "phase": w["phase"], "lean": w["lean"], "score": w["score"], "title": w["title"],
+        "kind_name": w["kind_name"], "prior": w["prior"], "post": w["post"],
+        "top": float(w["tr"]["top"]), "bot": float(w["tr"]["bot"]), "bars": int(w["tr"]["L"]),
+        "trigger": w.get("trigger"), "inval": w.get("inval"),
+        "last_ev": None if ev is None else {"label": ev["label"], "date": ev["date"], "p": ev["p"]},
+        "notes": list(w.get("notes") or []),
+    }
+
+
+def note_html(c, compact_view: bool = False) -> str:
+    """Khối "Wyckoff" đặt trong thẻ: pha hiện tại (A–E), tên pha, chú thích pha, mốc xác nhận / vô hiệu, sự kiện mới nhất.
+    c là dict từ compact() hoặc None. Một dòng HTML liền để Streamlit không coi là code."""
+    esc = _html.escape
+    head = '<div class="wy-top"><span class="wy-k">Wyckoff</span>'
+    foot = '<div class="wy-ft">Quy tắc máy tính, mang tính chủ quan; chỉ để quan sát, không phải khuyến nghị.</div>'
+    if not c:
+        return (f'<div class="wy none">{head}<span class="wy-tag">Chưa có cấu trúc</span></div>'
+                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần): '
+                'giá đang trong xu hướng hoặc biên quá rộng, nên chưa xác định được pha Wyckoff.</div>' + foot + '</div>')
+    kind = c["kind"]
+    cls = kind if kind in ("acc", "dist") else "unk"
+    tag = esc(label(c))
+    tagline = f'<span class="wy-tag">{tag}</span>'
+    if kind == "unk":
+        body = (f'<div class="wy-ph">Vùng đi ngang {fmt2(c["bot"])}–{fmt2(c["top"])} ({c["bars"]} nến)</div>'
+                '<div class="wy-tx">Xu hướng trước đó không rõ nên chưa phân biệt tích lũy hay phân phối, và chưa gán được pha.</div>'
+                f'<div class="wy-hint">Theo dõi hướng thoát: đóng cửa trên {fmt2(c["top"])} kèm volume lớn nghiêng về tích lũy; '
+                f'dưới {fmt2(c["bot"])} nghiêng về phân phối.</div>')
+        return f'<div class="wy {cls}">{head}{tagline}</div>{body}{foot}</div>'
+    ph = c["phase"]
+    steps = ""
+    if ph:
+        idx = "ABCDE".index(ph)
+        steps = '<div class="wy-steps">' + "".join(
+            f'<span class="{"on" if i == idx else "done" if i < idx else ""}">{p}</span>' for i, p in enumerate("ABCDE")) + '</div>'
+        pname = PHASE_NAME[kind][ph]
+        body = (f'<div class="wy-ph">Đang ở Pha {ph}: {esc(pname)}</div>'
+                f'<div class="wy-tx">{esc(PHASE_TEXT[kind][ph])}</div>')
+        if not compact_view:
+            body += f'<div class="wy-hint">{esc(PHASE_HINT[kind][ph])}</div>'
+    else:
+        what = "tích lũy" if kind == "acc" else "phân phối"
+        sig = "SC, AR, Spring, SOS" if kind == "acc" else "BC, AR, UT, SOW"
+        body = (f'<div class="wy-ph">Chưa xác định được pha</div>'
+                f'<div class="wy-tx">Có vùng đi ngang nghiêng về {what} nhưng chưa thấy đủ dấu hiệu đặc trưng ({sig}), '
+                'nên mới coi là vùng đi ngang, chưa vào Pha A.</div>')
+    lv = (f'<div class="wy-lv"><span>Biên trên / dưới</span><b>{fmt2(c["top"])} / {fmt2(c["bot"])}</b>'
+          f'<span>{esc(c["trigger"]["txt"])}</span><b>{fmt2(c["trigger"]["p"])}</b>'
+          f'<span>{esc(c["inval"]["txt"])}</span><b>{fmt2(c["inval"]["p"])}</b></div>') if c.get("trigger") and c.get("inval") else ""
+    ev = c.get("last_ev")
+    evh = (f'<div class="wy-ev">Sự kiện gần nhất: <b>{esc(ev["label"])}</b> · {pd.Timestamp(ev["date"]):%d/%m/%Y} · {fmt2(ev["p"])}'
+           f' · khớp mẫu {c["score"]}%</div>') if ev else f'<div class="wy-ev">Khớp mẫu {c["score"]}%</div>'
+    if compact_view:
+        lv = ""
+    return f'<div class="wy {cls}">{head}{tagline}</div>{steps}{body}{lv}{evh}{foot}</div>'
+
+
+def fmt2(x) -> str:
+    return _fmt(float(x))

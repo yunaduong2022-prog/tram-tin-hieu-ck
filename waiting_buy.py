@@ -725,7 +725,7 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP", "MUA": "✔ MUA"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -751,6 +751,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     html += ma_html       # MA20/50/200 + chip Ngắn hạn/Trung hạn (app._ma_summary_html, cùng thẻ ở Bộ lọc)
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
+    html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
     if pd.isna(r.get("Vùng mua từ")):
         return html
     go = r.get("Hành động") == "Vào ngay"

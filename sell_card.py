@@ -140,7 +140,7 @@ def _ma_html(r) -> str:
             _ma_cell("MA50", r.get("MA50"), r.get("MA50 %")) + '</div>')
 
 
-def card_html(r, as_of=None, tone="sell") -> str:
+def card_html(r, as_of=None, tone="sell", wy_of=None) -> str:
     """HTML một thẻ. Viết liền một dòng: Streamlit coi dòng thụt 4 ô trở lên là code."""
     tn = TONES.get(tone, TONES["sell"])
     esc = lambda s: html.escape(str(s if pd.notna(s) else ""))
@@ -175,6 +175,7 @@ def card_html(r, as_of=None, tone="sell") -> str:
         f'<div class="sc-stat"><div class="sc-k">RS vs VNI</div><div class="sc-rsrow"><div class="sc-v">{_f(rs)}</div>{rs_note}</div>{_rs_bar(rs)}</div>'
         '</div>'
         f'{_ma_html(r)}'
+        f'<div style="margin:10px 16px 0">{wy_of(r.get("Mã")) if wy_of else ""}</div>'
         f'<div class="sc-why"><div class="sc-k" style="margin-bottom:3px">Lý do</div><p>{esc(reason)}</p>'
         f'<p class="sc-hint">{esc(tn["hint"])}</p></div>'
         f'{foot_html}'
@@ -182,10 +183,11 @@ def card_html(r, as_of=None, tone="sell") -> str:
     )
 
 
-def cards_html(d: pd.DataFrame, as_of=None, tone="sell") -> str:
+def cards_html(d: pd.DataFrame, as_of=None, tone="sell", wy_of=None) -> str:
     """Lưới thẻ cho toàn bộ DataFrame (kèm CSS). as_of: ngày nến cuối (vd latest_date của app) hiện ở đáy thẻ.
+    wy_of: hàm mã -> HTML ghi chú Wyckoff (pha + chú thích), bỏ trống thì không hiện.
     tone: "sell" (BÁN / CHỐT LỜI), "risk" (theo dõi suy yếu), "over" (không mua đuổi), "recover" (đang phục hồi)."""
-    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of, tone) for _, r in d.iterrows()) + "</div>"
+    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of, tone, wy_of) for _, r in d.iterrows()) + "</div>"
 
 
 def add_names(d: pd.DataFrame, fund_map: dict) -> pd.DataFrame:
