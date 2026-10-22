@@ -794,13 +794,14 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             f'<div><span>Vốn hóa</span><b>{esc(str((meta or {}).get("Vốn hóa", "Chưa có")))}</b></div></div>')
     html += ma_html       # MA20/50/200 + chip Ngắn hạn/Trung hạn (app._ma_summary_html, cùng thẻ ở Bộ lọc)
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
+    # Khung Vùng mua (thang giá) đặt lên trên; cảnh báo phân kỳ RSI và ghi chú Wyckoff đưa xuống dưới
+    if pd.notna(r.get("Vùng mua từ")):
+        go = r.get("Hành động") == "Vào ngay"
+        tag = lambda t: f'<small>{t}</small>'
+        html += '<div style="margin-bottom:12px">' + ladder_html(
+            r["Mã"], r.get("Giá vào"), r["Vùng mua từ"], r["Vùng mua đến"], go, r["Cắt lỗ"], r["Cắt lỗ %"],
+            r["Mục tiêu 1"], r["Lời 1 %"], tag("R:R 1:2"), r["Mục tiêu 2"], r["Lời 2 %"], tag("R:R 1:3"),
+            _sentence(r["Ghi chú hành động"]), foot_text) + '</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
-    if pd.isna(r.get("Vùng mua từ")):
-        return html
-    go = r.get("Hành động") == "Vào ngay"
-    tag = lambda t: f'<small>{t}</small>'
-    html += ladder_html(r["Mã"], r.get("Giá vào"), r["Vùng mua từ"], r["Vùng mua đến"], go, r["Cắt lỗ"], r["Cắt lỗ %"],
-                        r["Mục tiêu 1"], r["Lời 1 %"], tag("R:R 1:2"), r["Mục tiêu 2"], r["Lời 2 %"], tag("R:R 1:3"),
-                        _sentence(r["Ghi chú hành động"]), foot_text)
     return html
