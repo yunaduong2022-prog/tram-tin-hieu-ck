@@ -112,7 +112,6 @@ def calculate_sector_metrics(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         liquidity_ratio = (t_today / t_avg * 100) if pd.notna(t_today) and pd.notna(t_avg) and t_avg > 0 else np.nan
         rows.append({
             "Nhóm ngành": sector, "Số mã có dữ liệu": n_members,
-            "Hiệu suất 1 phiên (%)": float(np.mean(day_change)) if day_change else np.nan,
             "Hiệu suất 1 tuần (%)": returns["1 tuần"],
             "Hiệu suất 1 tháng (%)": returns["1 tháng"],
             "Hiệu suất 3 tháng (%)": returns["3 tháng"],
@@ -123,7 +122,7 @@ def calculate_sector_metrics(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "Mã thành viên": ", ".join(members),
         })
     result = pd.DataFrame(rows)
-    for label, col in [("1 phiên", "Hiệu suất 1 phiên (%)"), ("1 tuần", "Hiệu suất 1 tuần (%)"), ("1 tháng", "Hiệu suất 1 tháng (%)"), ("3 tháng", "Hiệu suất 3 tháng (%)")]:
+    for label, col in [("1 tuần", "Hiệu suất 1 tuần (%)"), ("1 tháng", "Hiệu suất 1 tháng (%)"), ("3 tháng", "Hiệu suất 3 tháng (%)")]:
         bench, source = benchmarks[label]
         result[f"RS {label} (điểm %) "] = result[col] - bench if bench is not None else np.nan
     if not result.empty:
@@ -165,21 +164,18 @@ def render(raw: pd.DataFrame):
     if not info["has_index"]:
         st.warning("Dữ liệu hiện tại không có chuỗi VN-Index chuẩn. RS đang so với trung vị hiệu suất các mã có dữ liệu (proxy), không được hiểu là RS so với VN-Index. Để có RS chuẩn, cần bổ sung chuỗi VN-Index vào dữ liệu.")
 
-    # Một bộ chọn khung thời gian dùng chung cho bản đồ, tổng quan và bảng xếp hạng.
-    period = st.segmented_control(
-        "Khung thời gian phân tích", list(PERIODS), default="1 tháng", key="sector_shared_period"
-    ) or "1 tháng"
-    rs_col = f"RS {period} (điểm %) "
-    perf_col = f"Hiệu suất {period} (%)"
-
-    # Bản đồ ngành và các bảng cùng lấy dữ liệu theo bộ chọn chung.
+    # Bản đồ ngành đặt ở đầu trang: dùng hiệu suất thực tế theo khung được chọn.
     st.subheader("🗺️ Bản đồ ngành — Tìm tiền đang chảy vào đâu")
+    map_period = st.segmented_control(
+        "Khung thời gian bản đồ", ["1 phiên", "1 tuần", "1 tháng", "3 tháng"],
+        default="1 phiên", key="sector_map_period"
+    ) or "1 phiên"
     map_col = {
-        "1 phiên": "Hiệu suất 1 phiên (%)",
+        "1 phiên": "Tăng giá phiên gần nhất (%)",
         "1 tuần": "Hiệu suất 1 tuần (%)",
         "1 tháng": "Hiệu suất 1 tháng (%)",
         "3 tháng": "Hiệu suất 3 tháng (%)",
-    }[period]
+    }[map_period]
     map_view = metrics.sort_values(map_col, ascending=False, na_position="last")
     if map_view[map_col].notna().any():
         cards_per_row = 4
@@ -189,10 +185,13 @@ def render(raw: pd.DataFrame):
             for col, item in zip(cols, sectors[start:start + cards_per_row]):
                 value = item.get(map_col, np.nan)
                 sector_name = str(item["Nhóm ngành"])
-                delta = "Chưa đủ dữ liệu" if pd.isna(value) else f"{float(value):+.2f}%"
+                if pd.isna(value):
+                    delta = "Chưa đủ dữ liệu"
+                else:
+                    delta = f"{float(value):+.2f}%"
                 with col:
                     st.metric(sector_name, delta, delta_color="normal" if not pd.isna(value) else "off")
-                    if st.button("Xem chi tiết", key=f"sector_map_open_{period}_{sector_name}", use_container_width=True):
+                    if st.button("Xem chi tiết", key=f"sector_map_open_{map_period}_{sector_name}", use_container_width=True):
                         st.session_state["sector_detail"] = sector_name
                         st.session_state["sector_map_focus"] = sector_name
         if st.session_state.get("sector_map_focus"):
@@ -207,34 +206,16 @@ def render(raw: pd.DataFrame):
         col.metric(f"Tham chiếu · {label}", _fmt_pct(bench))
         col.caption(source)
 
-    view = metrics.copy().sort_values(rs_col, ascending=False, na_position="last")
-    # Tóm tắt nhanh: dùng cùng khung thời gian, bổ sung ngữ cảnh độ rộng để tránh chỉ nhìn lợi suất.
-    st.subheader("Sức mạnh ngành — Tổng quan nhanh")
-    st.caption(f"Đang xem khung **{period}**. Xếp hạng theo RS ngành; độ rộng và tỷ lệ trên MA20 phản ánh trạng thái các cổ phiếu ở phiên gần nhất.")
-    overview = view[["Nhóm ngành", perf_col, rs_col, "Độ rộng tăng giá (%)", "Trên MA20 (%)"]].copy()
-    overview["Xu hướng"] = np.select(
-        [overview[rs_col].notna() & overview["Độ rộng tăng giá (%)"].notna() & (overview[rs_col] > 0) & (overview["Độ rộng tăng giá (%)"] >= 55),
-         overview[rs_col].notna() & (overview[rs_col] > 0),
-         overview[rs_col].notna() & (overview[rs_col] < 0)],
-        ["Mạnh, có độ rộng", "Mạnh tương đối", "Yếu tương đối"], default="Chưa đủ dữ liệu")
-    overview = overview.rename(columns={
-        perf_col: f"Hiệu suất {period}", rs_col: f"RS {period} (điểm %)",
-        "Độ rộng tăng giá (%)": "Mã tăng phiên gần nhất (%)",
-    })
-    st.dataframe(overview, hide_index=True, use_container_width=True, column_config={
-        f"Hiệu suất {period}": st.column_config.NumberColumn(format="%+.2f%%"),
-        f"RS {period} (điểm %)": st.column_config.NumberColumn(format="%+.2f"),
-        "Mã tăng phiên gần nhất (%)": st.column_config.NumberColumn(format="%.1f%%"),
-        "Trên MA20 (%)": st.column_config.NumberColumn(format="%.1f%%"),
-    })
-
-    st.subheader("Xếp hạng ngành — Chi tiết chỉ số")
+    period = st.segmented_control("Khung xếp hạng", list(PERIODS), default="1 tháng", key="sector_period") or "1 tháng"
+    rs_col = f"RS {period} (điểm %) "
+    perf_col = f"Hiệu suất {period} (%)"
+    view = metrics.copy()
+    view = view.sort_values(rs_col, ascending=False, na_position="last")
+    st.subheader("Xếp hạng ngành")
     st.caption("RS ngành = hiệu suất bình quân đều các mã trong ngành trừ hiệu suất tham chiếu cùng kỳ. Các ngành có ít mã hợp lệ cần được diễn giải thận trọng.")
-    detailed = view[["Nhóm ngành", "Số mã có dữ liệu", perf_col, rs_col, "Độ rộng tăng giá (%)", "Trên MA20 (%)", "GTGD so TB20 (%)"]].copy()
-    detailed["Trạng thái"] = overview.set_index("Nhóm ngành").reindex(detailed["Nhóm ngành"])["Xu hướng"].to_numpy()
-    show = detailed.rename(columns={
+    show = view[["Nhóm ngành", "Số mã có dữ liệu", perf_col, rs_col, "Độ rộng tăng giá (%)", "Trên MA20 (%)", "GTGD so TB20 (%)", "Trạng thái"]].rename(columns={
         perf_col: f"Hiệu suất {period}", rs_col: f"RS {period} (điểm %)",
-        "Độ rộng tăng giá (%)": "Mã tăng phiên gần nhất (%)",
+        "Độ rộng tăng giá (%)": "Mã tăng phiên gần nhất (%)", "Trên MA20 (%)": "Trên MA20 (%)",
         "GTGD so TB20 (%)": "GTGD / TB20 (%)"})
     st.dataframe(show, hide_index=True, use_container_width=True, column_config={
         f"Hiệu suất {period}": st.column_config.NumberColumn(format="%+.2f%%"),
