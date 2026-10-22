@@ -33,6 +33,7 @@ PRICE = COLS[2:6]
 VOL = COLS[6]
 CLOSE_TIME = (15, 10)          # sau 15:10 coi như đã đóng cửa mọi sàn (HOSE/HNX/UPCOM)
 RATE_WAIT = 60                 # giây chờ khi nguồn báo giới hạn tần suất
+INDEX_SYMS = {"VNINDEX"}       # chỉ số: giữ nguyên điểm số (không chia 1000 như giá cổ phiếu)
 
 
 class Fatal(Exception):
@@ -68,9 +69,18 @@ def normalize(raw: pd.DataFrame, sym: str) -> pd.DataFrame:
     out = out[(out[PRICE] > 0).all(axis=1)]
     if out.empty:
         return empty
-    if out["Giá đóng cửa"].median() > 1000:      # nguồn trả đồng đầy đủ -> đổi sang nghìn đồng như file CafeF
+    if sym.upper() not in INDEX_SYMS and out["Giá đóng cửa"].median() > 1000:      # nguồn trả đồng đầy đủ -> đổi sang nghìn đồng như file CafeF
         out[PRICE] = out[PRICE] / 1000.0
     return out.drop_duplicates("Ngày", keep="last").sort_values("Ngày").reset_index(drop=True)[COLS]
+
+
+def _accessors(market, sym: str):
+    """Chỉ số thử đường lấy riêng của chỉ số (nếu thư viện có) rồi mới tới đường của cổ phiếu."""
+    acc = []
+    if sym.upper() in INDEX_SYMS and hasattr(market, "index"):
+        acc.append(lambda: market.index(sym))
+    acc.append(lambda: market.equity(sym))
+    return acc
 
 
 def fetch_one(market, sym: str, start: str, end: str, sources: tuple, accept_empty: bool):
@@ -79,7 +89,17 @@ def fetch_one(market, sym: str, start: str, end: str, sources: tuple, accept_emp
     for src in sources:
         for attempt in range(3):
             try:
-                raw = market.equity(sym).ohlcv(start=start, end=end, source=src)
+                raw, err = None, None
+                for make in _accessors(market, sym):
+                    try:
+                        raw = make().ohlcv(start=start, end=end, source=src)
+                        break
+                    except Exception as e2:  # noqa: BLE001
+                        if _is_fatal(e2) or _is_rate(e2):
+                            raise
+                        err = e2
+                if raw is None:
+                    raise err
                 df = normalize(raw, sym)
                 if df.empty:
                     if accept_empty:
