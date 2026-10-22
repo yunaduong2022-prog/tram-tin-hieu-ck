@@ -643,6 +643,8 @@ def card_css(dark: bool) -> str:
 .wb-lab small{font-size:11.5px;font-weight:500;color:var(--muted);margin-left:8px}
 .wb-zone{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .wb-zone b{font-size:15px;color:var(--txt2)}
+.wb-codebig{font-size:26px;font-weight:800;letter-spacing:.5px;color:var(--txt2);line-height:1}
+.wb-zlab{font-size:14.5px;font-weight:500;color:var(--txt);margin-right:6px}
 .wb-go,.wb-wait{display:inline-block;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
 .wb-go{background:var(--tag-green-bg);color:var(--tag-green-fg)}
 .wb-wait{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
@@ -759,8 +761,8 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
     html += (
         '<div class="wb-box">'
-        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab"><b>{esc(str(r["Mã"]))}</b> Vùng mua</span>'
-        f'<span class="wb-zone"><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b>{badge}</span></div>'
+        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab wb-codebig">{esc(str(r["Mã"]))}</span>'
+        f'<span class="wb-zone"><span><span class="wb-zlab">Vùng mua:</span><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b></span>{badge}</span></div>'
         f'<div class="wb-sub">{esc(_sentence(r["Ghi chú hành động"]))}</div></div>'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
         f'<b class="wb-red">{px(r["Cắt lỗ"])}{sg(r["Cắt lỗ %"])}</b></div></div>'
