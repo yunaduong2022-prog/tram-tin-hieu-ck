@@ -12,8 +12,9 @@ VN30_DU_PHONG = ["ACB", "BCM", "BID", "BSR", "CTG", "FPT", "GAS", "GVR", "HDB", 
 
 GROUPS: dict[str, list[str]] = {
     "Dầu khí": ["GAS", "PLX", "BSR", "PVD", "PVS", "PVC", "OIL", "PGD"],
-    "Cảng biển": ["MVN", "PHP", "GMD", "DXP", "HAH", "VSC", "SGP", "CDN", "TCL"],
-    "Vận tải": ["PVT", "PVP", "VOS", "VTO", "VIP", "GSP", "SAS", "VJC", "HVN", "SCS"],
+    "Cảng biển": ["MVN", "PHP", "GMD", "DXP", "VSC", "SGP", "CDN", "TCL"],
+    "Vận tải biển hàng hóa": ["HAH", "VTO", "VOS", "PVT", "PVP", "VIP", "PPH"],
+    "Vận tải": ["GSP", "SAS", "VJC", "HVN", "SCS"],
     "Cao su": ["GVR", "DRI", "PHR", "DPR", "TRC", "BRC", "HRC", "DRC", "CSM", "SRC"],
     "Phân bón": ["DPM", "DCM", "BFC", "LAS", "SFG", "VAF", "CSV", "DDV"],
     "Bán lẻ": ["MWG", "FRT", "PNJ", "DGW", "PET"],
@@ -21,24 +22,36 @@ GROUPS: dict[str, list[str]] = {
                   "SSB", "EIB", "KLB", "NAB", "VAB", "NVB", "ABB", "BVB", "EVF"],
     "Chứng khoán": ["SSI", "VND", "VCI", "HCM", "VIX", "SHS", "MBS", "FTS", "BSI", "CTS", "ORS", "TCX", "AGR", "TVS", "VDS",
                     "VFS", "APG", "DSC", "BMS", "BVS", "IVS", "SBS", "PSI", "VPX", "LPS", "APS", "DSE", "AAS", "VIG", "VCK"],
+    "Bảo hiểm": ["BVH"],
     "Bất động sản": ["VHM", "VIC", "VRE", "NVL", "KDH", "DXG", "DIG", "CEO", "PDR", "NLG", "KBC", "IDC", "SZC", "BCM", "TCH",
                      "HDG", "AGG", "IJC", "HTN", "NTL", "HQC", "DXS", "SGR", "HHS", "HPX", "HDC", "LDG", "NBB", "SCR", "QCG",
                      "VPI", "CRE", "VGC"],
-    "Khoáng sản": ["MSR", "KSV", "BMC", "DHM", "KSB", "NNC", "BKC"],
+    "Khai khoáng": ["MSR", "KSV", "BMC", "DHM", "KSB", "NNC", "BKC"],
     "Thép": ["HPG", "HSG", "NKG", "SMC", "TLH", "POM", "VGS", "TVN", "HMC"],
     "Thủy sản": ["VHC", "ANV", "FMC", "IDI", "MPC", "CMX", "ACL", "ABT"],
     "Dược phẩm": ["DCL", "DHG", "IMP", "TRA", "DBD"],
-    "Thực phẩm - Đồ uống": ["MCH"],
+    "Nông nghiệp & thực phẩm": ["MCH", "MSN", "VNM", "CLX"],
+    "Thịt & chăn nuôi": ["BAF"],
+    "Đường": ["SBT", "QNS"],
+    "Đồ uống": ["SAB", "SMB"],
+    "May mặc": ["VGT"],
+    "Công nghệ": ["FPT"],
+    "Xây dựng": ["CDC", "VCG"],
+    "Vật liệu xây dựng": ["HT1", "VGC", "NTP", "DHA", "VLB"],
+    "Hàng công nghiệp": ["DHC", "HHP", "VEA"],
+    "Hàng tiêu dùng": ["TLG"],
+    "Điện": ["NT2"],
+    "Nhựa": ["NTP"],
     "Hạ tầng giao thông": ["CII"],
-    "Vật liệu xây dựng": ["HT1", "VGC"],
+    "Đa ngành": ["VGC", "SAM"],
 }
 
 # Danh mục cũ của người dùng (giữ lại để chọn khi cần)
 OLD_LIST = ("SAS,GMD,KSV,MWG,MSN,MSB,NTP,TCB,BVH,BSR,VPB,TLG,MVN,MCH,HDB,PVT,VGT,NVB,BAF,DCM,FRT,PHP,ABB,PVS,HCM,DGW,VEA,MSR,"
-            "BFC,VHM,CTG,VPL,SHB,BID,VRE,LPB,SSB,GVR,VNM,SSI,HPG,VCB,VIB,FPT,VJC,ACB,SAB,STB,GAS,TCX,MBB,VIC,CTS,BSI,SBS,TVS,"
+            "BFC,VHM,CTG,SHB,BID,VRE,LPB,SSB,GVR,VNM,SSI,HPG,VCB,VIB,FPT,VJC,ACB,SAB,STB,GAS,TCX,MBB,VIC,CTS,BSI,SBS,TVS,"
             "FTS,PSI,AAS,VIX,SHS,APG,VCI,AGR,ORS,DSC,BMS,BVS,IVS,VDS,VFS,VIG,VND,VPX,LPS,MBS,VCK,APS,DSE,TPB,OCB,KLB,EVF,NAB,"
             "VAB,EIB,KDH,AGG,IJC,HDG,HTN,NTL,HQC,TCH,DXS,SGR,HHS,HPX,NLG,VCG,CEO,CLX,HDC,LDG,NBB,SAM,NVL,DIG,PDR,DXG,QCG,SCR,"
-            "VPI,CRE,DCL,CDC,BKC,QNS,PSS,PVP,VTO,DHA,VOS,SMB,PPH,HHP,DHC,VLB,TRC,DRI").split(",")
+            "VPI,CRE,DCL,CDC,BKC,QNS,PVP,VTO,DHA,VOS,SMB,PPH,HHP,DHC,VLB,TRC,DRI").split(",")
 
 VN30 = "VN30"
 OLD = "Danh mục cũ của bạn"

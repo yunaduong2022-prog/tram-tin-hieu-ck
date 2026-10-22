@@ -44,6 +44,12 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df.dropna(subset=["Ngày", "Mã", "Giá trị mua", "Giá trị bán"])
     df = df[df["Mã"].ne("")]
+    # Nhóm ngành trống/"Khác" -> lấy theo rổ mã trong watchlist.py (nhóm đầu tiên không phải VN30)
+    import watchlist as WL
+    _grp = {k: next((g for g in v if g != WL.VN30), None) for k, v in WL.membership(WL.VN30_DU_PHONG).items()}
+    _mapped = df["Mã"].map(_grp)
+    _blank = df["Nhóm ngành"].isna() | df["Nhóm ngành"].astype(str).str.strip().isin(["", "Khác", "nan"])
+    df["Nhóm ngành"] = df["Nhóm ngành"].where(~_blank, _mapped).fillna("Khác")
     df["Mua/bán ròng"] = df["Giá trị mua"].fillna(0) - df["Giá trị bán"].fillna(0)
     df = df.sort_values(["Mã", "Ngày"])
     df["Lũy kế 5 phiên"] = df.groupby("Mã")["Mua/bán ròng"].transform(lambda s: s.rolling(5, min_periods=1).sum())
