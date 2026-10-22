@@ -50,6 +50,8 @@ _CSS = """
 .sc.t-risk{--sc-c:#C8506A;--sc-bg:#33202A}
 .sc.t-over{--sc-c:#F5B942;--sc-bg:#3A2E12;--sc-fg:#3A2E12}
 .sc.t-recover{--sc-c:#8B6FE0;--sc-bg:#2A2347}
+.sc.t-surge{--sc-c:#1FA97A;--sc-bg:#12332B}
+.sc.t-plunge{--sc-c:#D92D4A;--sc-bg:#3A1A22}
 .sc-foot{margin:-6px 16px 14px;font-size:12px;color:var(--muted);text-align:right;font-style:italic}
 .sc-why .sc-hint{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 """
@@ -59,6 +61,8 @@ TONES = {
     "sell":    {"label": "BÁN / CHỐT LỜI", "hint": "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."},
     "risk":    {"label": "THEO DÕI SUY YẾU", "hint": "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."},
     "over":    {"label": "KHÔNG MUA ĐUỔI", "hint": "Cảnh báo không mua đuổi (Overbought)."},
+    "surge":   {"label": "TĂNG MẠNH", "hint": "Giá tăng mạnh trong phiên. Không mua đuổi: chờ nhịp lùi về vùng hỗ trợ hoặc xem thẻ ở mục Chờ mua."},
+    "plunge":  {"label": "GIẢM MẠNH", "hint": "Giá giảm mạnh trong phiên. Không bắt đáy vội: chờ giá dừng giảm, khối lượng cạn và lấy lại hỗ trợ."},
     "recover": {"label": "ĐANG PHỤC HỒI", "hint": "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng)."},
 }
 

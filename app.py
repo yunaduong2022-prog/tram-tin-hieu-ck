@@ -784,8 +784,6 @@ def mtf_block(res: dict) -> str:
 KQ_TERMS = {"Tất cả": None, "Ngắn hạn": "Trend_NganHan", "Trung hạn": "Trend_TrungHan", "Dài hạn": "Trend_DaiHan"}
 KQ_SORTS = ["Mã A → Z", "Mã Z → A", "Score cao → thấp", "Gần hỗ trợ nhất", "Gần kháng cự nhất"]
 KQ_PER_PAGE = {"Thẻ": 12, "Bảng": 50}
-SWING_STRONG_PCT = 30.0      # ngưỡng của mục Tăng mạnh (tăng từ đáy) và Giảm mạnh (giảm từ đỉnh), đơn vị %
-KQ_SORTS_SWING = ["Biên độ lớn → nhỏ", "Biên độ nhỏ → lớn"] + KQ_SORTS
 
 
 def kq_apply(a: pd.DataFrame, query: str, term: str, sort_by: str, _frames=None, data_key: str = "") -> pd.DataFrame:
@@ -799,9 +797,7 @@ def kq_apply(a: pd.DataFrame, query: str, term: str, sort_by: str, _frames=None,
     col = KQ_TERMS.get(term)
     if col and col in b.columns:
         b = b[b[col] == "TĂNG"]
-    if sort_by in ("Biên độ lớn → nhỏ", "Biên độ nhỏ → lớn") and "Swing_%" in b.columns:
-        b = b.sort_values("Swing_%", ascending=sort_by == "Biên độ nhỏ → lớn", kind="stable", na_position="last")
-    elif sort_by == "Mã Z → A":
+    if sort_by == "Mã Z → A":
         b = b.sort_values("Mã", key=lambda x: x.astype(str).str.upper(), ascending=False)
     elif sort_by == "Score cao → thấp" and "Score" in b.columns:
         b = b.sort_values("Score", ascending=False, kind="stable")
@@ -838,13 +834,11 @@ def kq_stat_card(label: str, value, sub: str, up: bool = False) -> str:
             f'<div class="kq-v{" up" if up else ""}">{value}</div><div class="kq-s">{htmllib.escape(sub)}</div></div>')
 
 
-def kq_table(b: pd.DataFrame, show_swing: bool = False):
+def kq_table(b: pd.DataFrame):
     """Bảng dữ liệu thật từ kết quả lọc; cột nào dự án không có thì bỏ qua, ô thiếu hiện —."""
     names = {"Mã": "Mã CK", "Giá": "Giá", "Chg_%": "Thay đổi (%)", "RS vs VNI": "RS",
              "MA10": "MA10", "MA20": "MA20", "MA50": "MA50", "MA100": "MA100", "MA200": "MA200",
              "Trend_NganHan": "Ngắn hạn", "Trend_TrungHan": "Trung hạn", "Trend_DaiHan": "Dài hạn"}
-    if show_swing:      # mục Tăng mạnh / Giảm mạnh: thêm cột nhịp giá (đúng dòng chữ trên thẻ)
-        names = {**names, "Swing_text": "Nhịp giá"}
     t = b[[c for c in names if c in b.columns]].rename(columns=names).copy()
     trend_cols = [c for c in ("Ngắn hạn", "Trung hạn", "Dài hạn") if c in t.columns]
     for c in trend_cols:
@@ -864,8 +858,8 @@ def kq_table(b: pd.DataFrame, show_swing: bool = False):
     return sty
 
 
-def _kq_reset_page(k: str = "kq"):
-    st.session_state[f"{k}_page"] = 1
+def _kq_reset_page():
+    st.session_state["kq_page"] = 1
 
 
 def page_filter():
@@ -874,25 +868,15 @@ def page_filter():
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua - Cắt lỗ - Mục tiêu (wb-*)
     st.caption("Giữ nguyên các điều kiện lọc hiện tại. Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
     f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
-    render_filter_results(f)
-
-
-def render_filter_results(f: pd.DataFrame, k: str = "kq", sorts=None, subheader: str = "📋 Kết quả lọc",
-                          empty_msg: str = "Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.",
-                          show_swing: bool = False):
-    """Khối Kết quả lọc dùng chung: thẻ thống kê, tìm mã, lọc thời hạn, sắp xếp, phân trang, kiểu Thẻ / Bảng.
-    f = danh sách mã đã lọc (mỗi mã một dòng); k = tiền tố key widget để mỗi mục có trạng thái riêng.
-    Dùng cho Bộ lọc Realtime, Tăng mạnh và Giảm mạnh để thẻ giống hệt nhau."""
-    sorts = sorts or KQ_SORTS
     st.divider()
-    st.subheader(subheader)
+    st.subheader("📋 Kết quả lọc")
     # ---- Tập B = Tập A + tìm mã + lọc thời hạn + sắp xếp (đọc trạng thái từ session_state để thẻ thống kê hiện đúng ngay lượt này)
     ss = st.session_state
-    b = kq_apply(f, ss.get(f"{k}_search", ""), ss.get(f"{k}_term") or "Tất cả", ss.get(f"{k}_sort", sorts[0]), frames, DATA_KEY)
-    view = ss.get(f"{k}_view") or "Thẻ"
+    b = kq_apply(f, ss.get("kq_search", ""), ss.get("kq_term") or "Tất cả", ss.get("kq_sort", KQ_SORTS[0]), frames, DATA_KEY)
+    view = ss.get("kq_view") or "Thẻ"
     per_page = KQ_PER_PAGE.get(view, 12)
     n_pages = max(1, math.ceil(len(b) / per_page))
-    ss[f"{k}_page"] = min(max(int(ss.get(f"{k}_page", 1) or 1), 1), n_pages)      # gán TRƯỚC khi tạo widget nên không gây StreamlitWidgetAlreadyInstantiatedError
+    ss["kq_page"] = min(max(int(ss.get("kq_page", 1) or 1), 1), n_pages)      # gán TRƯỚC khi tạo widget nên không gây StreamlitWidgetAlreadyInstantiatedError
     cnt = lambda col: int((f[col] == "TĂNG").sum()) if col in f.columns else 0   # thẻ xu hướng đếm trên Tập A, không đổi theo ô tìm kiếm / tab
     sc = st.columns(4)
     sc[0].markdown(kq_stat_card("Tổng số mã", f"{len(f)}", f"Đang hiển thị {len(b)} mã"), unsafe_allow_html=True)
@@ -900,28 +884,28 @@ def render_filter_results(f: pd.DataFrame, k: str = "kq", sorts=None, subheader:
     sc[2].markdown(kq_stat_card("Trung hạn · Tăng", cnt("Trend_TrungHan"), "MA20 > MA50 > MA100", True), unsafe_allow_html=True)
     sc[3].markdown(kq_stat_card("Dài hạn · Tăng", cnt("Trend_DaiHan"), "MA50 > MA100 > MA200", True), unsafe_allow_html=True)
     if f.empty:
-        st.info(empty_msg)
+        st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
     t1, t2, t3 = st.columns([2, 3.6, 1.8])
-    t1.text_input("Tìm mã", placeholder="🔍 Tìm mã...", key=f"{k}_search", label_visibility="collapsed", on_change=_kq_reset_page, args=(k,))
+    t1.text_input("Tìm mã", placeholder="🔍 Tìm mã...", key="kq_search", label_visibility="collapsed", on_change=_kq_reset_page)
     with t2:
-        st.segmented_control("Lọc theo thời hạn", list(KQ_TERMS), default="Tất cả", key=f"{k}_term", label_visibility="collapsed", on_change=_kq_reset_page, args=(k,))
-    t3.selectbox("Sắp xếp", sorts, key=f"{k}_sort", label_visibility="collapsed", on_change=_kq_reset_page, args=(k,))
+        st.segmented_control("Lọc theo thời hạn", list(KQ_TERMS), default="Tất cả", key="kq_term", label_visibility="collapsed", on_change=_kq_reset_page)
+    t3.selectbox("Sắp xếp", KQ_SORTS, key="kq_sort", label_visibility="collapsed", on_change=_kq_reset_page)
     v1, v2, v3 = st.columns([2, 3.6, 1.8])
     with v1:
-        st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], default="Thẻ", key=f"{k}_view", label_visibility="collapsed", on_change=_kq_reset_page, args=(k,))
+        st.segmented_control("Kiểu hiển thị", ["Thẻ", "Bảng"], default="Thẻ", key="kq_view", label_visibility="collapsed", on_change=_kq_reset_page)
     with v3:
-        st.number_input("Trang", min_value=1, max_value=n_pages, step=1, key=f"{k}_page", label_visibility="collapsed", disabled=n_pages == 1)
-    lo, hi = (ss[f"{k}_page"] - 1) * per_page, min(ss[f"{k}_page"] * per_page, len(b))
+        st.number_input("Trang", min_value=1, max_value=n_pages, step=1, key="kq_page", label_visibility="collapsed", disabled=n_pages == 1)
+    lo, hi = (ss["kq_page"] - 1) * per_page, min(ss["kq_page"] * per_page, len(b))
     v2.caption(f"Hiển thị {lo + 1 if len(b) else 0}–{hi} / {len(b)} mã · trang {ss['kq_page']}/{n_pages}")
     if b.empty:
         st.info("Không có mã nào khớp tìm kiếm / bộ lọc thời hạn. Chọn \"Tất cả\" hoặc xóa từ khóa để xem lại toàn bộ kết quả lọc.")
         return
     page_df = b.iloc[lo:hi]
     if view == "Bảng":
-        st.dataframe(kq_table(page_df, show_swing), hide_index=True, use_container_width=True)
+        st.dataframe(kq_table(page_df), hide_index=True, use_container_width=True)
         return
-    show_mtf = st.toggle("Hiện phân tích đa khung (D · W · M) và chiến lược trong từng thẻ", value=True, key=f"{k}_show_mtf")
+    show_mtf = st.toggle("Hiện phân tích đa khung (D · W · M) và chiến lược trong từng thẻ", value=True, key="show_mtf")
     # Có thể bổ sung vốn hóa thực tế qua data/stock_metadata.csv (cột Mã,Vốn hóa TT; đơn vị tỷ đồng).
     cap_map = {}
     if os.path.exists("data/stock_metadata.csv"):
@@ -946,7 +930,7 @@ def render_filter_results(f: pd.DataFrame, k: str = "kq", sorts=None, subheader:
         except Exception: pass
     apply_manual_overrides(fund_map, cap_map)
     if f.empty:
-        st.info(empty_msg)
+        st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
     try:     # trạng thái chờ mua / cảnh báo của từng mã -> tag ở góc phải thẻ
         _wb_map = _wb_table().set_index("Mã")[["Trạng thái", "Lý do"]].to_dict("index")
@@ -1012,44 +996,12 @@ def render_filter_results(f: pd.DataFrame, k: str = "kq", sorts=None, subheader:
                         + f'<div class="tag-container">' + chips_html + '</div>' + div_html + mtf_html + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
-                    if st.button("📊 Xem biểu đồ", key=f"chart_{k}_{code}", use_container_width=True):
+                    if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
                         st.session_state["selected_code"] = code
                         # các selectbox có key riêng giữ giá trị cũ -> đồng bộ luôn để mở đúng mã vừa bấm
                         for _k in ("mtf_code", "tab_code"):
                             st.session_state[_k] = code
                         NAV.goto("Cổ phiếu", "Tổng quát")
-
-
-# ------------------------------------------------------------------ TRANG: TĂNG MẠNH / GIẢM MẠNH (lọc từ toàn bộ rổ của Bộ lọc Realtime)
-def _strong_swing_set(kind: str) -> pd.DataFrame:
-    """Toàn bộ mã trong rổ Bộ lọc Realtime (chưa áp bộ lọc nâng cao nào) mà nhịp giá hiện tại là `kind` ('up' / 'down')
-    và biên độ >= SWING_STRONG_PCT. Dùng đúng cột Swing_kind / Swing_% mà thẻ hiển thị "Đã tăng X% từ đáy" / "Đã giảm X% từ đỉnh"."""
-    d = res_df.sort_values("Score", ascending=False).drop_duplicates("Mã")
-    pct = pd.to_numeric(d["Swing_%"], errors="coerce")
-    return d[(d["Swing_kind"] == kind) & (pct >= SWING_STRONG_PCT)].reset_index(drop=True)
-
-
-def page_strong_up():
-    st.title("🚀 Tăng mạnh")
-    header()
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
-    st.caption(f"Các mã trong **Bộ lọc Realtime** đã **tăng từ {SWING_STRONG_PCT:.0f}% trở lên tính từ đáy** "
-               "(đúng số \"Đã tăng X% từ đáy\" trên thẻ). Mục này chỉ lọc lại thẻ từ Bộ lọc Realtime, không thay đổi danh sách ở đó.")
-    f = _strong_swing_set("up")
-    render_filter_results(f, k="up", sorts=KQ_SORTS_SWING, subheader=f"📋 Mã tăng ≥ {SWING_STRONG_PCT:.0f}% từ đáy",
-                          empty_msg=f"Hiện chưa có mã nào tăng từ {SWING_STRONG_PCT:.0f}% trở lên tính từ đáy.", show_swing=True)
-
-
-def page_strong_down():
-    st.title("📉 Giảm mạnh")
-    header()
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
-    st.caption(f"Các mã trong **Bộ lọc Realtime** đã **giảm từ {SWING_STRONG_PCT:.0f}% trở lên tính từ đỉnh** "
-               "(đúng số \"Đã giảm X% từ đỉnh\" trên thẻ). Mục này chỉ lọc lại thẻ từ Bộ lọc Realtime, không thay đổi danh sách ở đó.")
-    f = _strong_swing_set("down")
-    render_filter_results(f, k="dn", sorts=KQ_SORTS_SWING, subheader=f"📋 Mã giảm ≥ {SWING_STRONG_PCT:.0f}% từ đỉnh",
-                          empty_msg=f"Hiện chưa có mã nào giảm từ {SWING_STRONG_PCT:.0f}% trở lên tính từ đỉnh.", show_swing=True)
-
 
 # ------------------------------------------------------------------ TRANG: CỔ PHIẾU CHỜ MUA TRONG TUẦN
 @st.cache_data(show_spinner="Đang nhận diện trạng thái chờ mua cho cả rổ...")
@@ -1299,6 +1251,74 @@ def page_watchlist():
         NAV.goto("Cổ phiếu", "Tổng quát")
 
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
+
+
+def _move_page(kind: str):
+    """Tăng mạnh / Giảm mạnh: mã biến động giá lớn nhất ở phiên cuối, lọc theo ngưỡng % do người dùng chọn."""
+    up = kind == "surge"
+    st.title("🚀 Tăng mạnh" if up else "💥 Giảm mạnh")
+    header()
+    st.caption(("Các mã **tăng mạnh** ở phiên cuối (xếp theo % tăng giảm dần). " if up else
+                "Các mã **giảm mạnh** ở phiên cuối (xếp theo % giảm sâu nhất trước). ") +
+               "Ngưỡng có thể chỉnh bên dưới. Nên kết hợp với khối lượng và trạng thái ở mục **Chờ mua**; "
+               "chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    t = _wb_table().copy()
+    t = t[t["Chg %"].notna()]
+    vol = res_df.set_index("Mã")["Vol/Avg10"] if "Vol/Avg10" in res_df.columns else None
+    t["Vol/Avg10"] = t["Mã"].map(vol) if vol is not None else np.nan
+    c1, c2, c3 = st.columns([1.4, 1.2, 3])
+    thr = c1.slider("Ngưỡng % thay đổi giá", 1.0, 7.0, 4.0, 0.5, key=f"mv_thr_{kind}")
+    vmin = c2.selectbox("Khối lượng", ["Tất cả", "≥ 1.0× TB10", "≥ 1.5× TB10", "≥ 2.0× TB10"], key=f"mv_vol_{kind}")
+    d = t[t["Chg %"] >= thr] if up else t[t["Chg %"] <= -thr]
+    if vmin != "Tất cả":
+        d = d[d["Vol/Avg10"] >= float(vmin.split("≥ ")[1].split("×")[0])]
+    inds = c3.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                          key=f"mv_ind_{kind}", placeholder="Tất cả nhóm")
+    q = st.text_input("Tìm mã", "", key=f"mv_q_{kind}", placeholder="🔍 Tìm mã...").upper().strip()
+    if q:
+        d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+    if inds:
+        d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+    d = d.sort_values("Chg %", ascending=not up)
+    st.metric("Tổng số mã", len(d))
+    if d.empty:
+        st.info("Không có mã nào đạt ngưỡng.")
+        return
+    _, _fm = _wb_meta_maps(WY_KEY)
+    _ma = {c_: _wb_ma_of(c_) for c_ in d["Mã"]}
+    d = d.assign(**{"MA20": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[0]),
+                    "MA20 %": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[1]),
+                    "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
+                    "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
+    def _why(r):
+        v = r.get("Vol/Avg10")
+        vt = f", khối lượng {float(v):.1f} lần trung bình 10 phiên" if pd.notna(v) else ""
+        return f'{"Tăng" if up else "Giảm"} {abs(float(r["Chg %"])):.2f}% trong phiên gần nhất{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
+    d = d.assign(**{"Lý do": d.apply(_why, axis=1)})
+    _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
+                       f'style="color:{"var(--green)" if up else "var(--red)"};font-weight:600;text-decoration:none;cursor:pointer">'
+                       f'{htmllib.escape(str(c_))}</a>' for c_ in d["Mã"])
+    st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+                f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
+                f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind), unsafe_allow_html=True)
+    _sell_jump_js()
+    with st.expander("Xem dạng bảng"):
+        st.dataframe(d[["Mã", "Giá", "Chg %", "Vol/Avg10", "Score", "RS20", "Nhóm", "Danh sách"]].reset_index(drop=True), hide_index=True,
+                     column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                    "Chg %": st.column_config.NumberColumn(format="%.2f"),
+                                    "Vol/Avg10": st.column_config.NumberColumn("Vol / TB10", format="%.2f"),
+                                    "Score": st.column_config.NumberColumn(format="%.1f"),
+                                    "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
+                     **_STRETCH_DF)
+
+
+def page_surge():
+    _move_page("surge")
+
+
+def page_plunge():
+    _move_page("plunge")
 
 
 def page_recovering():
@@ -2092,9 +2112,9 @@ def route():
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Bộ lọc Realtime": return page_filter()
-        if sub == "Tăng mạnh": return page_strong_up()
-        if sub == "Giảm mạnh": return page_strong_down()
         if sub == "Chờ mua": return page_wait_buy()
+        if sub == "Tăng mạnh": return page_surge()
+        if sub == "Giảm mạnh": return page_plunge()
         if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
