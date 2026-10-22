@@ -605,6 +605,28 @@ def sort_group(d: pd.DataFrame, group: str) -> pd.DataFrame:
             .drop(columns="_o"))
 
 
+def ladder_html(code, price, zone_lo, zone_hi, go, sl, sl_pct, tp1, tp1_pct, tp1_tag, tp2, tp2_pct, tp2_tag, note, foot, extra="") -> str:
+    """Khung Vùng mua dạng THANG GIÁ: Mục tiêu 2 > Mục tiêu 1 > Vùng mua (nổi bật) > Cắt lỗ, đúng thứ tự giá từ cao xuống thấp.
+    Dùng chung cho thẻ Chờ mua / Mua ngay / Watchlist và khối đa khung ở Bộ lọc Realtime. Các % tính so với `price`.
+    tp1_tag / tp2_tag: HTML nhỏ cạnh nhãn mục tiêu (vd. R:R); tp2 = None thì bỏ dòng Mục tiêu 2. Viết liền một dòng cho Markdown."""
+    esc = _html.escape
+    px = lambda x: "-" if x is None or pd.isna(x) else f"{round(float(x), 1):,.1f}"
+    sg = lambda p: "" if p is None or pd.isna(p) else f" ({float(p):+.1f}%)"
+    badge = '<span class="wb-brk go">[✓ Vào được ngay]</span>' if go else '<span class="wb-brk wait">[⏳ Chờ mua]</span>'
+    rows = ""
+    if tp2 is not None and not pd.isna(tp2):
+        rows += f'<div class="wb-lr"><span class="wb-lab">Mục tiêu 2{tp2_tag}</span><b class="wb-grn">{px(tp2)}{sg(tp2_pct)}</b></div>'
+    rows += f'<div class="wb-lr"><span class="wb-lab">Mục tiêu 1{tp1_tag}</span><b class="wb-grn">{px(tp1)}{sg(tp1_pct)}</b></div>'
+    return ('<div class="wb-box wb-ladder">'
+            f'<div class="wb-lh"><span class="wb-codebig">{esc(str(code))}</span>'
+            f'<span class="wb-lhr"><span class="wb-lpx">Giá<b>{px(price)}</b></span>{badge}</span></div>'
+            + rows +
+            f'<div class="wb-lr wb-lz{"" if go else " wait"}"><span class="wb-lab">Vùng mua</span><span class="wb-zv">{px(zone_lo)} – {px(zone_hi)}</span></div>'
+            f'<div class="wb-lr"><span class="wb-lab">Cắt lỗ nếu sai</span><b class="wb-red">{px(sl)}{sg(sl_pct)}</b></div>'
+            f'<div class="wb-lnote">{esc(note)}</div>{extra}'
+            f'<div class="wb-foot" style="margin-top:12px;text-align:right">{esc(foot)}</div></div>')
+
+
 # ------------------------------------------------------------------ GIAO DIỆN THẺ (HTML/CSS, ăn theo biến màu của theme.py)
 _BADGE = {G1: "g", G2: "a", G3: "n"}
 
@@ -650,6 +672,25 @@ def card_css(dark: bool) -> str:
 .wb-wait{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .wb-sub{font-size:12.5px;line-height:1.5;color:var(--muted);margin-top:7px}
 .wb-red{color:var(--red);font-size:15px}.wb-grn{color:var(--green);font-size:15px}
+.wb-ladder{padding:16px 18px 14px}
+.wb-lh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.wb-lh .wb-codebig{font-size:30px}
+.wb-lhr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.wb-lpx{font-size:14px;color:var(--muted)}.wb-lpx b{font-size:17px;color:var(--txt2);margin-left:4px}
+.wb-lr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 2px}
+.wb-lr+.wb-lr{border-top:1px dashed var(--line)}
+.wb-lr .wb-lab{font-size:15px}
+.wb-lr b{font-size:17px;font-weight:800}
+.wb-lz{margin:6px 0;padding:12px 14px;border-radius:12px;background:var(--line2);border-left:4px solid var(--green)}
+.wb-lr.wb-lz{border-top:none}
+.wb-brk{font-size:13.5px;font-weight:800;white-space:nowrap;background:none;padding:0}
+.wb-brk.go{color:var(--green)}.wb-brk.wait{color:#F5B942}
+.wb-lab small.wb-go{background:var(--tag-green-bg);color:var(--tag-green-fg);font-size:11.5px;font-weight:700}
+.wb-lab small.wb-wait{background:var(--tag-amber-bg);color:var(--tag-amber-fg);font-size:11.5px;font-weight:700}
+.wb-lz.wait{border-left-color:#F5B942}
+.wb-lz .wb-lab{font-size:16px;font-weight:700;color:var(--txt2)}
+.wb-lz .wb-zv{font-size:22px;font-weight:800;color:var(--txt2);white-space:nowrap}
+.wb-lnote{font-size:13px;line-height:1.5;color:var(--txt);opacity:.9;margin-top:10px}
 .wb-foot{font-size:11.5px;line-height:1.45;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
 /* Bảng kết quả */
 .wbt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
@@ -758,18 +799,8 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     if pd.isna(r.get("Vùng mua từ")):
         return html
     go = r.get("Hành động") == "Vào ngay"
-    badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
-    html += (
-        '<div class="wb-box">'
-        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab wb-codebig">{esc(str(r["Mã"]))}</span>'
-        f'<span class="wb-zone"><span><span class="wb-zlab">Vùng mua:</span><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b></span>{badge}</span></div>'
-        f'<div class="wb-sub">{esc(_sentence(r["Ghi chú hành động"]))}</div></div>'
-        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
-        f'<b class="wb-red">{px(r["Cắt lỗ"])}{sg(r["Cắt lỗ %"])}</b></div></div>'
-        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu 1<small>R:R 1:2</small></span>'
-        f'<b class="wb-grn">{px(r["Mục tiêu 1"])}{sg(r["Lời 1 %"])}</b></div>'
-        f'<div class="wb-line"><span class="wb-lab">Mục tiêu 2<small>R:R 1:3</small></span>'
-        f'<b class="wb-grn">{px(r["Mục tiêu 2"])}{sg(r["Lời 2 %"])}</b></div></div>'
-        f'<div class="wb-foot">{esc(foot_text)}</div>'
-        '</div>')
+    tag = lambda t: f'<small>{t}</small>'
+    html += ladder_html(r["Mã"], r.get("Giá vào"), r["Vùng mua từ"], r["Vùng mua đến"], go, r["Cắt lỗ"], r["Cắt lỗ %"],
+                        r["Mục tiêu 1"], r["Lời 1 %"], tag("R:R 1:2"), r["Mục tiêu 2"], r["Lời 2 %"], tag("R:R 1:3"),
+                        _sentence(r["Ghi chú hành động"]), foot_text)
     return html

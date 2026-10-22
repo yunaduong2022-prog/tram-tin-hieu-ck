@@ -770,24 +770,12 @@ def mtf_strategy_box(s: dict, code: str = "") -> str:
     px = lambda x: f"{x:,.1f}"
     pct = lambda x: f" ({(x / n['close'] - 1) * 100:+.1f}%)"
     go = n["close"] <= n["entry_hi"]
-    zone_badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
-    rr_badge = (f'<span class="wb-go">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>' if s["rr_value"] >= 1.8
-                else f'<span class="wb-wait">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>')
-    extra = "".join(f'<div class="wb-sub">⚠ {htmllib.escape(w)}</div>' for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
-    tp2_html = ""
-    if n.get("tp2") is not None:
-        tp2_html = (f'<div class="wb-line"><span class="wb-lab">Mục tiêu 2</span>'
-                    f'<b class="wb-grn">{px(n["tp2"])}{pct(n["tp2"])}</b></div>'
-                    + (f'<div class="wb-sub">{htmllib.escape(s["tp2_note"])}</div>' if s.get("tp2_note") else ""))
-    return ('<div class="wb-box">'
-            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab wb-codebig">{htmllib.escape(code)}</span>'
-            f'<span class="wb-zone"><span><span class="wb-zlab">Vùng mua:</span><b>{px(n["entry_lo"])} – {px(n["entry_hi"])}</b></span>{zone_badge}</span></div>'
-            f'<div class="wb-sub">{htmllib.escape(s["status"])}</div></div>'
-            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
-            f'<b class="wb-red">{px(n["sl"])}{pct(n["sl"])}</b></div></div>'
-            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu 1</span>'
-            f'<span class="wb-zone"><b class="wb-grn">{px(n["tp"])}{pct(n["tp"])}</b>{rr_badge}</span></div>{tp2_html}{extra}</div>'
-            f'<div class="wb-foot">{htmllib.escape(_min_trading())}</div></div>')
+    pc = lambda x: (x / n["close"] - 1) * 100
+    rr_cls = "wb-go" if s["rr_value"] >= 1.8 else "wb-wait"
+    rr_tag = f'<small class="{rr_cls}" style="margin-left:8px">R:R 1:{s["rr_value"]} · {s["rr_label"]}</small>'
+    notes = [s["status"]] + ["⚠ " + w for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else [])] + ([s["tp2_note"]] if s.get("tp2_note") else [])
+    return WB.ladder_html(code, n["close"], n["entry_lo"], n["entry_hi"], go, n["sl"], pc(n["sl"]), n["tp"], pc(n["tp"]), rr_tag,
+                          n.get("tp2"), pc(n["tp2"]) if n.get("tp2") is not None else None, "", " ".join(notes), _min_trading())
 
 
 def mtf_block(res: dict, code: str = "") -> str:
