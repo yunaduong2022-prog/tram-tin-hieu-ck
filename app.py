@@ -25,6 +25,7 @@ import rsi_divergence as DV
 import foreign_flow as FF
 import sector_dashboard as SD
 import market_view as MV
+import market_overview as MO
 import my_watchlist as MW
 import sell_card
 
@@ -2142,6 +2143,15 @@ def route():
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
+    if main == "Thị trường" and sub == "Tổng quan":
+        try:
+            _waiting_overview = _wb_table()
+            _buy_overview = _buy_now_table(_waiting_overview)
+            _wait_n = int(_waiting_overview["Mã"].nunique()) if "Mã" in _waiting_overview else len(_waiting_overview)
+            _buy_n = int(_buy_overview["Mã"].nunique()) if "Mã" in _buy_overview else len(_buy_overview)
+        except Exception:
+            _buy_n, _wait_n = None, None
+        return MO.render(raw, DATA_KEY, buy_n=_buy_n, wait_n=_wait_n)
     if main == "Thị trường" and sub == "Góc nhìn thị trường":
         return MV.render()
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
