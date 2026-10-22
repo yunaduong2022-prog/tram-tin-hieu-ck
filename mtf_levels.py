@@ -137,7 +137,8 @@ def _strategy(res, sl_pct, watch):
             for t in watch if res[t]["ok"] and res[t]["trend"] == "Giảm"]
     return {"ok": True, "entry": f"{round(entry_min, 1):,.1f}" + " – " + f"{round(entry_max, 1):,.1f}", "sl": f"{round(stop_loss, 1):,.1f}",
             "tp": f"{round(take_profit, 1):,.1f}", "rr": f"1 : {rr} ({label})", "rr_value": rr, "rr_label": label,
-            "status": status, "tp_note": tp_note, "warn": warn, "sl_pct": round(sl_pct * 100)}
+            "status": status, "tp_note": tp_note, "warn": warn, "sl_pct": round(sl_pct * 100),
+            "num": {"entry_lo": entry_min, "entry_hi": entry_max, "sl": stop_loss, "tp": take_profit, "close": d["close"]}}
 
 
 def analyze_dwm_timeframe(df_d, df_w, df_m):

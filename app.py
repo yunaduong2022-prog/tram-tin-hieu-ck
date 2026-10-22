@@ -734,6 +734,31 @@ def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
 
 
+def mtf_strategy_box(s: dict) -> str:
+    """Bảng Vùng mua - Cắt lỗ - Mục tiêu dạng hàng ngang, cùng kiểu khối "Mua ngay" ở Cổ phiếu chờ mua
+    (class wb-* lấy từ waiting_buy.card_css). Số liệu lấy nguyên từ ML._strategy, không đổi cách tính."""
+    if not s["ok"]:
+        return f'<div class="wb-box"><div class="wb-sec"><div class="wb-sub" style="margin:0">{htmllib.escape(s["msg"])}</div></div></div>'
+    n = s["num"]
+    px = lambda x: f"{x:,.1f}"
+    pct = lambda x: f" ({(x / n['close'] - 1) * 100:+.1f}%)"
+    go = n["close"] <= n["entry_hi"]
+    zone_badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
+    rr_badge = (f'<span class="wb-go">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>' if s["rr_value"] >= 1.8
+                else f'<span class="wb-wait">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>')
+    extra = "".join(f'<div class="wb-sub">⚠ {htmllib.escape(w)}</div>' for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
+    return ('<div class="wb-box">'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
+            f'<span class="wb-zone"><b>{px(n["entry_lo"])} – {px(n["entry_hi"])}</b>{zone_badge}</span></div>'
+            f'<div class="wb-sub">{htmllib.escape(s["status"])}</div></div>'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
+            f'<b class="wb-red">{px(n["sl"])}{pct(n["sl"])}</b></div></div>'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu</span>'
+            f'<span class="wb-zone"><b class="wb-grn">{px(n["tp"])}{pct(n["tp"])}</b>{rr_badge}</span></div>{extra}</div>'
+            f'<div class="wb-foot">Vùng mua = hỗ trợ đến hỗ trợ +2% · Cắt lỗ = hỗ trợ −{s["sl_pct"]}% · Mục tiêu = kháng cự gần nhất · '
+            f'R:R tính từ giữa vùng mua · % so với giá hiện tại {px(n["close"])}</div></div>')
+
+
 def mtf_block(res: dict) -> str:
     """Khối 'Phân tích đa khung D - W - M' + hộp chiến lược cho thẻ kết quả lọc (không có dòng trống / thụt lề để Markdown không vỡ)."""
     subs = []
@@ -749,16 +774,7 @@ def mtf_block(res: dict) -> str:
         else:
             body, trend = f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>', '<span class="c-gray">—</span>'
         subs.append(f'<div class="tf-subcard" style="border-top:3px solid {accent}"><div class="tf-title"><span>{title}</span>{trend}</div>{body}</div>')
-    s = res["strategy"]
-    if s["ok"]:
-        cls = "" if s["rr_value"] >= 1.8 else "warn" if s["rr_value"] > 0 else "bad"
-        extra = "".join(f"<br>⚠ {htmllib.escape(w)}" for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
-        strat = (f'<div class="strategy-box {cls}">🎯 <b>CHIẾN LƯỢC GIAO DỊCH:</b><br>'
-                 f'• <b>Vùng gom (Entry):</b> {s["entry"]} &nbsp;|&nbsp; • <b>Cắt lỗ (SL):</b> {s["sl"]} &nbsp;|&nbsp; '
-                 f'• <b>Kỳ vọng (TP):</b> {s["tp"]}<br>• <b>Tỷ lệ R:R:</b> <b>{s["rr"]}</b><br>'
-                 f'<i>{htmllib.escape(s["status"])}</i>{extra}</div>')
-    else:
-        strat = f'<div class="strategy-box warn">🎯 <b>CHIẾN LƯỢC GIAO DỊCH:</b><br>{htmllib.escape(s["msg"])}</div>'
+    strat = mtf_strategy_box(res["strategy"])
     return ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
             f'<div class="multi-tf-container">{"".join(subs)}</div>{strat}')
 
@@ -848,6 +864,7 @@ def _kq_reset_page():
 def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua - Cắt lỗ - Mục tiêu (wb-*)
     st.caption("Giữ nguyên các điều kiện lọc hiện tại. Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
     f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
     st.divider()
