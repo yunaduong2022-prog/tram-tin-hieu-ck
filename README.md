@@ -18,6 +18,15 @@ streamlit run app.py
 
 Trên macOS/Linux, kích hoạt môi trường bằng `source .venv/bin/activate`.
 
+## Thị trường > Tổng quan (mới)
+Tab đầu tiên của mục **Thị trường** và cũng là trang mở đầu khi vào app (đổi `DEFAULT_MAIN` trong `nav.py` nếu muốn như cũ). Code nằm trong `market_overview.py`, các ngưỡng ở đầu file.
+- **Xu hướng** (VN-Index): Tăng / Đi ngang / Giảm theo tỷ lệ điều kiện đạt: đóng cửa trên MA20, MA20 dốc lên, đóng cửa trên MA50, đáy 10 phiên sau cao hơn đáy trước. Cần mã `VNINDEX` trong `data/eod_prices.csv`.
+- **Độ rộng**: số mã tăng so với số mã giảm trong rổ theo dõi.
+- **Dòng tiền**: thanh khoản rổ so với trung bình 20 phiên (lệch quá ±10% là Tăng / Giảm), kèm dòng khối ngoại nếu có.
+- **Mức độ rủi ro**: Thấp / Vừa / Cao theo số điều kiện rủi ro đang xảy ra (VN-Index dưới MA20, MA20 dốc xuống, mã giảm nhiều hơn mã tăng, thanh khoản dưới trung bình 20 phiên, khối ngoại bán ròng). Cần ít nhất 3 điều kiện có dữ liệu.
+- Bên dưới: bản đồ sức mạnh ngành (RS 1 tuần / 1 tháng / 3 tháng), nhóm dẫn dắt và suy yếu, số mã **MUA** (mục Mua ngay) và **CHỜ MUA**, kèm nút chuyển nhanh sang các mục đó.
+- Tab **Nhóm ngành** của mục Thị trường nay hiển thị trang Sức mạnh ngành (`sector_dashboard.py`) thay cho trang chờ.
+
 ## Cảnh báo phân kỳ RSI & giá (mới)
 Thẻ ở **Bộ lọc Realtime** và **Chờ mua** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
 - **Cảnh báo đảo chiều**: Phân kỳ thường giảm (giá HH, RSI LH), phân kỳ thường tăng (giá LL, RSI HL), phân kỳ phóng đại (2 đỉnh / 2 đáy giá bằng nhau, RSI đỉnh sau thấp hơn / đáy sau cao hơn) → nhãn `TẠI VÙNG CẢN`.
@@ -152,23 +161,3 @@ Tab **Thị trường → Dòng tiền khối ngoại** đã có dashboard để
 **Nạp dữ liệu:** mở tab này, tải `foreign_flow_template.csv`, điền dữ liệu từ nguồn dữ liệu chứng khoán phù hợp rồi tải CSV lên. Các cột bắt buộc: `Ngày`, `Mã`, `Giá trị mua`, `Giá trị bán`. Các cột bổ sung được hỗ trợ: `Sàn`, `Khối lượng mua`, `Khối lượng bán`, `Giá đóng cửa`, `Tổng GTGD`, `Nhóm ngành`. Giá trị mua/bán và tổng GTGD phải cùng đơn vị (khuyến nghị tỷ đồng).
 
 File sau khi nạp được lưu tại `data/foreign_flow.csv`. Để dữ liệu tồn tại sau các lần deploy và được chia sẻ với người dùng app, cần commit file này lên repo; không nên dùng upload trong app làm phương thức nhập dữ liệu sản xuất lâu dài. Tự động cập nhật qua API chưa được bật vì cần chọn nhà cung cấp có dữ liệu khối ngoại, xác thực API và điều kiện cấp phép. App không suy ra giao dịch khối ngoại từ dữ liệu OHLCV.
-
-
-## Thị trường · Góc nhìn thị trường
-
-Mục con này (trước đây là "VN-Index") hiển thị bản tin nhận định thị trường theo ngày: chọn **Tháng/Năm** ở cột trái, bấm vào một ngày để xem chi tiết ở cột phải.
-
-Mỗi ngày là một file Markdown `data/goc_nhin_thi_truong/YYYY-MM-DD.md` (ví dụ `2026-10-23.md`):
-
-```
-# Tiêu đề bản tin
-> Một dòng tóm tắt hiển thị ở danh sách bên trái
-
-## Tổng kết phiên 23/10
-- **VN-Index:** ...
-
-### 1. Mục đầu tiên
-Nội dung Markdown...
-```
-
-Thêm bản tin mới chỉ cần thêm file rồi commit lên repo, không phải sửa code. Dòng `##` hiển thị thành thanh tiêu đề màu; `###` là tiêu đề từng mục.
