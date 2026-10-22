@@ -978,6 +978,13 @@ def page_filter():
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
                 mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
                 div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
+                try:     # cùng phép tính với biểu đồ (khung Ngày): đủ nến và độ nghiêng >= +1.0 -> nghiêng tăng
+                    _ad = analyze_cached(frames, code, "D", DATA_KEY)
+                    lean_up = bool(_ad.get("enough") and _ad.get("dir", 0) > 0)
+                except Exception:
+                    lean_up = False
+                lean_html = ('<div style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#08785E">'
+                             '▲ DỰ BÁO NGHIÊNG TĂNG</div>') if lean_up else ""
                 _wb = _wb_map.get(code)
                 if _wb:
                     _tl, _tbg, _tfg = WB.status_tag(_wb["Trạng thái"], _wb["Lý do"])
@@ -988,7 +995,7 @@ def page_filter():
                 html = (f'<div class="stock-card in-box">'
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
-                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div>{status_html}</div>'
+                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div>{lean_html}</div>{status_html}</div>'
                         f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
