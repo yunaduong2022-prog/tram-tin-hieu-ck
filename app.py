@@ -23,9 +23,8 @@ import mtf_levels as ML
 import waiting_buy as WB
 import rsi_divergence as DV
 import foreign_flow as FF
-import market_view as MV
-import market_overview as MO
 import sector_dashboard as SD
+import market_view as MV
 import my_watchlist as MW
 import sell_card
 
@@ -2143,21 +2142,12 @@ def route():
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
-    if main == "Thị trường" and sub == "Tổng quan":
-        try:                                   # đếm mã MUA / CHỜ MUA; lỗi thì để trống, không làm hỏng cả trang
-            _t = _wb_table()
-            _now = _buy_now_table(_t)
-            _buy_n = len(_now)
-            _wait_n = int((_t["Danh sách"].isin(WB.BUY_GROUPS) & ~_t["Mã"].isin(set(_now["Mã"]))).sum())
-        except Exception:  # noqa: BLE001
-            _buy_n = _wait_n = None
-        return MO.render(raw, DATA_KEY, _buy_n, _wait_n)
-    if main == "Thị trường" and sub == "Nhóm ngành":
-        return SD.render(raw)
     if main == "Thị trường" and sub == "Góc nhìn thị trường":
         return MV.render()
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
+    if main == "Ngành" and sub == "Tổng quan ngành":
+        return SD.render(raw)
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Bộ lọc Realtime": return page_filter()
