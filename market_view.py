@@ -25,6 +25,7 @@ import market_stats as MS
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "goc_nhin_thi_truong")
 _NAME_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})\.md$")
 _META_RE = re.compile(r"^@(\w+)\s*:\s*(.*)$")        # dòng khai báo số liệu nhập tay, ví dụ: @khoi_ngoai: 340
+EOD_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "eod_prices.csv")
 FF_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "foreign_flow.csv")
 
 CSS = """
@@ -32,12 +33,16 @@ CSS = """
 /* ----- danh sách bản tin (cột trái) ----- */
 .mv-head{font-weight:800;font-size:16px;color:var(--txt2);margin:0 0 4px}
 [class*="st-key-mvc_"]{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:10px 14px 11px;margin-bottom:10px;gap:4px!important;transition:border-color .15s,background .15s}
+  padding:10px 14px 14px;margin-bottom:10px;gap:4px!important;transition:border-color .15s,background .15s}
 [class*="st-key-mvc_"]:hover{border-color:var(--accent)}
 [class*="st-key-mvc_"][class*="__sel"]{border-color:var(--accent);background:var(--card2);box-shadow:0 0 0 1px var(--accent) inset}
 [class*="st-key-mvc_"] .stButton>button{width:100%;min-height:0!important;height:auto!important;padding:2px 0!important;
   justify-content:flex-start!important;text-align:left!important;background:transparent!important;border:none!important;
   box-shadow:none!important;white-space:normal!important}
+[class*="st-key-mvc_"] [data-testid="stMarkdownContainer"]{margin:0!important}
+[class*="st-key-mvc_"] [data-testid="stMarkdownContainer"] p{margin:0!important}
+[class*="st-key-mvc_"] .stButton>button>div,[class*="st-key-mvc_"] .stButton>button [data-testid="stMarkdownContainer"]{
+  width:100%!important;justify-content:flex-start!important;text-align:left!important}
 [class*="st-key-mvc_"] .stButton>button p{text-align:left!important;font-weight:700!important;font-size:14px!important;
   line-height:1.4!important;color:var(--txt2)!important}
 [class*="st-key-mvc_"] .stButton>button:hover p{color:var(--accent)!important}
@@ -129,6 +134,17 @@ def load_entries(_stamp: float) -> list[dict]:
 def _stamp() -> float:
     files = glob.glob(os.path.join(DATA_DIR, "*.md"))
     return max((os.path.getmtime(p) for p in files), default=0.0) + len(files)
+
+
+@st.cache_data(show_spinner=False)
+def _load_eod(mtime: float):
+    """Tự đọc data/eod_prices.csv (chỉ các cột cần) khi app không truyền dữ liệu sang."""
+    import pandas as pd
+    df = pd.read_csv(EOD_CSV, dtype={"Mã": str}, usecols=["Mã", "Ngày", "Giá đóng cửa", "Khối lượng khớp lệnh"])
+    df["Ngày"] = pd.to_datetime(df["Ngày"], format="mixed", dayfirst=True, errors="coerce")
+    for c in ("Giá đóng cửa", "Khối lượng khớp lệnh"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df.dropna(subset=["Mã", "Ngày", "Giá đóng cửa"])
 
 
 @st.cache_data(show_spinner=False)
@@ -279,7 +295,11 @@ def render(raw=None, data_key: str = ""):
             st.markdown(f'<div class="mv-dhead"><div class="mv-date">{cur["date"]:%d/%m/%Y}</div>'
                         f'<h1>{html.escape(cur["title"])}</h1></div>', unsafe_allow_html=True)
             try:
-                px = MS.stats_for(_daily(raw, data_key), cur["date"]) if raw is not None else None
+                src, key = raw, data_key
+                if src is None and os.path.exists(EOD_CSV):
+                    key = str(os.path.getmtime(EOD_CSV))
+                    src = _load_eod(os.path.getmtime(EOD_CSV))
+                px = MS.stats_for(_daily(src, key), cur["date"]) if src is not None else None
                 fx = MS.foreign_stats(_foreign_series(entries), cur["date"])
                 st.markdown(_stats_html(px, fx), unsafe_allow_html=True)
             except Exception as e:  # noqa: BLE001  số liệu tự động lỗi thì không làm hỏng cả trang
