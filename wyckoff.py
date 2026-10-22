@@ -410,7 +410,7 @@ def note_html(c, compact_view: bool = False) -> str:
     c là dict từ compact() hoặc None. Một dòng HTML liền để Streamlit không coi là code."""
     esc = _html.escape
     head = '<div class="wy-top"><span class="wy-k">Wyckoff</span>'
-    foot = '<div class="wy-ft">Quy tắc máy tính, mang tính chủ quan; chỉ để quan sát, không phải khuyến nghị.</div>'
+    foot = '<div class="wy-ft">Quy tắc mang tính chủ quan; chỉ để quan sát, không phải khuyến nghị.</div>'
     if not c:
         return (f'<div class="wy none">{head}<span class="wy-tag">Chưa có cấu trúc</span></div>'
                 '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần): '
