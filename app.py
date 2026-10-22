@@ -756,7 +756,7 @@ def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
 
 
-def mtf_strategy_box(s: dict) -> str:
+def mtf_strategy_box(s: dict, code: str = "") -> str:
     """Bảng Vùng mua - Cắt lỗ - Mục tiêu dạng hàng ngang, cùng kiểu khối "Mua ngay" ở Cổ phiếu chờ mua
     (class wb-* lấy từ waiting_buy.card_css). Số liệu lấy nguyên từ ML._strategy, không đổi cách tính."""
     if not s["ok"]:
@@ -770,7 +770,7 @@ def mtf_strategy_box(s: dict) -> str:
                 else f'<span class="wb-wait">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>')
     extra = "".join(f'<div class="wb-sub">⚠ {htmllib.escape(w)}</div>' for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
     return ('<div class="wb-box">'
-            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab"><b>{htmllib.escape(code)}</b> Vùng mua</span>'
             f'<span class="wb-zone"><b>{px(n["entry_lo"])} – {px(n["entry_hi"])}</b>{zone_badge}</span></div>'
             f'<div class="wb-sub">{htmllib.escape(s["status"])}</div></div>'
             f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
@@ -781,7 +781,7 @@ def mtf_strategy_box(s: dict) -> str:
             f'R:R tính từ giữa vùng mua · % so với giá hiện tại {px(n["close"])}</div></div>')
 
 
-def mtf_block(res: dict) -> str:
+def mtf_block(res: dict, code: str = "") -> str:
     """Khối 'Phân tích đa khung D - W - M' + hộp chiến lược cho thẻ kết quả lọc (không có dòng trống / thụt lề để Markdown không vỡ)."""
     subs = []
     for tf in ("D", "W", "M"):
@@ -796,7 +796,7 @@ def mtf_block(res: dict) -> str:
         else:
             body, trend = f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>', '<span class="c-gray">—</span>'
         subs.append(f'<div class="tf-subcard" style="border-top:3px solid {accent}"><div class="tf-title"><span>{title}</span>{trend}</div>{body}</div>')
-    strat = mtf_strategy_box(res["strategy"])
+    strat = mtf_strategy_box(res["strategy"], code)
     return ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
             f'<div class="multi-tf-container">{"".join(subs)}</div>{strat}')
 
@@ -992,7 +992,7 @@ def page_filter():
                         or '<span class="muted">Chưa có chỉ báo Tốt</span>'
                 else:
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
-                mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
+                mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY), code) if show_mtf else ""
                 div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
                 lean_html = _lean_html(code)
                 _wb = _wb_map.get(code)

@@ -759,7 +759,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
     html += (
         '<div class="wb-box">'
-        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
+        f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab"><b>{esc(str(r["Mã"]))}</b> Vùng mua</span>'
         f'<span class="wb-zone"><b>{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}</b>{badge}</span></div>'
         f'<div class="wb-sub">{esc(_sentence(r["Ghi chú hành động"]))}</div></div>'
         f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
