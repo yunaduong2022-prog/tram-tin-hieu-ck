@@ -4,7 +4,7 @@ import streamlit as st
 # Menu chính -> danh sách tab phụ (rỗng = không có sub-menu)
 MENU = {
     "Vĩ mô": [],
-    "Thị trường": ["Góc nhìn thị trường", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
+    "Thị trường": ["Tổng quan", "Góc nhìn thị trường", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
                    "Nhóm ngành", "Kết quả kinh doanh"],
     "Ngành": ["Tổng quan ngành", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
@@ -14,10 +14,12 @@ MENU = {
                           "Bán / Chốt lời", "Backtest chiến lược"],
     "Biểu đồ": [],
 }
+DEFAULT_MAIN = "Thị trường"   # trang mở đầu khi vào app (muốn như cũ thì đổi thành "Bộ lọc & Backtest")
 ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Biểu đồ": "📈"}
 
 # Mô tả nội dung từng tab phụ của mục "Thị trường" (hiển thị ở trang chờ cho tới khi có nội dung thật)
 MARKET_DESC = {
+    "Tổng quan": ["Xu hướng, độ rộng, dòng tiền, mức độ rủi ro", "Bản đồ sức mạnh ngành", "Số cổ phiếu phát tín hiệu MUA / CHỜ MUA"],
     "Góc nhìn thị trường": ["Bản tin nhận định thị trường theo ngày"],
     "Dòng tiền khối ngoại": ["Mua/bán ròng", "Top cổ phiếu được mua/bán ròng", "Lũy kế 5–20 phiên"],
     "Dòng tiền tự doanh": ["Theo dõi giao dịch tự doanh (chỉ hiển thị khi có dữ liệu)"],
@@ -69,17 +71,18 @@ def render_nav():
     pending = st.session_state.pop("_nav_pending", None)  # áp dụng yêu cầu goto() trước khi tạo widget
     if pending:
         st.session_state["nav_main"], st.session_state["nav_sub"] = pending
-    st.session_state.setdefault("nav_main", "Bộ lọc & Backtest")
+    st.session_state.setdefault("nav_main", DEFAULT_MAIN)
     if st.session_state.get("nav_main") not in MENU:
-        st.session_state["nav_main"] = "Bộ lọc & Backtest"
+        st.session_state["nav_main"] = DEFAULT_MAIN
     st.session_state.setdefault("nav_sub", (MENU[st.session_state["nav_main"]] or [None])[0])
 
     with st.container(key="mega-nav"):
         main = st.segmented_control("Menu", list(MENU), key="nav_main", label_visibility="collapsed",
                                     format_func=lambda m: f"{ICON[m]} {m}", on_change=_reset_sub)
-        if main is None:  # bấm lại mục đang chọn -> giữ nguyên
-            main = "Bộ lọc & Backtest"
+        if main is None:  # bấm lại mục đang chọn -> giữ nguyên mục vừa xem
+            main = st.session_state.get("_nav_last_main", DEFAULT_MAIN)
             st.session_state["nav_main"] = main
+        st.session_state["_nav_last_main"] = main
         subs = MENU[main]
         sub = None
         if subs:
