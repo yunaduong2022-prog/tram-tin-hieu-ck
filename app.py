@@ -778,7 +778,7 @@ def mtf_strategy_box(s: dict, code: str = "") -> str:
                           n.get("tp2"), pc(n["tp2"]) if n.get("tp2") is not None else None, "", " ".join(notes), _min_trading())
 
 
-def mtf_block(res: dict, code: str = "") -> str:
+def mtf_block(res: dict, code: str = "", parts: bool = False):
     """Khối 'Phân tích đa khung D - W - M' + hộp chiến lược cho thẻ kết quả lọc (không có dòng trống / thụt lề để Markdown không vỡ)."""
     subs = []
     for tf in ("D", "W", "M"):
@@ -794,8 +794,11 @@ def mtf_block(res: dict, code: str = "") -> str:
             body, trend = f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>', '<span class="c-gray">—</span>'
         subs.append(f'<div class="tf-subcard" style="border-top:3px solid {accent}"><div class="tf-title"><span>{title}</span>{trend}</div>{body}</div>')
     strat = mtf_strategy_box(res["strategy"], code)
-    return ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
-            f'<div class="multi-tf-container">{"".join(subs)}</div>{strat}')
+    tf_html = ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
+               f'<div class="multi-tf-container">{"".join(subs)}</div>')
+    if parts:     # thẻ kết quả lọc: tách khung Vùng mua (đặt lên trên) khỏi phần phân tích D-W-M (đặt dưới RSI/Wyckoff)
+        return tf_html, strat
+    return tf_html + strat
 
 
 # ------------------------------------------------------------------ KẾT QUẢ LỌC: thống kê · tìm kiếm · lọc thời hạn · sắp xếp · bảng
@@ -989,7 +992,7 @@ def page_filter():
                         or '<span class="muted">Chưa có chỉ báo Tốt</span>'
                 else:
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
-                mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY), code) if show_mtf else ""
+                mtf_html, strat_html = mtf_block(mtf_cached(frames, code, DATA_KEY), code, parts=True) if show_mtf else ("", "")
                 div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
                 lean_html = _lean_html(code)
                 _wb = _wb_map.get(code)
@@ -1012,7 +1015,7 @@ def page_filter():
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
                         f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
                         + _ma_summary_html(code)
-                        + f'<div class="tag-container">' + chips_html + '</div>' + div_html + _wy_note(code, True) + mtf_html + '</div>')
+                        + f'<div class="tag-container">' + chips_html + '</div>' + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '') + div_html + _wy_note(code, True) + mtf_html + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
