@@ -1017,7 +1017,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb9")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb10")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 @st.cache_data(show_spinner=False)
@@ -1254,22 +1254,48 @@ def page_watchlist():
 
 
 def _move_page(kind: str):
-    """Tăng mạnh / Giảm mạnh: mã biến động giá lớn nhất ở phiên cuối, lọc theo ngưỡng % do người dùng chọn."""
+    """Tăng mạnh / Giảm mạnh. Hai chế độ: biến động trong phiên cuối, hoặc so với đáy (tăng) / đỉnh (giảm) trong 120 phiên."""
     up = kind == "surge"
     st.title("🚀 Tăng mạnh" if up else "💥 Giảm mạnh")
     header()
-    st.caption(("Các mã **tăng mạnh** ở phiên cuối (xếp theo % tăng giảm dần). " if up else
-                "Các mã **giảm mạnh** ở phiên cuối (xếp theo % giảm sâu nhất trước). ") +
-               "Ngưỡng có thể chỉnh bên dưới. Nên kết hợp với khối lượng và trạng thái ở mục **Chờ mua**; "
-               "chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    lbl_ses = "Tăng trong phiên" if up else "Giảm trong phiên"
+    lbl_leg = "Tăng từ đáy" if up else "Giảm từ đỉnh"
+    mode = st.segmented_control("Chế độ", [lbl_ses, lbl_leg], default=lbl_ses, key=f"mv_mode_{kind}",
+                                label_visibility="collapsed") or lbl_ses
+    by_leg = mode == lbl_leg
+    if by_leg:
+        st.caption(("Các mã đã **tăng mạnh từ đáy** thấp nhất 120 phiên tới giá hiện tại, xếp theo % tăng giảm dần. "
+                    "Đã chạy xa nên **không mua đuổi**: chờ nhịp lùi về hỗ trợ, hoặc xem trạng thái ở mục **Chờ mua** / **Bán / Chốt lời**. "
+                    if up else
+                    "Các mã đã **giảm mạnh từ đỉnh** cao nhất 120 phiên tới giá hiện tại, xếp theo % giảm sâu nhất trước. "
+                    "Chưa nên bắt đáy sớm: chờ giá dừng giảm và lấy lại hỗ trợ; mã có dấu hiệu tích lũy nằm ở mục **Đang phục hồi**. ")
+                   + "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    else:
+        st.caption(("Các mã **tăng mạnh** ở phiên cuối, xếp theo % tăng giảm dần. " if up else
+                    "Các mã **giảm mạnh** ở phiên cuối, xếp theo % giảm sâu nhất trước. ") +
+                   "Nên kết hợp với khối lượng và trạng thái ở mục **Chờ mua**; chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
     t = _wb_table().copy()
-    t = t[t["Chg %"].notna()]
+    col = ("Tăng từ đáy hiện tại %" if up else "Giảm từ đỉnh %") if by_leg else "Chg %"
+    t = t[t[col].notna()]
     vol = res_df.set_index("Mã")["Vol/Avg10"] if "Vol/Avg10" in res_df.columns else None
     t["Vol/Avg10"] = t["Mã"].map(vol) if vol is not None else np.nan
-    c1, c2, c3 = st.columns([1.4, 1.2, 3])
-    thr = c1.slider("Ngưỡng % thay đổi giá", 1.0, 7.0, 4.0, 0.5, key=f"mv_thr_{kind}")
-    vmin = c2.selectbox("Khối lượng", ["Tất cả", "≥ 1.0× TB10", "≥ 1.5× TB10", "≥ 2.0× TB10"], key=f"mv_vol_{kind}")
-    d = t[t["Chg %"] >= thr] if up else t[t["Chg %"] <= -thr]
+    c1, c2, c3 = st.columns([1.6, 1.2, 3])
+    if by_leg:
+        _def, _lo, _hi, _step = (30, 15, 100, 5) if up else (20, 10, 80, 5)
+        _opts = [20, 30, 50] if up else [15, 20, 30]
+        _k = f"mv_thr_leg_{kind}"
+        st.session_state.setdefault(_k, _def)
+        qc = st.columns(len(_opts) + 1)
+        qc[0].caption("Chọn nhanh")
+        for qcol, o in zip(qc[1:], _opts):
+            if qcol.button(f"{o}%", key=f"mv_q_{kind}_{o}", use_container_width=True):
+                st.session_state[_k] = o
+        thr = c1.slider("Ngưỡng %", _lo, _hi, step=_step, key=_k)
+    else:
+        thr = c1.slider("Ngưỡng % thay đổi giá", 1.0, 15.0, 4.0, 0.5, key=f"mv_thr_{kind}")
+    vmin = c2.selectbox("Khối lượng", ["Tất cả", "≥ 1.0× TB10", "≥ 1.5× TB10", "≥ 2.0× TB10"],
+                        index=0 if by_leg else 1, key=f"mv_vol_{kind}_{int(by_leg)}")
+    d = t[t[col] >= thr] if (up or by_leg) else t[t[col] <= -thr]
     if vmin != "Tất cả":
         d = d[d["Vol/Avg10"] >= float(vmin.split("≥ ")[1].split("×")[0])]
     inds = c3.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
@@ -1279,7 +1305,9 @@ def _move_page(kind: str):
         d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
     if inds:
         d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
-    d = d.sort_values("Chg %", ascending=not up)
+    d = d.sort_values(col, ascending=(not up and not by_leg))
+    if by_leg and not up:
+        d = d.sort_values(col, ascending=False)
     st.metric("Tổng số mã", len(d))
     if d.empty:
         st.info("Không có mã nào đạt ngưỡng.")
@@ -1290,9 +1318,15 @@ def _move_page(kind: str):
                     "MA20 %": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[1]),
                     "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
                     "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
+
     def _why(r):
         v = r.get("Vol/Avg10")
         vt = f", khối lượng {float(v):.1f} lần trung bình 10 phiên" if pd.notna(v) else ""
+        if by_leg:
+            head = (f'Giá hiện tại đã tăng {float(r[col]):.0f}% so với đáy 120 phiên' if up
+                    else f'Giá hiện tại đã giảm {float(r[col]):.0f}% so với đỉnh 120 phiên')
+            return f'{head}; phiên gần nhất {float(r["Chg %"]):+.2f}%{vt}. Trạng thái hiện tại: {r["Danh sách"]}' if pd.notna(r["Chg %"]) \
+                else f'{head}{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
         return f'{"Tăng" if up else "Giảm"} {abs(float(r["Chg %"])):.2f}% trong phiên gần nhất{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
     d = d.assign(**{"Lý do": d.apply(_why, axis=1)})
     _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
@@ -1304,9 +1338,11 @@ def _move_page(kind: str):
     st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind), unsafe_allow_html=True)
     _sell_jump_js()
     with st.expander("Xem dạng bảng"):
-        st.dataframe(d[["Mã", "Giá", "Chg %", "Vol/Avg10", "Score", "RS20", "Nhóm", "Danh sách"]].reset_index(drop=True), hide_index=True,
+        st.dataframe(d[["Mã", "Giá", "Chg %", col, "Vol/Avg10", "Score", "RS20", "Nhóm", "Danh sách"]].loc[:, lambda x: ~x.columns.duplicated()]
+                     .reset_index(drop=True), hide_index=True,
                      column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
                                     "Chg %": st.column_config.NumberColumn(format="%.2f"),
+                                    col: st.column_config.NumberColumn(format="%.1f"),
                                     "Vol/Avg10": st.column_config.NumberColumn("Vol / TB10", format="%.2f"),
                                     "Score": st.column_config.NumberColumn(format="%.1f"),
                                     "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},

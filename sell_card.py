@@ -150,6 +150,11 @@ def card_html(r, as_of=None, tone="sell") -> str:
     rs_ok = pd.notna(rs) and float(rs) >= 1
     gain = r.get("Tăng từ đáy %")
     gain_html = f'<div class="sc-gain">Đã tăng {float(gain):.0f}% từ đáy</div>' if pd.notna(gain) else ""
+    dd = r.get("Giảm từ đỉnh %")
+    if tone == "plunge" and pd.notna(dd):
+        gain_html = f'<div class="sc-gain">Đã giảm {float(dd):.0f}% từ đỉnh</div>'
+    elif tone == "surge" and pd.notna(r.get("Tăng từ đáy hiện tại %")):
+        gain_html = f'<div class="sc-gain">Đã tăng {float(r.get("Tăng từ đáy hiện tại %")):.0f}% từ đáy</div>'
     nm = short_name(r.get("Tên công ty"))
     name_html = f'<div class="sc-name" title="{esc(r.get("Tên công ty"))}">{esc(nm)}</div>' if nm else ""
     dt = _fmt_date(as_of)

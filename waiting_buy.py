@@ -576,11 +576,19 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
             res["Tăng từ đáy %"] = _leg_structure(g.reset_index(drop=True))["leg_gain"]
         except Exception:
             res["Tăng từ đáy %"] = np.nan
+        try:      # % giá hiện tại so với đáy thấp nhất / đỉnh cao nhất trong leg_lookback phiên (cho mục Tăng mạnh / Giảm mạnh)
+            _n = min(len(g), CFG["leg_lookback"])
+            _c = float(g["Giá đóng cửa"].iat[-1])
+            _lo, _hi = float(g["Giá thấp nhất"].to_numpy(float)[-_n:].min()), float(g["Giá cao nhất"].to_numpy(float)[-_n:].max())
+            res["Tăng từ đáy hiện tại %"] = (_c / _lo - 1) * 100 if _lo > 0 else np.nan
+            res["Giảm từ đỉnh %"] = (1 - _c / _hi) * 100 if _hi > 0 else np.nan
+        except Exception:
+            res["Tăng từ đáy hiện tại %"] = res["Giảm từ đỉnh %"] = np.nan
         can, t1 = res.get("Cản gần", np.nan), res.get("Mục tiêu 1", np.nan)
         if res["Hành động"] == "Vào ngay" and pd.notna(can) and pd.notna(t1) and can < t1:
             res["Ghi chú hành động"] += f"; lưu ý cản gần {can:.2f} (+{(can / r['Giá'] - 1) * 100:.1f}%) thấp hơn Mục tiêu 1"
         rows.append({"Mã": code, "Giá": r["Giá"], "Chg %": r.get("Chg_%", np.nan), "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
-    cols = ["Mã", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Hành động bán", "Tăng từ đáy %", "Ghi chú hành động",
+    cols = ["Mã", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Hành động bán", "Tăng từ đáy %", "Tăng từ đáy hiện tại %", "Giảm từ đỉnh %", "Ghi chú hành động",
             "Vùng mua từ", "Vùng mua đến", "Giá vào", "Cắt lỗ", "Cắt lỗ %", "Mục tiêu 1", "Lời 1 %", "Mục tiêu 2", "Lời 2 %",
             "R:R", "Cản gần", "Cách vùng mua %"]
     out = pd.DataFrame(rows)
