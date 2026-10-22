@@ -56,14 +56,16 @@ CSS = """
 .mv-dhead h1{margin:0!important;padding:0!important;font-size:26px!important;line-height:1.3;color:var(--txt2)!important}
 .mv-panel{margin:18px 26px 0;border:1px solid var(--line);border-radius:14px;background:var(--bg2);overflow:hidden}
 .mv-ph{padding:12px 20px;font-weight:800;font-size:15px;color:var(--txt2);border-bottom:1px solid var(--line)}
-.mv-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;background:var(--line)}
-.mv-tile{background:var(--bg2);padding:14px 20px}
-.mv-tl{font-size:13px;color:var(--muted);margin-bottom:2px}
-.mv-tv{font-size:27px;font-weight:800;color:var(--txt2);line-height:1.3}
-.mv-ts{font-size:13.5px;color:var(--muted);line-height:1.6}
+.mv-tbl-wrap{overflow-x:auto}
+.mv-tbl{width:100%;border-collapse:collapse;font-size:14.5px;line-height:1.6}
+.mv-tbl th{text-align:left;padding:10px 20px;font-size:13px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--line);background:var(--bg2)}
+.mv-tbl td{padding:11px 20px;vertical-align:top;border-bottom:1px solid var(--line);color:var(--txt)}
+.mv-tbl tr:last-child td{border-bottom:none}
+.mv-tbl td.mv-c1{width:20%;font-weight:700;color:var(--txt2)}
+.mv-tbl td.mv-c2{width:24%;font-weight:800;font-size:16px;color:var(--txt2);white-space:nowrap}
+.mv-tbl td.mv-c3{color:var(--muted)}
 .mv-up{color:var(--green)!important}.mv-dn{color:var(--red)!important}
-.mv-tile code{font-size:12px}
-.mv-checks{padding:14px 20px;border-top:1px solid var(--line);font-size:15px;line-height:2;color:var(--txt);columns:2 300px}
+.mv-tbl code{font-size:12px}
 .mv-note{padding:0 20px 14px;font-size:12px;color:var(--muted)}
 .st-key-mv-body{padding:18px 26px 26px}
 .st-key-mv-body h2{background:linear-gradient(135deg,var(--hero),#0E5A47 160%);color:var(--cream)!important;
@@ -186,62 +188,66 @@ def _foreign_series(entries: list[dict]):
 
 
 def _stats_html(st_: dict | None, fx: dict | None = None, day=None) -> str:
-    """Khối số liệu (thẻ số + danh sách kiểm tra) cho một ngày. st_: số tự tính từ giá; fx: khối ngoại."""
+    """Bảng số liệu (Chỉ báo | Giá trị | Đánh giá) cho một ngày. st_: số tự tính từ giá; fx: khối ngoại."""
     st_ = st_ or {}
-    tiles, checks = [], []
+    rows: list[tuple[str, str, str]] = []
+
+    def chk(ok: bool, txt: str) -> str:
+        return f'<span class="{"mv-up" if ok else "mv-dn"}">{"✓" if ok else "✗"}</span> {txt}'
+
     if "index" in st_:
-        sub = ""
+        val, ev = _n(st_["index"], 2), []
         if "index_pts" in st_:
-            sub = f'<span class="{_cls(st_["index_pts"])}">{_sg(st_["index_pts"])} điểm ({_sg(st_["index_pct"], 2, "%")})</span>'
-        tiles.append(f'<div class="mv-tile"><div class="mv-tl">VN-Index</div><div class="mv-tv">{_n(st_["index"], 2)}</div>'
-                     f'<div class="mv-ts">{sub}</div></div>')
+            c = _cls(st_["index_pts"])
+            val = f'<span class="{c}">{val} ({_sg(st_["index_pct"], 2, "%")})</span>'
+            ev.append(f'<span class="{c}">{_sg(st_["index_pts"])} điểm</span> so với phiên trước')
+        rows.append(("VN-Index", val, "<br>".join(ev)))
         if "ma20" in st_:
             above = st_["index"] >= st_["ma20"]
-            tiles.append(f'<div class="mv-tile"><div class="mv-tl">MA20</div><div class="mv-tv">{_n(st_["ma20"], 2)}</div>'
-                         f'<div class="mv-ts">VN-Index đang <b class="{"mv-up" if above else "mv-dn"}">{"trên" if above else "dưới"}</b> MA20 '
-                         f'({_sg(st_["index"] - st_["ma20"], 1)} điểm)</div></div>')
-            checks.append((above, "VN-Index đóng cửa trên MA20"))
+            ev = [chk(above, f'VN-Index đóng cửa trên MA20 ({_sg(st_["index"] - st_["ma20"], 1)} điểm)'
+                      if above else f'VN-Index đóng cửa dưới MA20 ({_sg(st_["index"] - st_["ma20"], 1)} điểm)')]
             if "ma20_5ago" in st_:
-                checks.append((st_["ma20"] > st_["ma20_5ago"], "MA20 dốc lên so với 5 phiên trước"))
+                ev.append(chk(st_["ma20"] > st_["ma20_5ago"], "MA20 dốc lên so với 5 phiên trước"))
+            rows.append(("MA20", _n(st_["ma20"], 2), "<br>".join(ev)))
         if "hi20" in st_:
-            tiles.append(f'<div class="mv-tile"><div class="mv-tl">Biên độ 20 phiên (giá đóng cửa)</div>'
-                         f'<div class="mv-tv">{_n(st_["lo20"], 0)} – {_n(st_["hi20"], 0)}</div>'
-                         f'<div class="mv-ts">Cách đáy 20 phiên {_sg(st_["from_lo20_pct"], 1, "%")}</div></div>')
+            rows.append(("Biên độ 20 phiên (giá đóng cửa)", f'{_n(st_["lo20"], 0)} – {_n(st_["hi20"], 0)}',
+                         f'Cách đáy 20 phiên <span class="{_cls(st_["from_lo20_pct"])}">{_sg(st_["from_lo20_pct"], 1, "%")}</span>'))
     if "value" in st_:
-        sub = []
+        ev = []
         if st_.get("value_prev_pct") is not None:
-            sub.append(f'<span class="{_cls(st_["value_prev_pct"])}">{_sg(st_["value_prev_pct"], 1, "%")}</span> so với phiên trước')
+            ev.append(f'<span class="{_cls(st_["value_prev_pct"])}">{_sg(st_["value_prev_pct"], 1, "%")}</span> so với phiên trước')
         if st_.get("value_avg20_pct") is not None:
-            sub.append(f'<span class="{_cls(st_["value_avg20_pct"])}">{_sg(st_["value_avg20_pct"], 1, "%")}</span> so với TB 20 phiên')
+            ev.append(f'<span class="{_cls(st_["value_avg20_pct"])}">{_sg(st_["value_avg20_pct"], 1, "%")}</span> so với TB 20 phiên')
         if st_.get("value_highest_n"):
-            sub.append(f'cao nhất {st_["value_highest_n"]} phiên')
-        tiles.append(f'<div class="mv-tile"><div class="mv-tl">Thanh khoản (rổ theo dõi)</div>'
-                     f'<div class="mv-tv">{_n(st_["value"], 0)} tỷ</div><div class="mv-ts">{"<br>".join(sub)}</div></div>')
+            ev.append(f'Cao nhất {st_["value_highest_n"]} phiên')
         if st_.get("value_avg20_pct") is not None:
-            checks.append((st_["value_avg20_pct"] > 0, "Thanh khoản cao hơn trung bình 20 phiên"))
-        tiles.append(f'<div class="mv-tile"><div class="mv-tl">Độ rộng (rổ {st_["n"]} mã)</div>'
-                     f'<div class="mv-tv"><span class="mv-up">{st_["up"]}</span> / <span class="mv-dn">{st_["down"]}</span></div>'
-                     f'<div class="mv-ts">mã tăng / giảm · {st_["flat"]} đứng giá</div></div>')
-        checks.append((st_["up"] > st_["down"], "Số mã tăng nhiều hơn số mã giảm"))
+            ev.append(chk(st_["value_avg20_pct"] > 0, "Thanh khoản cao hơn trung bình 20 phiên"))
+        rows.append(("Thanh khoản (rổ theo dõi)", f'{_n(st_["value"], 0)} tỷ', "<br>".join(ev)))
+        rows.append((f'Độ rộng (rổ {st_["n"]} mã)',
+                     f'<span class="mv-up">{st_["up"]}</span> / <span class="mv-dn">{st_["down"]}</span>',
+                     f'Mã tăng / giảm · {st_["flat"]} đứng giá<br>'
+                     + chk(st_["up"] > st_["down"], "Số mã tăng nhiều hơn số mã giảm")))
     if fx:
         v = fx["value"]
         lab = "Mua ròng" if v > 0 else "Bán ròng" if v < 0 else "Cân bằng"
-        cum = (f'<br>5 phiên gần nhất: <span class="{_cls(fx["cum5"])}">{_sg(fx["cum5"], 0, " tỷ")}</span>' if "cum5" in fx else "")
-        tiles.append(f'<div class="mv-tile"><div class="mv-tl">Khối ngoại</div>'
-                     f'<div class="mv-tv {_cls(v)}">{_sg(v, 0, " tỷ")}</div><div class="mv-ts">{lab} toàn thị trường{cum}</div></div>')
-        checks.append((v > 0, "Khối ngoại mua ròng"))
+        ev = [f'{lab} toàn thị trường']
+        if "cum5" in fx:
+            ev.append(f'5 phiên gần nhất: <span class="{_cls(fx["cum5"])}">{_sg(fx["cum5"], 0, " tỷ")}</span>')
+        ev.append(chk(v > 0, "Khối ngoại mua ròng"))
+        rows.append(("Khối ngoại", f'<span class="{_cls(v)}">{_sg(v, 0, " tỷ")}</span>', "<br>".join(ev)))
     else:
-        tiles.append('<div class="mv-tile"><div class="mv-tl">Khối ngoại</div><div class="mv-tv">Chưa có</div>'
-                     '<div class="mv-ts">Thêm dòng <code>@khoi_ngoai: 340</code> vào file bản tin (tỷ đồng, âm = bán ròng)</div></div>')
-    if not tiles:
+        rows.append(("Khối ngoại", "Chưa có",
+                     'Thêm dòng <code>@khoi_ngoai: 340</code> vào file bản tin (tỷ đồng, âm = bán ròng)'))
+    if not rows:
         return '<div class="mv-note">Chưa có dữ liệu giá của ngày này trong data/eod_prices.csv nên chưa tự tính được số liệu.</div>'
-    chk = "<br>".join(f'<span class="{"mv-up" if ok else "mv-dn"}">{"✓" if ok else "✗"}</span> {txt}' for ok, txt in checks)
+    body = "".join(f'<tr><td class="mv-c1">{a}</td><td class="mv-c2">{b}</td><td class="mv-c3">{c}</td></tr>' for a, b, c in rows)
     note = ("Số liệu giá tự tính từ dữ liệu cuối phiên. Thanh khoản và độ rộng chỉ tính trên rổ mã theo dõi của app, "
             "không phải toàn thị trường nên không dùng để so với con số của sàn."
             + ("" if "index" in st_ else " Chưa có VNINDEX hoặc chưa có giá ngày này nên chưa hiện số VN-Index."))
     head = f'Số liệu phiên {day:%d/%m/%Y}' if day is not None else 'Số liệu phiên'
-    return (f'<div class="mv-panel"><div class="mv-ph">{head}</div><div class="mv-stats">{"".join(tiles)}</div>'
-            f'<div class="mv-checks">{chk}</div><div class="mv-note">{note}</div></div>')
+    return (f'<div class="mv-panel"><div class="mv-ph">{head}</div><div class="mv-tbl-wrap"><table class="mv-tbl">'
+            f'<thead><tr><th>Chỉ báo</th><th>Giá trị</th><th>Đánh giá</th></tr></thead><tbody>{body}</tbody></table></div>'
+            f'<div class="mv-note" style="padding-top:12px;border-top:1px solid var(--line)">{note}</div></div>')
 
 
 def _reset_sel():
