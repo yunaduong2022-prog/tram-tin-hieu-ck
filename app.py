@@ -978,13 +978,18 @@ def page_filter():
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
                 mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
                 div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-                try:     # cùng phép tính với biểu đồ (khung Ngày): đủ nến và độ nghiêng >= +1.0 -> nghiêng tăng
+                try:     # cùng phép tính với biểu đồ (khung Ngày): đủ nến và độ nghiêng >= +1.0 -> nghiêng tăng, <= -1.0 -> nghiêng giảm
                     _ad = analyze_cached(frames, code, "D", DATA_KEY)
-                    lean_up = bool(_ad.get("enough") and _ad.get("dir", 0) > 0)
+                    lean_dir = (_ad.get("dir", 0) if _ad.get("enough") else 0)
                 except Exception:
-                    lean_up = False
-                lean_html = ('<div style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#08785E">'
-                             '▲ DỰ BÁO NGHIÊNG TĂNG</div>') if lean_up else ""
+                    lean_dir = 0
+                lean_html = ""
+                if lean_dir > 0:
+                    lean_html = ('<div style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#08785E">'
+                                 '▲ DỰ BÁO NGHIÊNG TĂNG</div>')
+                elif lean_dir < 0:
+                    lean_html = ('<div style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#C02645">'
+                                 '▼ DỰ BÁO NGHIÊNG GIẢM</div>')
                 _wb = _wb_map.get(code)
                 if _wb:
                     _tl, _tbg, _tfg = WB.status_tag(_wb["Trạng thái"], _wb["Lý do"])
