@@ -13,7 +13,7 @@ import streamlit as st
 import watchlist as WL
 
 INDEX_NAMES = {"VNINDEX", "VN-INDEX", "VN_INDEX", "VNINDEXINDEX", "VNINDEX1", "^VNINDEX"}
-PERIODS = {"1 phiên": 1, "1 tuần": 5, "1 tháng": 21, "3 tháng": 63}
+PERIODS = {"1 tuần": 5, "1 tháng": 21, "3 tháng": 63}
 
 
 def _clean(raw: pd.DataFrame) -> pd.DataFrame:
@@ -151,8 +151,8 @@ def _fmt_pct(x, digits=1):
 
 
 def render(raw: pd.DataFrame):
-    st.title("🏭 Tổng quan ngành")
-    st.caption("Bản đồ dòng tiền giúp nhận diện nhanh nhóm ngành mạnh/yếu, sau đó xem sức mạnh tương đối và cổ phiếu dẫn dắt. Dữ liệu lấy từ nguồn giá đang được app sử dụng; không phải khuyến nghị mua/bán.")
+    st.title("🏭 Sức mạnh ngành & luân chuyển dòng tiền")
+    st.caption("Phân tích từ dữ liệu giá đang được app sử dụng. Đây là công cụ theo dõi, không phải khuyến nghị mua/bán.")
     metrics, info = calculate_sector_metrics(raw)
     if metrics.empty:
         st.warning(info.get("error", "Chưa có dữ liệu để tính sức mạnh ngành."))
@@ -164,42 +164,6 @@ def render(raw: pd.DataFrame):
     if not info["has_index"]:
         st.warning("Dữ liệu hiện tại không có chuỗi VN-Index chuẩn. RS đang so với trung vị hiệu suất các mã có dữ liệu (proxy), không được hiểu là RS so với VN-Index. Để có RS chuẩn, cần bổ sung chuỗi VN-Index vào dữ liệu.")
 
-    # Bản đồ ngành đặt ở đầu trang: dùng hiệu suất thực tế theo khung được chọn.
-    st.subheader("🗺️ Bản đồ ngành — Tìm tiền đang chảy vào đâu")
-    map_period = st.segmented_control(
-        "Khung thời gian bản đồ", ["1 phiên", "1 tuần", "1 tháng", "3 tháng"],
-        default="1 phiên", key="sector_map_period"
-    ) or "1 phiên"
-    map_col = {
-        "1 phiên": "Tăng giá phiên gần nhất (%)",
-        "1 tuần": "Hiệu suất 1 tuần (%)",
-        "1 tháng": "Hiệu suất 1 tháng (%)",
-        "3 tháng": "Hiệu suất 3 tháng (%)",
-    }[map_period]
-    map_view = metrics.sort_values(map_col, ascending=False, na_position="last")
-    if map_view[map_col].notna().any():
-        cards_per_row = 4
-        sectors = map_view.to_dict("records")
-        for start in range(0, len(sectors), cards_per_row):
-            cols = st.columns(cards_per_row)
-            for col, item in zip(cols, sectors[start:start + cards_per_row]):
-                value = item.get(map_col, np.nan)
-                sector_name = str(item["Nhóm ngành"])
-                if pd.isna(value):
-                    delta = "Chưa đủ dữ liệu"
-                else:
-                    delta = f"{float(value):+.2f}%"
-                with col:
-                    st.metric(sector_name, delta, delta_color="normal" if not pd.isna(value) else "off")
-                    if st.button("Xem chi tiết", key=f"sector_map_open_{map_period}_{sector_name}", use_container_width=True):
-                        st.session_state["sector_detail"] = sector_name
-                        st.session_state["sector_map_focus"] = sector_name
-        if st.session_state.get("sector_map_focus"):
-            st.caption(f"Ngành được chọn từ bản đồ: **{st.session_state['sector_map_focus']}**. Xem phần chi tiết bên dưới.")
-    else:
-        st.info("Chưa đủ dữ liệu để hiển thị bản đồ ngành ở khung thời gian này.")
-
-    st.divider()
     c1, c2, c3 = st.columns(3)
     for col, label in zip((c1, c2, c3), ("1 tuần", "1 tháng", "3 tháng")):
         bench, source = info["benchmark"][label]
@@ -226,11 +190,7 @@ def render(raw: pd.DataFrame):
     })
 
     st.subheader("Chi tiết từng ngành")
-    sector_options = view["Nhóm ngành"].tolist()
-    preferred = st.session_state.get("sector_detail")
-    if preferred not in sector_options:
-        preferred = sector_options[0] if sector_options else None
-    chosen = st.selectbox("Chọn ngành", sector_options, index=sector_options.index(preferred) if preferred else 0, key="sector_detail")
+    chosen = st.selectbox("Chọn ngành", view["Nhóm ngành"].tolist(), key="sector_detail")
     row = metrics[metrics["Nhóm ngành"] == chosen].iloc[0]
     a, b, c, e = st.columns(4)
     a.metric("Hiệu suất 1 tuần", _fmt_pct(row["Hiệu suất 1 tuần (%)"]))

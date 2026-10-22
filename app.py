@@ -23,7 +23,6 @@ import mtf_levels as ML
 import waiting_buy as WB
 import rsi_divergence as DV
 import foreign_flow as FF
-import sector_dashboard as SD
 import market_view as MV
 import my_watchlist as MW
 import sell_card
@@ -2146,8 +2145,6 @@ def route():
         return MV.render()
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
-    if main == "Ngành" and sub == "Tổng quan ngành":
-        return SD.render(raw)
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Bộ lọc Realtime": return page_filter()
