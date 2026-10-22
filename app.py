@@ -23,6 +23,7 @@ import mtf_levels as ML
 import waiting_buy as WB
 import rsi_divergence as DV
 import foreign_flow as FF
+import market_view as MV
 import my_watchlist as MW
 import sell_card
 
@@ -2036,6 +2037,8 @@ def route():
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
+    if main == "Thị trường" and sub == "Góc nhìn thị trường":
+        return MV.render()
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Bộ lọc & Backtest":

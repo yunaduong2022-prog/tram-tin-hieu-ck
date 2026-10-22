@@ -4,7 +4,7 @@ import streamlit as st
 # Menu chính -> danh sách tab phụ (rỗng = không có sub-menu)
 MENU = {
     "Vĩ mô": [],
-    "Thị trường": ["VN-Index", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
+    "Thị trường": ["Góc nhìn thị trường", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
                    "Nhóm ngành", "Kết quả kinh doanh"],
     "Ngành": ["Tổng quan ngành", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
@@ -18,7 +18,7 @@ ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ
 
 # Mô tả nội dung từng tab phụ của mục "Thị trường" (hiển thị ở trang chờ cho tới khi có nội dung thật)
 MARKET_DESC = {
-    "VN-Index": ["Xu hướng", "Hỗ trợ / kháng cự", "Độ rộng thị trường"],
+    "Góc nhìn thị trường": ["Bản tin nhận định thị trường theo ngày"],
     "Dòng tiền khối ngoại": ["Mua/bán ròng", "Top cổ phiếu được mua/bán ròng", "Lũy kế 5–20 phiên"],
     "Dòng tiền tự doanh": ["Theo dõi giao dịch tự doanh (chỉ hiển thị khi có dữ liệu)"],
     "Thanh khoản & độ rộng": ["Giá trị giao dịch", "Số mã tăng / giảm"],

@@ -152,3 +152,23 @@ Tab **Thị trường → Dòng tiền khối ngoại** đã có dashboard để
 **Nạp dữ liệu:** mở tab này, tải `foreign_flow_template.csv`, điền dữ liệu từ nguồn dữ liệu chứng khoán phù hợp rồi tải CSV lên. Các cột bắt buộc: `Ngày`, `Mã`, `Giá trị mua`, `Giá trị bán`. Các cột bổ sung được hỗ trợ: `Sàn`, `Khối lượng mua`, `Khối lượng bán`, `Giá đóng cửa`, `Tổng GTGD`, `Nhóm ngành`. Giá trị mua/bán và tổng GTGD phải cùng đơn vị (khuyến nghị tỷ đồng).
 
 File sau khi nạp được lưu tại `data/foreign_flow.csv`. Để dữ liệu tồn tại sau các lần deploy và được chia sẻ với người dùng app, cần commit file này lên repo; không nên dùng upload trong app làm phương thức nhập dữ liệu sản xuất lâu dài. Tự động cập nhật qua API chưa được bật vì cần chọn nhà cung cấp có dữ liệu khối ngoại, xác thực API và điều kiện cấp phép. App không suy ra giao dịch khối ngoại từ dữ liệu OHLCV.
+
+
+## Thị trường · Góc nhìn thị trường
+
+Mục con này (trước đây là "VN-Index") hiển thị bản tin nhận định thị trường theo ngày: chọn **Tháng/Năm** ở cột trái, bấm vào một ngày để xem chi tiết ở cột phải.
+
+Mỗi ngày là một file Markdown `data/goc_nhin_thi_truong/YYYY-MM-DD.md` (ví dụ `2026-10-23.md`):
+
+```
+# Tiêu đề bản tin
+> Một dòng tóm tắt hiển thị ở danh sách bên trái
+
+## Tổng kết phiên 23/10
+- **VN-Index:** ...
+
+### 1. Mục đầu tiên
+Nội dung Markdown...
+```
+
+Thêm bản tin mới chỉ cần thêm file rồi commit lên repo, không phải sửa code. Dòng `##` hiển thị thành thanh tiêu đề màu; `###` là tiêu đề từng mục.
