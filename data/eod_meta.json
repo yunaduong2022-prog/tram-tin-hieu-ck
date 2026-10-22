@@ -1,9 +1,9 @@
 {
- "updated_at": "22/10/2026 00:14 (giờ VN)",
- "latest_date": "2026-10-21",
+ "updated_at": "22/10/2026 17:37 (giờ VN)",
+ "latest_date": "2026-10-22",
  "symbols": 202,
- "symbols_on_latest_date": 198,
- "rows": 383190,
+ "symbols_on_latest_date": 197,
+ "rows": 382398,
  "sources": {
   "vci": 202
  },
@@ -11,6 +11,8 @@
   "PSS: ProviderError: Nguồn VND trả về dữ liệu giá lịch sử không phải JSON hợp lệ\n(English: vnstock settings language en)"
  ],
  "skipped": 0,
- "adjusted": [],
+ "adjusted": [
+  "VNINDEX"
+ ],
  "stopped": null
 }
