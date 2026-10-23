@@ -1266,7 +1266,7 @@ def page_sector_ranking():
                     st.session_state[_k] = code
                 NAV.goto("Cổ phiếu", "Tổng quát")
 
-    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card)
+    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt)
 
 
 def _wl_card(r, u, ver):

@@ -29,17 +29,21 @@ import waiting_buy as WB
 CFG = {
     "leader_top_n": 3,        # số mã dẫn đầu RS tối đa (ngành ít mã thì lấy tối đa 1/2 số mã)
     "leader_min_rs": E.RS_STABLE,   # mã dẫn đầu phải có RS20 >= ngưỡng này (không gọi "dẫn đầu" khi chính nó cũng thua thị trường)
-    "ret_sessions": 20,       # số phiên tính hiệu suất để so mã với trung bình ngành (cùng kỳ với RS20)
+    "ret_sessions": 20,       # luật "yếu hơn ngành" luôn đo trên 20 phiên (không phụ thuộc khung xếp hạng đang chọn, tránh nhiễu 1 phiên)
     "liq_up": 1.10,           # GTGD TB 5 phiên / TB 20 phiên >= ngưỡng => thanh khoản cải thiện
     "weak_gap": -3.0,         # yếu hơn ngành: hiệu suất 20 phiên thấp hơn TB ngành từ x điểm % ...
     "min_stocks": 3,          # ngành có ít hơn ngần này mã thì xếp hạng chỉ mang tính tham khảo
 }
 
+# Khung xếp hạng RS: số phiên giao dịch. Tháng = 20 phiên để khớp RS20 của app.
+PERIODS = {"Ngày": 1, "Tuần": 5, "Tháng": 20, "3 Tháng": 63}
+DEFAULT_PERIOD = "Tháng"
+
 VIEW_LEAD, VIEW_TREND, VIEW_ACCUM, VIEW_WEAK = (
     "Mạnh nhất theo RS", "Xu hướng tăng + thanh khoản", "Tích lũy / gần điểm mua", "Yếu hơn ngành / suy yếu")
 VIEWS = [VIEW_LEAD, VIEW_TREND, VIEW_ACCUM, VIEW_WEAK]
 VIEW_HELP = {
-    VIEW_LEAD: "Các mã có RS20 cao nhất ngành (so với VN-Index hoặc proxy thị trường), chưa có tín hiệu suy yếu.",
+    VIEW_LEAD: "Các mã có RS cao nhất ngành ở khung đang chọn (Ngày / Tuần / Tháng / 3 Tháng, so với VN-Index hoặc proxy thị trường), chưa có tín hiệu suy yếu.",
     VIEW_TREND: "Giá trên MA20, MA10 trên MA20, trung hạn không giảm, và dòng tiền đang quay lại (GTGD 5 phiên so với TB20, "
                 "khối lượng tăng dần hoặc dòng tiền sớm).",
     VIEW_ACCUM: "Các mã thuộc nhóm *Điểm mua đã xác nhận* hoặc *Sắp có điểm mua* của mục Chờ mua: đã có tín hiệu mua, "
@@ -77,27 +81,39 @@ def _num(x, default=np.nan) -> float:
         return default
 
 
-def _stock_stats(raw: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
-    """Hiệu suất N phiên và GTGD 5 phiên / TB20 (GTGD xấp xỉ = giá đóng cửa × khối lượng) cho từng mã."""
+def _stock_stats(raw: pd.DataFrame, symbols: list[str], mkt: pd.Series) -> pd.DataFrame:
+    """Hiệu suất và RS theo từng khung (Ngày / Tuần / Tháng / 3 Tháng) + GTGD 5 phiên / TB20.
+
+    RS = (giá cuối / giá đầu kỳ của mã) / (chỉ số thị trường cuối / đầu kỳ), cùng công thức RS20 của engine.
+    GTGD xấp xỉ = giá đóng cửa × khối lượng.
+    """
     d = SD._clean(raw)
-    n = CFG["ret_sessions"]
     rows = []
     for sym in symbols:
         g = d[d["Mã"] == sym].sort_values("Ngày")
-        close = g["Giá đóng cửa"].to_numpy(float)
-        ret = (close[-1] / close[-n - 1] - 1) * 100 if len(close) > n and close[-n - 1] > 0 else np.nan
+        close, dates = g["Giá đóng cửa"].to_numpy(float), g["Ngày"].to_numpy()
+        row = {"Mã": sym}
+        for label, n in PERIODS.items():
+            ret = rs = np.nan
+            if len(close) > n and close[-n - 1] > 0:
+                ret = (close[-1] / close[-n - 1] - 1) * 100
+                m0, m1 = mkt.get(pd.Timestamp(dates[-n - 1]), np.nan), mkt.get(pd.Timestamp(dates[-1]), np.nan)
+                if pd.notna(m0) and pd.notna(m1) and m0 > 0 and m1 > 0:
+                    rs = (close[-1] / close[-n - 1]) / (m1 / m0)
+            row[f"Hiệu suất {label}"], row[f"RS {label}"] = ret, rs
         liq = np.nan
         vol = g["Khối lượng khớp lệnh"].to_numpy(float)
         if len(g) >= 20 and not np.isnan(vol[-20:]).any():
             val = close * vol
             m20 = val[-20:].mean()
             liq = val[-5:].mean() / m20 if m20 > 0 else np.nan
-        rows.append({"Mã": sym, "Hiệu suất (%)": ret, "Thanh khoản 5p/TB20": liq})
+        row["Thanh khoản 5p/TB20"] = liq
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
 def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.DataFrame, raw: pd.DataFrame,
-                       fund_map: dict | None = None) -> pd.DataFrame:
+                       fund_map: dict | None = None, mkt: pd.Series | None = None, period: str = DEFAULT_PERIOD) -> pd.DataFrame:
     """Bảng một dòng / mã trong ngành, kèm hạng RS, RS so với ngành và các cờ phân loại 4 góc nhìn."""
     fund_map = fund_map or {}
     syms = list(dict.fromkeys(str(s).upper() for s in symbols))
@@ -106,13 +122,21 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
         return pd.DataFrame()
     wcols = [c for c in ("Mã", "Trạng thái", "Danh sách", "Hành động", "Hành động bán", "Lý do") if c in wait_df.columns]
     d = scr.merge(wait_df[wcols], on="Mã", how="left")
-    d = d.merge(_stock_stats(raw, list(d["Mã"])), on="Mã", how="left")
+    if mkt is None:
+        mkt = E.market_series(raw)[0]
+    d = d.merge(_stock_stats(raw, list(d["Mã"]), mkt), on="Mã", how="left")
     n = len(d)
 
-    d["RS20"] = pd.to_numeric(d["RS20"], errors="coerce")
-    d["Hạng RS"] = d["RS20"].rank(ascending=False, method="min").astype("Int64")
+    # Hạng RS ở cả 4 khung (để thấy mã mạnh bền hay chỉ bật 1-2 phiên) và chênh lệch với trung bình đều của ngành
+    for label in PERIODS:
+        d[f"Hạng {label}"] = d[f"RS {label}"].rank(ascending=False, method="min").astype("Int64")
+        d[f"Chênh {label}"] = d[f"Hiệu suất {label}"] - d[f"Hiệu suất {label}"].mean()
+    # Cột của khung đang chọn
+    d["RS"] = d[f"RS {period}"]
+    d["Hạng RS"] = d[f"Hạng {period}"]
+    d["Hiệu suất (%)"] = d[f"Hiệu suất {period}"]
+    d["RS vs ngành"] = d[f"Chênh {period}"]          # điểm %, so với trung bình đều của ngành cùng kỳ
     sector_ret = d["Hiệu suất (%)"].mean()
-    d["RS vs ngành"] = d["Hiệu suất (%)"] - sector_ret          # điểm %, so với trung bình đều của ngành
     d["ROE (%)"] = d["Mã"].map(lambda c: _num((fund_map.get(c) or {}).get("ROE")))
 
     price, ma20 = pd.to_numeric(d["Giá"], errors="coerce"), pd.to_numeric(d["MA20"], errors="coerce")
@@ -122,18 +146,19 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
     # --- Yếu hơn ngành / suy yếu
     risk_list = d["Danh sách"].eq(WB.L_RISK)
     sell_sig = d["Hành động bán"].eq("BÁN") | (pd.to_numeric(d["PV_signal"], errors="coerce") < 0)
-    lag = (d["RS vs ngành"] <= CFG["weak_gap"]) & ~above_ma20
+    gap_ref = d["Chênh Tháng"]          # luật yếu hơn ngành luôn đo trên 20 phiên
+    lag = (gap_ref <= CFG["weak_gap"]) & ~above_ma20
     d["_weak"] = (risk_list | sell_sig | lag).fillna(False)
     d["Lý do yếu"] = [
         "; ".join(x for x in (
             "đã có tín hiệu hạ tỷ trọng / xu hướng suy yếu" if rl else "",
             "có tín hiệu bán (giá-khối lượng)" if ss else "",
             f"thua trung bình ngành {abs(gap):.1f} điểm % và nằm dưới MA20" if lg else "") if x)
-        for rl, ss, lg, gap in zip(risk_list, sell_sig, lag, d["RS vs ngành"])]
+        for rl, ss, lg, gap in zip(risk_list, sell_sig, lag, gap_ref)]
 
     # --- Mạnh nhất theo RS
     top_n = max(1, min(CFG["leader_top_n"], n // 2))
-    d["_lead"] = ((d["Hạng RS"] <= top_n) & (d["RS20"] >= CFG["leader_min_rs"]) & ~d["_weak"]).fillna(False)
+    d["_lead"] = ((d["Hạng RS"] <= top_n) & (d["RS"] >= CFG["leader_min_rs"]) & ~d["_weak"]).fillna(False)
 
     # --- Xu hướng tăng + thanh khoản cải thiện
     trend_up = above_ma20 & d["Trend_NganHan"].eq("TĂNG") & d["Trend_TrungHan"].ne("GIẢM")
@@ -158,6 +183,7 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
     d.attrs["sector_ret"] = float(sector_ret) if pd.notna(sector_ret) else np.nan
     d.attrs["n"] = n
     d.attrs["top_n"] = top_n
+    d.attrs["period"] = period
     return d.sort_values(["Hạng RS", "Score"], ascending=[True, False], na_position="last").reset_index(drop=True)
 
 
@@ -168,12 +194,12 @@ def view_frame(d: pd.DataFrame, view: str) -> pd.DataFrame:
     if view == VIEW_LEAD:
         return d[d["_lead"]].sort_values("Hạng RS")
     if view == VIEW_TREND:
-        return d[d["_trend"]].sort_values(["Score", "RS20"], ascending=False)
+        return d[d["_trend"]].sort_values(["Score", "RS"], ascending=False)
     if view == VIEW_ACCUM:
         x = d[d["_accum"]].copy()
         x["_o"] = x["Trạng thái"].map(_ACCUM_ORDER).fillna(9)
         return x.sort_values(["_o", "Score"], ascending=[True, False]).drop(columns="_o")
-    return d[d["_weak"]].sort_values("RS vs ngành")
+    return d[d["_weak"]].sort_values("Chênh Tháng")
 
 
 # ------------------------------------------------------------------ KHỐI "VỊ THẾ TRONG NGÀNH" TRÊN THẺ
@@ -181,20 +207,20 @@ def _fmt(x, f="{:.2f}", na="—"):
     return na if pd.isna(x) else f.format(x)
 
 
-def context_html(r: pd.Series, view: str, n: int) -> str:
+def context_html(r: pd.Series, view: str, n: int, period: str = DEFAULT_PERIOD) -> str:
     """Khối ngữ cảnh ngành gắn vào thẻ MUA / CHỜ MUA: hạng RS, RS so với ngành, thanh khoản và lý do mã nằm ở góc nhìn này."""
     esc = _html.escape
     rank, gap, liq = r["Hạng RS"], r["RS vs ngành"], r["Thanh khoản 5p/TB20"]
     chips = []
     if pd.notna(rank):
-        chips.append((f"Hạng RS {int(rank)}/{n}", "g" if int(rank) <= max(1, n // 3) else "r" if int(rank) > n - max(1, n // 3) else ""))
+        chips.append((f"Hạng RS {period} {int(rank)}/{n}", "g" if int(rank) <= max(1, n // 3) else "r" if int(rank) > n - max(1, n // 3) else ""))
     if pd.notna(gap):
-        chips.append((f"{gap:+.1f} điểm % so với ngành", "g" if gap > 0 else "r"))
+        chips.append((f"{gap:+.1f} điểm % so với ngành ({period})", "g" if gap > 0 else "r"))
     if pd.notna(liq):
         chips.append((f"GTGD 5p/TB20 {liq:.1f}x", "g" if liq >= CFG["liq_up"] else "a" if liq < 0.9 else ""))
     chips.append((f"Xu hướng {str(r['Xu hướng']).lower()}", {"Tăng": "g", "Yếu": "r"}.get(r["Xu hướng"], "")))
     if view == VIEW_LEAD:
-        why = f"RS20 {_fmt(r['RS20'])}, đứng thứ {int(rank)} trong {n} mã của ngành." if pd.notna(rank) else ""
+        why = f"RS {period} {_fmt(r['RS'])}, đứng thứ {int(rank)} trong {n} mã của ngành." if pd.notna(rank) else ""
     elif view == VIEW_TREND:
         why = "Giá trên MA20, MA10 trên MA20 và dòng tiền đang quay lại."
     elif view == VIEW_ACCUM:
@@ -218,11 +244,12 @@ PER_VIEW = 9
 
 
 def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.DataFrame, groups: dict,
-           fund_map: dict, card_renderer):
+           fund_map: dict, card_renderer, mkt: pd.Series | None = None):
     """card_renderer(row_chờ_mua, ctx_html, view_key) vẽ một thẻ (do app.py cung cấp để dùng đúng thẻ MUA / CHỜ MUA)."""
     st.title("🏆 Vị thế cổ phiếu trong ngành")
-    st.caption("Tìm mã dẫn đầu, không chỉ tìm ngành mạnh. RS ở đây là RS20 của app (so với VN-Index hoặc proxy thị trường); "
-               "\"so với ngành\" là chênh lệch hiệu suất 20 phiên của mã với trung bình đều của ngành. "
+    st.caption("Tìm mã dẫn đầu, không chỉ tìm ngành mạnh. RS = hiệu suất của mã chia hiệu suất VN-Index (hoặc proxy thị trường) cùng kỳ; "
+               "\"so với ngành\" là chênh lệch hiệu suất của mã với trung bình đều của ngành cùng kỳ. "
+               "Chọn khung Ngày / Tuần / Tháng / 3 Tháng để đổi cách xếp hạng. "
                "Chỉ để tham khảo, không phải khuyến nghị đầu tư.")
     st.markdown(CSS, unsafe_allow_html=True)
 
@@ -244,7 +271,10 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     sector = st.selectbox("Chọn ngành", sectors, key="sr_sector",
                           help="Sắp theo RS 1 tháng của ngành, ngành mạnh nhất ở đầu danh sách.")
 
-    d = build_sector_frame(groups[sector], res_df, wait_df, raw, fund_map)
+    st.session_state.setdefault("sr_period", DEFAULT_PERIOD)
+    period = st.segmented_control("Khung xếp hạng", list(PERIODS), key="sr_period",
+                                  help="Ngày = 1 phiên, Tuần = 5 phiên, Tháng = 20 phiên, 3 Tháng = 63 phiên giao dịch.") or DEFAULT_PERIOD
+    d = build_sector_frame(groups[sector], res_df, wait_df, raw, fund_map, mkt, period)
     if d.empty:
         st.info("Ngành này chưa có mã nào có dữ liệu giá mới nhất.")
         return
@@ -264,19 +294,22 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
         st.warning(f"Ngành này chỉ có {n} mã có dữ liệu, thứ hạng chỉ mang tính tham khảo.")
 
     # --- Bảng xếp hạng
-    st.subheader("Bảng xếp hạng theo RS")
-    show = d[["Hạng RS", "Mã", "Giá", "Chg_%", "Score", "RS20", "RS vs ngành", "Hiệu suất (%)",
+    st.subheader(f"Bảng xếp hạng theo RS · {period}")
+    st.caption("Cột Hạng Ngày / Tuần / Tháng / 3 Tháng cho thấy mã mạnh bền (hạng cao ở mọi khung) hay chỉ bật vài phiên gần đây.")
+    rank_cols = [f"Hạng {p}" for p in PERIODS]
+    show = d[["Hạng RS", "Mã", *rank_cols, "Giá", "Chg_%", "Score", "RS", "RS vs ngành", "Hiệu suất (%)",
               "Thanh khoản 5p/TB20", "ROE (%)", "Xu hướng", "Trạng thái", "Vị thế"]].rename(columns={
-        "Chg_%": "% phiên", "RS20": "RS", "RS vs ngành": "RS so với ngành (điểm %)",
-        "Hiệu suất (%)": "Hiệu suất 20 phiên", "Thanh khoản 5p/TB20": "GTGD 5p / TB20"})
+        "Hạng RS": f"Hạng RS ({period})", "Chg_%": "% phiên", "RS": f"RS {period}",
+        "RS vs ngành": "RS so với ngành (điểm %)", "Hiệu suất (%)": f"Hiệu suất {period}",
+        "Thanh khoản 5p/TB20": "GTGD 5p / TB20"})
     st.dataframe(show, hide_index=True, **_STRETCH_DF, column_config={
-        "Hạng RS": st.column_config.NumberColumn(format="%d"),
+        **{c: st.column_config.NumberColumn(format="%d") for c in [f"Hạng RS ({period})", *rank_cols]},
         "Giá": st.column_config.NumberColumn(format="%.2f"),
         "% phiên": st.column_config.NumberColumn(format="%+.2f%%"),
         "Score": st.column_config.NumberColumn(format="%.1f"),
-        "RS": st.column_config.NumberColumn(format="%.2f"),
+        f"RS {period}": st.column_config.NumberColumn(format="%.2f"),
         "RS so với ngành (điểm %)": st.column_config.NumberColumn(format="%+.1f"),
-        "Hiệu suất 20 phiên": st.column_config.NumberColumn(format="%+.1f%%"),
+        f"Hiệu suất {period}": st.column_config.NumberColumn(format="%+.1f%%"),
         "GTGD 5p / TB20": st.column_config.NumberColumn(format="%.2fx"),
         "ROE (%)": st.column_config.NumberColumn(format="%.1f%%"),
     })
@@ -303,18 +336,18 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
         if w.empty:
             continue
         with cols[i % 3]:
-            card_renderer(w.iloc[0], context_html(r, view, n), VIEWS.index(view))
+            card_renderer(w.iloc[0], context_html(r, view, n, period), VIEWS.index(view))
     if len(codes_now) > PER_VIEW and not show_all:
         st.caption(f"Đang hiển thị {PER_VIEW}/{len(codes_now)} mã đứng đầu góc nhìn này.")
     with st.expander("ℹ️ Quy tắc phân loại"):
         st.markdown(
-            f"- **Mạnh nhất theo RS**: hạng RS20 trong ngành thuộc top {d.attrs['top_n']} (ngành ít mã thì lấy tối đa một nửa), "
-            f"RS20 ≥ {CFG['leader_min_rs']:.2f}, chưa có tín hiệu suy yếu.\n"
+            f"- **Mạnh nhất theo RS**: hạng RS ở khung đang chọn ({period}) thuộc top {d.attrs['top_n']} (ngành ít mã thì lấy tối đa một nửa), "
+            f"RS ≥ {CFG['leader_min_rs']:.2f}, chưa có tín hiệu suy yếu.\n"
             f"- **Xu hướng tăng + thanh khoản**: giá trên MA20, MA10 > MA20, trung hạn không phải GIẢM; và GTGD 5 phiên ≥ "
             f"{CFG['liq_up']:.1f} lần TB20, hoặc khối lượng tăng 3 phiên liên tiếp, hoặc có dòng tiền sớm.\n"
             "- **Tích lũy / gần điểm mua**: nhóm *Điểm mua đã xác nhận* và *Sắp có điểm mua* ở mục Chờ mua (gồm Tích lũy / Siết nền giá, "
             "Gần vùng mua, Điểm mua đẹp và Đã có tín hiệu mua theo chiến lược, tức đã bứt khỏi nền).\n"
-            f"- **Yếu hơn ngành / suy yếu**: nhóm *Hạ tỷ trọng / Xu hướng suy yếu*, hoặc có tín hiệu bán, hoặc hiệu suất 20 phiên thấp hơn "
+            f"- **Yếu hơn ngành / suy yếu**: nhóm *Hạ tỷ trọng / Xu hướng suy yếu*, hoặc có tín hiệu bán, hoặc hiệu suất 20 phiên (cố định, không đổi theo khung) thấp hơn "
             f"trung bình ngành từ {abs(CFG['weak_gap']):.0f} điểm % trở lên khi giá dưới MA20.\n\n"
             "Một mã có thể xuất hiện ở nhiều góc nhìn. Ngưỡng nằm trong `CFG` của `sector_ranking.py`. "
             "Hiệu suất ngành là trung bình đều các mã, chưa theo vốn hóa.")
