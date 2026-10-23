@@ -256,5 +256,4 @@ def html(ctx: dict) -> str:
     return ('<div class="ac-box">' + head + '<div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
             '<table class="ac-tb"><thead><tr><th>Vị thế tài khoản</th><th>Hành động</th><th>Vùng giá / Mốc lưu ý</th></tr></thead>'
             f'<tbody>{body}</tbody></table>'
-            f'<div class="ac-bs">Căn cứ: {esc(" · ".join(_basis(s)))}</div>'
             '<div class="ac-ft">Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.</div></div>')
