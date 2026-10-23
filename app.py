@@ -1239,6 +1239,7 @@ def page_buy_now():
             _wb_card(r, str(r["Danh sách"]))
     if len(d) > WB_PER_GROUP and not show_all:
         st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
+    _rt_focus_scroll()
 
 
 def _wl_card(r, u, ver):
@@ -1274,6 +1275,7 @@ def page_watchlist():
         NAV.goto("Cổ phiếu", "Tổng quát")
 
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
+    _rt_focus_scroll()
 
 
 def page_realtime_filter():
@@ -1295,7 +1297,14 @@ def page_realtime_filter():
             st.session_state[_k] = code
         NAV.goto("Cổ phiếu", "Tổng quát")
 
-    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart)
+    def _mtf(code: str):
+        try:
+            A = {t_: analyze_cached(frames, code, t_, DATA_KEY) for t_ in ("M", "W", "D")}
+            return E.mtf_conclusion(A), A
+        except Exception:
+            return None, None
+
+    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf)
 
 
 def _move_page(kind: str):
@@ -1305,7 +1314,8 @@ def _move_page(kind: str):
     header()
     lbl_ses = "Tăng trong phiên" if up else "Giảm trong phiên"
     lbl_leg = "Tăng từ đáy" if up else "Giảm từ đỉnh"
-    mode = st.segmented_control("Chế độ", [lbl_ses, lbl_leg], default=lbl_ses, key=f"mv_mode_{kind}",
+    st.session_state.setdefault(f"mv_mode_{kind}", lbl_ses)
+    mode = st.segmented_control("Chế độ", [lbl_ses, lbl_leg], key=f"mv_mode_{kind}",
                                 label_visibility="collapsed") or lbl_ses
     by_leg = mode == lbl_leg
     if by_leg:
@@ -1382,6 +1392,7 @@ def _move_page(kind: str):
                 f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
     st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind, _wy_note, _lean_html), unsafe_allow_html=True)
     _sell_jump_js()
+    _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "Chg %", col, "Vol/Avg10", "Score", "RS20", "Nhóm", "Danh sách"]].loc[:, lambda x: ~x.columns.duplicated()]
                      .reset_index(drop=True), hide_index=True,
@@ -1424,6 +1435,7 @@ def page_recovering():
                     "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua (wb-*)
     st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover", _wy_note, _lean_html, _min_trading()), unsafe_allow_html=True)
+    _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "MA20", "MA50", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
                      column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
@@ -1480,6 +1492,7 @@ def page_alert_lists():
                                             "Score": st.column_config.NumberColumn(format="%.1f"),
                                             "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
                              **_STRETCH_DF)
+    _rt_focus_scroll()
     st.caption(f"{int((t_all['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
 
 
@@ -1548,6 +1561,7 @@ def page_sell_list():
     d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
     st.markdown(sell_card.cards_html(d, latest_date, wy_of=_wy_note, lean_of=_lean_html), unsafe_allow_html=True)
     _sell_jump_js()
+    _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Hành động bán", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Lý do"]].rename(columns={"Hành động bán": "Tín hiệu"})
                      .reset_index(drop=True), hide_index=True,
@@ -1607,7 +1621,7 @@ def mtf_card(conc, A, code=""):
                 'chọn điểm vào. Hai khung lớn cùng giảm thì không mua; khung lớn ngược nhau thì CHỜ. ⚠ = chưa đủ nến '
                 'cho Ichimoku/EMA200 nên các chỉ báo đó chưa được tính điểm. Đây là xác suất, không phải chắc chắn: '
                 'luôn đặt cắt lỗ.</div>')
-    return f'<div class="card">{"".join(html)}</div>'
+    return f'<div class="card" id="mtf-conclusion">{"".join(html)}</div>'
 
 
 def rsi_card(a, tf, code):
@@ -2105,6 +2119,7 @@ def page_stock():
             if not info["reasons"]:
                 st.write("Chưa có chỉ báo nào đóng góp điểm.")
 
+    _rt_focus_scroll()
     st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
 
@@ -2175,8 +2190,68 @@ def page_mtf_levels():
                "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
 
+# ------------------------------------------------------------------ LIÊN KẾT TỪ SƠ ĐỒ (Bộ lọc Realtime)
+_RT_JS = """<script>
+const f=%s;let tries=0;
+function find(d){
+ if(f.kind==='wb')return [...d.querySelectorAll('[class*="st-key-wbcard-"]')].find(e=>[...e.classList].some(c=>c.startsWith('st-key-wbcard-')&&c.endsWith('-'+f.code)));
+ return d.getElementById(f.id);}
+function go(){const d=window.parent.document;
+ if(f.tab){const t=[...d.querySelectorAll('[role="tab"]')].find(b=>b.textContent.trim().startsWith(f.tab));
+  if(t&&t.getAttribute('aria-selected')!=='true')t.click();}
+ const el=find(d);
+ if(el&&el.offsetParent!==null){el.scrollIntoView({behavior:'smooth',block:'center'});
+  if(f.kind==='wb'){el.classList.add('wb-focus');setTimeout(()=>el.classList.remove('wb-focus'),4000);}
+  else if(f.kind==='sc'){el.classList.add('sc-flash');setTimeout(()=>el.classList.remove('sc-flash'),3000);}
+  else{el.style.boxShadow='0 0 0 2px #2DD4A7';setTimeout(()=>{el.style.boxShadow=''},3000);}}
+ else if(tries++<32)setTimeout(go,250);}
+go();</script>"""
+
+
+def _rt_focus_scroll():
+    """Trang đích gọi sau khi vẽ xong thẻ: cuộn tới thẻ của mã vừa bấm ở sơ đồ Bộ lọc Realtime (chỉ một lần)."""
+    f = st.session_state.pop("rt_focus", None)
+    if f:
+        import streamlit.components.v1 as components
+        components.html(_RT_JS % json.dumps(f), height=0)
+
+
+def _rt_go(target: str, code: str):
+    """Đặt trang đích + mã cần cuộn tới theo liên kết ?rtgo=<đích>~<mã> ở sơ đồ Bộ lọc Realtime."""
+    code = code.upper().strip()
+    BT = "Bộ lọc & Backtest"
+    if target == "wait":      # trang Chờ mua đã có sẵn cơ chế wb_focus
+        st.session_state["_nav_pending"] = (BT, "Chờ mua")
+        st.session_state["wb_view"], st.session_state["wb_focus"] = "Thẻ", code
+    elif target == "buynow":
+        st.session_state["_nav_pending"] = (BT, "Mua ngay")
+        st.session_state["bn_all"] = True
+        st.session_state["rt_focus"] = {"kind": "wb", "code": code}
+    elif target == "watch":
+        st.session_state["_nav_pending"] = (BT, "Watchlist")
+        st.session_state["wl_view"] = "Thẻ"
+        st.session_state["rt_focus"] = {"kind": "wb", "code": code}
+    elif target in ("recover", "risk", "over", "sell"):
+        sub = {"recover": "Đang phục hồi", "risk": "Danh sách cảnh báo", "over": "Danh sách cảnh báo", "sell": "Bán / Chốt lời"}[target]
+        st.session_state["_nav_pending"] = (BT, sub)
+        st.session_state["rt_focus"] = {"kind": "sc", "id": f"sc-{code}", "tab": {"risk": "Xu hướng suy yếu", "over": "Tăng quá đà"}.get(target, "")}
+    elif target in ("surge-s", "surge-l", "plunge-s", "plunge-l"):
+        up = target.startswith("surge")
+        kind = "surge" if up else "plunge"
+        st.session_state["_nav_pending"] = (BT, "Tăng mạnh" if up else "Giảm mạnh")
+        by_leg = target.endswith("-l")
+        st.session_state[f"mv_mode_{kind}"] = ((("Tăng từ đáy" if up else "Giảm từ đỉnh")) if by_leg else ("Tăng trong phiên" if up else "Giảm trong phiên"))
+        st.session_state["rt_focus"] = {"kind": "sc", "id": f"sc-{code}", "tab": ""}
+    elif target == "chart":
+        st.session_state["selected_code"] = code
+        for _k in ("mtf_code", "tab_code"):
+            st.session_state[_k] = code
+        st.session_state["_nav_pending"] = ("Biểu đồ", None)
+        st.session_state["rt_focus"] = {"kind": "id", "id": "mtf-conclusion", "tab": ""}
+
+
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
-def route():
+def _route_inner():
     BR.render_header(f"Dữ liệu EOD · {latest_date:%d/%m/%Y}")
     _go = st.query_params.get("wbgo")      # liên kết "Xem thêm" ở bảng Cổ phiếu chờ mua -> mở thẻ của mã đó
     if _go:
@@ -2184,6 +2259,11 @@ def route():
         st.session_state["_nav_pending"] = ("Bộ lọc & Backtest", "Chờ mua")
         st.session_state["wb_view"] = "Thẻ"
         st.session_state["wb_focus"] = str(_go).upper().strip()
+    _rt = st.query_params.get("rtgo")      # liên kết ở sơ đồ Bộ lọc Realtime -> mở thẻ của mã ở đúng trang
+    if _rt:
+        st.query_params.clear()
+        if "~" in str(_rt):
+            _rt_go(*str(_rt).split("~", 1))
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
@@ -2222,6 +2302,11 @@ def route():
         return page_stock_tab(sub)
     NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""),
                     NAV.MARKET_DESC.get(sub) if main == "Thị trường" else None)
+
+
+def route():
+    _route_inner()
+    st.session_state.pop("rt_focus", None)      # trang đích không có thẻ của mã (rỗng / bị lọc): bỏ yêu cầu cuộn còn sót
 
 
 route()

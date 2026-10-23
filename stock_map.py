@@ -15,6 +15,7 @@ Không tính lại gì cả: mọi mục lấy đúng điều kiện của các 
   - Bán / Chốt lời: Hành động bán là BÁN hoặc CHỐT LỜI
   - Tăng mạnh / Giảm mạnh: theo ngưỡng mặc định của hai trang đó (xem hằng số bên dưới)
   - Watchlist     : mã có trong data/watchlist_cua_toi.csv
+  - Kết luận đa khung: thẻ ở trang Biểu đồ (engine.mtf_conclusion), chỉ tính khi chọn một mã
 Phần dựng dữ liệu và HTML không phụ thuộc Streamlit; chỉ render() mới import streamlit.
 """
 from __future__ import annotations
@@ -33,6 +34,7 @@ SURGE_LEG = 30.0                         # hoặc tăng từ đáy 120 phiên >=
 PLUNGE_SESSION = 4.0                     # giảm >= 4% trong phiên cuối (cùng điều kiện khối lượng)
 PLUNGE_LEG = 20.0                        # hoặc giảm từ đỉnh 120 phiên >= 20%
 
+TF_VN = {"M": "Tháng", "W": "Tuần", "D": "Ngày"}
 TONE = {"buy": "var(--green)", "wait": "var(--amber)", "recover": "#5BC0EB", "warn": "var(--amber)",
         "sell": "var(--red)", "none": "var(--muted)", "up": "var(--green)", "down": "var(--red)",
         "watch": "var(--gold)"}
@@ -92,7 +94,7 @@ def _levels(r) -> list[str]:
     return pts
 
 
-def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None) -> list[dict]:
+def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None) -> list[dict]:
     """Các mục mã đang nằm trong, mỗi mục: {title, icon, tag, tone, points[]}."""
     rows = t[t["Mã"].astype(str).str.upper() == code.upper()]
     if rows.empty:
@@ -102,27 +104,27 @@ def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_m
     sell = hd in SELL
     out: list[dict] = []
 
-    def add(icon, title, tag, tone, points):
-        out.append({"icon": icon, "title": title, "tag": tag, "tone": tone, "points": [p for p in points if p]})
+    def add(icon, title, tag, tone, points, go=""):
+        out.append({"icon": icon, "title": title, "tag": tag, "tone": tone, "go": go, "points": [p for p in points if p]})
 
     if code in now_codes:
         add("⚡", "Mua ngay", str(r.get("Trạng thái") or ""), "buy",
-            [f"Giá {_px(r.get('Giá'))} đang trong vùng mua, vào được ngay (nên chia lệnh)"] + _parts(r.get("Lý do"))[:1] + _levels(r))
+            [f"Giá {_px(r.get('Giá'))} đang trong vùng mua, vào được ngay (nên chia lệnh)"] + _parts(r.get("Lý do"))[:1] + _levels(r), "buynow")
     elif dsh in WB.BUY_GROUPS:
         pts = _parts(r.get("Lý do"))
         lv = _levels(r)
         gap = _f(r.get("Cách vùng mua %"))
         if lv and gap is not None:
             lv[0] += f" · giá cách vùng mua {_pc(gap)}"
-        add("🛒", "Chờ mua", f"{dsh} · {r.get('Trạng thái')}", "wait", pts + lv)
+        add("🛒", "Chờ mua", f"{dsh} · {r.get('Trạng thái')}", "wait", pts + lv, "wait")
     if dsh == WB.L_RECOVER and not sell:
-        add("🌱", "Đang phục hồi", str(r.get("Trạng thái") or ""), "recover", _parts(r.get("Lý do")) + _levels(r))
+        add("🌱", "Đang phục hồi", str(r.get("Trạng thái") or ""), "recover", _parts(r.get("Lý do")) + _levels(r), "recover")
     if dsh == WB.L_RISK and not sell:
-        add("⚠️", "Danh sách cảnh báo", "Xu hướng suy yếu", "warn", _parts(r.get("Lý do")))
+        add("⚠️", "Danh sách cảnh báo", "Xu hướng suy yếu", "warn", _parts(r.get("Lý do")), "risk")
     if dsh == WB.L_OVERBOUGHT and not sell:
-        add("⚠️", "Danh sách cảnh báo", "Tăng quá đà", "warn", _parts(r.get("Lý do")))
+        add("⚠️", "Danh sách cảnh báo", "Tăng quá đà", "warn", _parts(r.get("Lý do")), "over")
     if sell:
-        add("🔴", "Bán / Chốt lời", str(hd), "sell", _parts(r.get("Lý do")))
+        add("🔴", "Bán / Chốt lời", str(hd), "sell", _parts(r.get("Lý do")), "sell")
     if dsh == WB.L_NONE:
         add("⛔", "Đứng ngoài", "Không có điểm mua", "none",
             ["Bị loại khỏi mọi danh sách cơ hội"] + _parts(r.get("Lý do"))[:2])
@@ -143,12 +145,27 @@ def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_m
         dn_pts.append(f"Phiên cuối {_pc(chg)}, khối lượng {vol:.1f}× TB10")
     if leg_dn is not None and leg_dn >= PLUNGE_LEG:
         dn_pts.append(f"Đã giảm {_pc(leg_dn, False)} từ đỉnh 120 phiên: chưa nên bắt đáy sớm, chờ giá dừng giảm")
+    sess_up = chg is not None and chg >= SURGE_SESSION and vol is not None and vol >= SURGE_VOL
+    sess_dn = chg is not None and chg <= -PLUNGE_SESSION and vol is not None and vol >= SURGE_VOL
     if up_pts:
-        add("🚀", "Tăng mạnh", "", "up", up_pts)
+        add("🚀", "Tăng mạnh", "", "up", up_pts, "surge-s" if sess_up else "surge-l")
     if dn_pts:
-        add("💥", "Giảm mạnh", "", "down", dn_pts)
+        add("💥", "Giảm mạnh", "", "down", dn_pts, "plunge-s" if sess_dn else "plunge-l")
+    if conc:      # Kết luận đa khung: thẻ ở trang Biểu đồ (cột bên phải)
+        pts = [conc.get("text"), f"Điểm đa khung {float(conc['score']):+.0f}/100 (−100 đến +100)"]
+        if A:
+            segs = []
+            for tf in ("M", "W", "D"):
+                a = A.get(tf) or {}
+                if a.get("enough"):
+                    lab = "Tăng" if a["dir"] > 0 else "Giảm" if a["dir"] < 0 else "Ngang"
+                    segs.append(f"{TF_VN[tf]} {lab} {abs(a['bias']):.0f}/100")
+                else:
+                    segs.append(f"{TF_VN[tf]} thiếu dữ liệu")
+            pts.append(" · ".join(segs))
+        add("📊", "Kết luận đa khung", str(conc.get("verdict") or ""), {"green": "buy", "red": "sell"}.get(conc.get("kind"), "wait"), pts, "chart")
     if code.upper() in wl_codes:
-        add("⭐", "Watchlist", "", "watch", ["Có trong danh sách theo dõi của bạn"])
+        add("⭐", "Watchlist", "", "watch", ["Có trong danh sách theo dõi của bạn"], "watch")
     return out
 
 
@@ -184,6 +201,9 @@ CSS = """<style>
 .mm-kids{margin:8px 0 0 20px;border-left:2px solid var(--line)}
 .mm-k{position:relative;padding:5px 0 5px 20px}
 .mm-k:before{content:"";position:absolute;left:0;top:22px;width:16px;border-top:2px solid var(--line)}
+a.mm-card{display:block;text-decoration:none;color:inherit}
+a.mm-card:hover{background:var(--card2)}
+.mm-go{float:right;font-size:12px;color:var(--c);font-weight:500;margin-left:10px;white-space:nowrap}
 .mm-card{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;padding:9px 13px}
 .mm-ct{font-weight:600;color:var(--txt2);font-size:15px}
 .mm-tag{display:inline-block;margin-left:8px;padding:1px 9px;border-radius:999px;border:1px solid var(--c);color:var(--c);font-size:12px;font-weight:500;vertical-align:1px}
@@ -217,14 +237,19 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
         for m in mems:
             tag = f'<span class="mm-tag">{_e(m["tag"])}</span>' if m["tag"] else ""
             pts = "".join(f'<div class="mm-pt">{_e(p)}</div>' for p in m["points"])
-            kids += (f'<div class="mm-k"><div class="mm-card" style="--c:{TONE[m["tone"]]}">'
-                     f'<div class="mm-ct">{m["icon"]} {_e(m["title"])}{tag}</div>{pts}</div></div>')
+            if m.get("go"):
+                lab = "Mở biểu đồ ›" if m["go"] == "chart" else "Mở thẻ ›"
+                kids += (f'<div class="mm-k"><a class="mm-card" href="?rtgo={m["go"]}~{_e(code)}" target="_self" style="--c:{TONE[m["tone"]]}">'
+                         f'<div class="mm-ct">{m["icon"]} {_e(m["title"])}{tag}<span class="mm-go">{lab}</span></div>{pts}</a></div>')
+            else:
+                kids += (f'<div class="mm-k"><div class="mm-card" style="--c:{TONE[m["tone"]]}">'
+                         f'<div class="mm-ct">{m["icon"]} {_e(m["title"])}{tag}</div>{pts}</div></div>')
         b1 = (f'<div class="mm-b" style="--c:var(--accent)"><div class="mm-bt">🧭 Đang nằm ở {len(mems)} mục</div>'
               f'<div class="mm-kids">{kids}</div></div>')
     else:
         b1 = ('<div class="mm-b" style="--c:var(--muted)"><div class="mm-bt">🧭 Chưa nằm trong mục nào</div>'
               '<div class="mm-kids"><div class="mm-k"><div class="mm-empty">Mã chưa thỏa điều kiện của các mục '
-              'Mua ngay, Chờ mua, Đang phục hồi, Cảnh báo, Bán / Chốt lời, Tăng / Giảm mạnh.</div></div></div></div>')
+              'Mua ngay, Chờ mua, Đang phục hồi, Cảnh báo, Bán / Chốt lời, Tăng / Giảm mạnh, Watchlist.</div></div></div></div>')
 
     # nhánh 2: cơ bản
     fk = "".join(f'<div class="mm-k"><div class="mm-fk"><span>{_e(k)}</span><span>{_e(v)}</span></div></div>' for k, v in funda)
@@ -236,7 +261,7 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
 
 
 # ------------------------------------------------------------------ giao diện Streamlit
-def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None) -> None:
+def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None) -> None:
     import streamlit as st
 
     st.caption("Chọn ngành rồi chọn mã để xem mã đang nằm ở mục nào và ý chính của từng mục. "
@@ -266,7 +291,9 @@ def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_co
         return
 
     row = t[t["Mã"].astype(str).str.upper() == code.upper()].iloc[0]
-    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map),
+    conc, A = mtf_fn(code) if mtf_fn else (None, None)
+    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A),
                           fundamentals(code, row, cap_map, fund_map)), unsafe_allow_html=True)
+    st.caption("Bấm vào từng mục để mở đúng thẻ của mã ở trang đó.")
     if open_chart is not None and st.button("📈 Xem biểu đồ", key=f"rt_chart_{code}"):
         open_chart(code)      # NAV.goto đã tự chạy lại trang
