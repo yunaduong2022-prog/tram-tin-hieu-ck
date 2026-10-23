@@ -277,7 +277,7 @@ def _rank_table_html(show: pd.DataFrame, period: str) -> str:
     fmt = {"Giá": "{:.2f}", "% phiên": "{:+.2f}%", f"Biên độ {period} (%)": "{:.1f}%", "Score": "{:.1f}", f"RS {period}": "{:.2f}",
            "RS so với ngành (điểm %)": "{:+.1f}", f"Hiệu suất {period}": "{:+.1f}%", "GTGD 5p / TB20": "{:.2f}x", "ROE (%)": "{:.1f}%"}
     signed = {"% phiên", "RS so với ngành (điểm %)", f"Hiệu suất {period}"}
-    head = "".join(f"<th>{esc(str(c))}</th>" for c in show.columns)
+    head = "".join(f"<th>{esc(str(c)).replace(' (', '<br>(')}</th>" for c in show.columns)   # phần trong ngoặc xuống dòng riêng
     rows = []
     for _, r in show.iterrows():
         tds = []
