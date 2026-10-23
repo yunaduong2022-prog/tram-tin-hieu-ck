@@ -809,8 +809,14 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
             f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
             f'<div><span>ROE</span><b>{esc(str((meta or {}).get("ROE", "Chưa có")))}</b></div>'
+            + (f'<div><span>P/E</span><b>{esc(str(meta["P/E"]))}</b></div><div><span>EPS</span><b>{esc(str(meta["EPS"]))}</b></div>'
+               if (meta or {}).get("EPS", "Chưa có") != "Chưa có" else "") +
             f'<div class="wide"><span>Ngành</span><b>{esc(str((meta or {}).get("Ngành", "Chưa có")))}</b></div>'
-            f'<div><span>Vốn hóa</span><b>{esc(str((meta or {}).get("Vốn hóa", "Chưa có")))}</b></div></div>')
+            f'<div><span>Vốn hóa</span><b>{esc(str((meta or {}).get("Vốn hóa", "Chưa có")))}</b></div>'
+            + (f'<div><span>Giá trị sổ sách</span><b>{esc(str(meta["BVPS"]))}</b></div><div><span>KLGD MA20</span><b>{esc(str(meta["KLGD MA20"]))}</b></div>'
+               if (meta or {}).get("EPS", "Chưa có") != "Chưa có" else "")
+            + (f'<div class="wide"><span>Xếp hạng ngành</span><b>{esc(str(meta["Xếp hạng"]))}</b></div>' if (meta or {}).get("Xếp hạng") else "")
+            + '</div>')
     html += ma_html       # MA20/50/200 + chip Ngắn hạn/Trung hạn (app._ma_summary_html, cùng thẻ ở Bộ lọc)
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
     # Khung Vùng mua (thang giá) đặt lên trên; cảnh báo phân kỳ RSI và ghi chú Wyckoff đưa xuống dưới

@@ -243,7 +243,11 @@ def fundamentals(code: str, row, cap_map: dict, fund_map: dict) -> list[tuple[st
             ("Vốn hóa", fmt((cap_map or {}).get(code.upper()), "{:,.0f} tỷ")),
             ("P/B", fmt(fd.get("P/B"), "{:.2f}")),
             ("P/E", fmt(fd.get("P/E"), "{:.1f}")),
-            ("ROE", fmt(fd.get("ROE"), "{:.1f}%"))]
+            ("ROE", fmt(fd.get("ROE"), "{:.1f}%"))] + (
+        [("EPS", fmt(fd.get("EPS"), "{:,.0f} đ")), ("Giá trị sổ sách", fmt(fd.get("Giá trị sổ sách"), "{:,.0f} đ")),
+         ("KLGD MA20", fmt(fd.get("KLGD MA20"), "{:,.0f} cp"))] if _f(fd.get("EPS")) is not None else []) + (
+        [("Xếp hạng ngành", f"{int(fd['Xếp hạng'])} (TC {int(fd['Xếp hạng tài chính'])} · KD {int(fd['Xếp hạng kinh doanh'])}) · {fd.get('Bảng xếp hạng', '')}")]
+        if _f(fd.get("Xếp hạng")) is not None and _f(fd.get("Xếp hạng tài chính")) is not None and _f(fd.get("Xếp hạng kinh doanh")) is not None else [])
 
 
 # ------------------------------------------------------------------ HTML

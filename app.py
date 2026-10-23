@@ -757,7 +757,11 @@ def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap
         name = row.get("Tên công ty")
         if isinstance(name, str) and name.strip():
             fund_map.setdefault(code, {})["Tên công ty"] = name.strip()
-        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N"):
+        txt = row.get("Bảng xếp hạng")
+        if isinstance(txt, str) and txt.strip():
+            fund_map.setdefault(code, {})["Bảng xếp hạng"] = txt.strip()
+        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N", "EPS", "Giá trị sổ sách", "KLGD MA20",
+                    "Xếp hạng", "Xếp hạng tài chính", "Xếp hạng kinh doanh"):
             v = num(row.get(col))
             if v is not None:
                 fund_map.setdefault(code, {})[col] = v
@@ -1110,7 +1114,11 @@ def _wb_meta(code: str) -> dict:
     return {"Tên": (str(fd["Tên công ty"]).strip() if isinstance(fd.get("Tên công ty"), str) else ""),
             "Ngành": ", ".join(sectors) if sectors else "Khác / chưa phân loại",
             "Vốn hóa": fmt(cap_map.get(code.upper()), "{:,.0f} tỷ"),
-            "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%")}
+            "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%"),
+            "P/E": fmt(fd.get("P/E"), "{:.1f}"), "EPS": fmt(fd.get("EPS"), "{:,.0f}"),
+            "BVPS": fmt(fd.get("Giá trị sổ sách"), "{:,.0f}"), "KLGD MA20": fmt(fd.get("KLGD MA20"), "{:,.0f}"),
+            "Xếp hạng": (f"{int(fd['Xếp hạng'])} (TC {int(fd['Xếp hạng tài chính'])} · KD {int(fd['Xếp hạng kinh doanh'])}) · {fd.get('Bảng xếp hạng', '')}"
+                         if pd.notna(fd.get("Xếp hạng")) and pd.notna(fd.get("Xếp hạng tài chính")) and pd.notna(fd.get("Xếp hạng kinh doanh")) else "")}
 
 
 def _wb_ma_of(code: str) -> dict:
