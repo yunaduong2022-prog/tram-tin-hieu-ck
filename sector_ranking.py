@@ -179,9 +179,9 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
     # --- Tích lũy / gần điểm mua / đã vượt nền
     d["_accum"] = d["Danh sách"].isin([WB.G1, WB.G2]) & ~d["_weak"]
 
-    # Cột Trạng thái trên bảng: trạng thái Chờ mua + ghi chú Wyckoff (bỏ khi Wyckoff chưa xác định: "-" hoặc "Đi ngang")
+    # Cột Trạng thái trên bảng: ghi chú Wyckoff (đứng trước) + trạng thái Chờ mua (bỏ khi Wyckoff chưa xác định: "-" hoặc "Đi ngang")
     wy = d["Wyckoff"].fillna("-").astype(str).str.strip() if "Wyckoff" in d else pd.Series("-", index=d.index)
-    d["Trạng thái + Wyckoff"] = [st_ if w in ("-", "", "Đi ngang") else f"{st_} · Wyckoff: {w}" for st_, w in zip(d["Trạng thái"].astype(str), wy)]
+    d["Trạng thái + Wyckoff"] = [st_ if w in ("-", "", "Đi ngang") else f"Wyckoff: {w} · {st_}" for st_, w in zip(d["Trạng thái"].astype(str), wy)]
 
     d["Xu hướng"] = np.where(d["_trend_up"], "Tăng", np.where(above_ma20.fillna(False), "Trung tính", "Yếu"))
 
