@@ -1,14 +1,16 @@
 {
- "updated_at": "23/10/2026 03:43 (giờ VN)",
- "latest_date": "2026-10-22",
+ "updated_at": "23/10/2026 16:17 (giờ VN)",
+ "latest_date": "2026-10-23",
  "symbols": 203,
- "symbols_on_latest_date": 198,
- "rows": 384387,
+ "symbols_on_latest_date": 201,
+ "rows": 384044,
  "sources": {
   "vci": 203
  },
  "failed": [],
  "skipped": 0,
- "adjusted": [],
+ "adjusted": [
+  "KSV"
+ ],
  "stopped": null
 }
