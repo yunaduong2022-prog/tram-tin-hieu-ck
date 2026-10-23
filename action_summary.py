@@ -19,6 +19,7 @@ ctx (dict): close, ma20, ma50, ma200 (float | None), label (nhãn tag trạng th
 from __future__ import annotations
 
 import html as _html
+import re
 
 SELL_LABELS = ("BÁN", "CHỐT LỜI", "Hạ tỷ trọng")
 BUY_STATES = ("Điểm mua đẹp", "Đã có tín hiệu mua theo chiến lược")
@@ -61,7 +62,7 @@ def _signals(c: dict) -> dict:
         mid = "~"
     if dist and mid == "+":
         mid = "~"
-    return dict(ma=ma, above=above, sell=sell, dist=dist, acc=acc, div_up=div_up, div_dn=div_dn, short=short, mid=mid, wy=wy,
+    return dict(reason=reason, ma=ma, above=above, sell=sell, dist=dist, acc=acc, div_up=div_up, div_dn=div_dn, short=short, mid=mid, wy=wy,
                 lean=int(c.get("lean") or 0), buy=state in BUY_STATES, near=state in NEAR_STATES, over=state == OVERBOUGHT,
                 label=label, state=state)
 
@@ -126,12 +127,39 @@ def _basis(s: dict) -> list[str]:
     return out
 
 
+def _sell_why(reason: str) -> list[str]:
+    """Rút gọn LÝ DO của tín hiệu bán / hạ tỷ trọng (waiting_buy) thành các ý ngắn để giải thích vì sao Ngắn hạn tiêu cực."""
+    out = []
+    m = re.search(r"có tín hiệu bán trong 3 phiên \((.+?)\)\s*(?::|$)", reason)
+    if m:
+        out.append(f"có tín hiệu bán trong 3 phiên gần nhất: {m.group(1)}")
+    m = re.search(r"giá chỉnh ([\d.]+)% từ đỉnh [\d.]+, sâu hơn mọi nhịp chỉnh trước \(tối đa ([\d.]+)%\)", reason)
+    if m:
+        out.append(f"nhịp chỉnh {m.group(1)}% sâu hơn mọi nhịp trước (tối đa {m.group(2)}%)")
+    m = re.search(r"rơi ([\d.]+)% trong 5 phiên", reason)
+    if m:
+        out.append(f"rơi {m.group(1)}% trong 5 phiên")
+    if re.search(r"(thủng|dưới) EMA20", reason):
+        out.append("đã thủng EMA20")
+    return out or ["có tín hiệu bán / hạ tỷ trọng"]
+
+
 def _picture(s: dict) -> str:
-    short_r = []      # chỉ ghi vị trí giá so với MA (không ghi tín hiệu bán / hạ tỷ trọng, mục đó đã có ở thẻ trạng thái và dòng "Căn cứ")
+    # Ngắn hạn: ghi vị trí giá so với MA; nếu nhãn Tiêu cực đến từ tín hiệu bán (dù giá còn trên MA20) thì ghi rõ lý do đó
+    short_r = []
+    ma_part = []
     if _ok(s["ma"][20]):
-        short_r.append("giá trên MA20" if s["above"][20] else "giá dưới MA20")
+        ma_part.append("giá trên MA20" if s["above"][20] else "giá dưới MA20")
         if not s["above"][20] and _ok(s["ma"][50]) and not s["above"][50]:
-            short_r.append("dưới MA50")
+            ma_part.append("dưới MA50")
+    if s["sell"]:
+        why = _sell_why(s.get("reason", ""))
+        if s["above"][20]:
+            short_r = [f"giá còn trên MA20 nhưng {why[0]}"] + why[1:]
+        else:
+            short_r = ma_part + why
+    else:
+        short_r = ma_part
     mid_r = []
     for n in (50, 200):
         if _ok(s["ma"][n]):
