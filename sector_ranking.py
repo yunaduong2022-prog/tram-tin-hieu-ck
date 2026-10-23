@@ -92,6 +92,8 @@ def _stock_stats(raw: pd.DataFrame, symbols: list[str], mkt: pd.Series) -> pd.Da
     for sym in symbols:
         g = d[d["Mã"] == sym].sort_values("Ngày")
         close, dates = g["Giá đóng cửa"].to_numpy(float), g["Ngày"].to_numpy()
+        hi_a = pd.to_numeric(g["Giá cao nhất"], errors="coerce").to_numpy(float) if "Giá cao nhất" in g else np.full(len(g), np.nan)
+        lo_a = pd.to_numeric(g["Giá thấp nhất"], errors="coerce").to_numpy(float) if "Giá thấp nhất" in g else np.full(len(g), np.nan)
         row = {"Mã": sym}
         for label, n in PERIODS.items():
             ret = rs = np.nan
@@ -101,6 +103,9 @@ def _stock_stats(raw: pd.DataFrame, symbols: list[str], mkt: pd.Series) -> pd.Da
                 if pd.notna(m0) and pd.notna(m1) and m0 > 0 and m1 > 0:
                     rs = (close[-1] / close[-n - 1]) / (m1 / m0)
             row[f"Hiệu suất {label}"], row[f"RS {label}"] = ret, rs
+            # Biên độ giá: thấp nhất / cao nhất trong đúng n phiên gần nhất (Ngày = nến của phiên mới nhất)
+            hi, lo = (np.nanmax(hi_a[-n:]), np.nanmin(lo_a[-n:])) if len(close) >= n and not np.isnan(hi_a[-n:]).all() and not np.isnan(lo_a[-n:]).all() else (np.nan, np.nan)
+            row[f"Cao {label}"], row[f"Thấp {label}"] = hi, lo
         liq = np.nan
         vol = g["Khối lượng khớp lệnh"].to_numpy(float)
         if len(g) >= 20 and not np.isnan(vol[-20:]).any():
@@ -135,6 +140,10 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
     d["RS"] = d[f"RS {period}"]
     d["Hạng RS"] = d[f"Hạng {period}"]
     d["Hiệu suất (%)"] = d[f"Hiệu suất {period}"]
+    d["Cao nhất"], d["Thấp nhất"] = d[f"Cao {period}"], d[f"Thấp {period}"]
+    d["Biên độ (%)"] = (d["Cao nhất"] / d["Thấp nhất"] - 1) * 100
+    d["Biên độ giá"] = [("—" if pd.isna(lo) or pd.isna(hi) else f"{lo:,.2f} – {hi:,.2f}")
+                        for lo, hi in zip(d["Thấp nhất"], d["Cao nhất"])]
     d["RS vs ngành"] = d[f"Chênh {period}"]          # điểm %, so với trung bình đều của ngành cùng kỳ
     sector_ret = d["Hiệu suất (%)"].mean()
     d["ROE (%)"] = d["Mã"].map(lambda c: _num((fund_map.get(c) or {}).get("ROE")))
@@ -218,6 +227,8 @@ def context_html(r: pd.Series, view: str, n: int, period: str = DEFAULT_PERIOD) 
         chips.append((f"{gap:+.1f} điểm % so với ngành ({period})", "g" if gap > 0 else "r"))
     if pd.notna(liq):
         chips.append((f"GTGD 5p/TB20 {liq:.1f}x", "g" if liq >= CFG["liq_up"] else "a" if liq < 0.9 else ""))
+    if pd.notna(r.get("Thấp nhất")) and pd.notna(r.get("Cao nhất")):
+        chips.append((f"Biên độ {period}: {r['Thấp nhất']:,.2f} – {r['Cao nhất']:,.2f}", ""))
     chips.append((f"Xu hướng {str(r['Xu hướng']).lower()}", {"Tăng": "g", "Yếu": "r"}.get(r["Xu hướng"], "")))
     if view == VIEW_LEAD:
         why = f"RS {period} {_fmt(r['RS'])}, đứng thứ {int(rank)} trong {n} mã của ngành." if pd.notna(rank) else ""
@@ -297,15 +308,17 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     st.subheader(f"Bảng xếp hạng theo RS · {period}")
     st.caption("Cột Hạng Ngày / Tuần / Tháng / 3 Tháng cho thấy mã mạnh bền (hạng cao ở mọi khung) hay chỉ bật vài phiên gần đây.")
     rank_cols = [f"Hạng {p}" for p in PERIODS]
-    show = d[["Hạng RS", "Mã", *rank_cols, "Giá", "Chg_%", "Score", "RS", "RS vs ngành", "Hiệu suất (%)",
+    show = d[["Hạng RS", "Mã", *rank_cols, "Giá", "Chg_%", "Biên độ giá", "Biên độ (%)", "Score", "RS", "RS vs ngành", "Hiệu suất (%)",
               "Thanh khoản 5p/TB20", "ROE (%)", "Xu hướng", "Trạng thái", "Vị thế"]].rename(columns={
-        "Hạng RS": f"Hạng RS ({period})", "Chg_%": "% phiên", "RS": f"RS {period}",
+        "Hạng RS": f"Hạng RS ({period})", "Chg_%": "% phiên",
+        "Biên độ giá": f"Thấp nhất – Cao nhất ({period})", "Biên độ (%)": f"Biên độ {period} (%)", "RS": f"RS {period}",
         "RS vs ngành": "RS so với ngành (điểm %)", "Hiệu suất (%)": f"Hiệu suất {period}",
         "Thanh khoản 5p/TB20": "GTGD 5p / TB20"})
     st.dataframe(show, hide_index=True, **_STRETCH_DF, column_config={
         **{c: st.column_config.NumberColumn(format="%d") for c in [f"Hạng RS ({period})", *rank_cols]},
         "Giá": st.column_config.NumberColumn(format="%.2f"),
         "% phiên": st.column_config.NumberColumn(format="%+.2f%%"),
+        f"Biên độ {period} (%)": st.column_config.NumberColumn(format="%.1f%%"),
         "Score": st.column_config.NumberColumn(format="%.1f"),
         f"RS {period}": st.column_config.NumberColumn(format="%.2f"),
         "RS so với ngành (điểm %)": st.column_config.NumberColumn(format="%+.1f"),
