@@ -56,6 +56,16 @@ _ACCUM_ORDER = {WB.GOOD_ENTRY: 0, WB.BUY_SIGNAL: 1, WB.WATCH: 2, WB.NEAR_ZONE: 3
 
 CSS = """
 <style>
+.srt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:10px}
+.srt{border-collapse:collapse;width:100%;font-size:13px;color:var(--txt);table-layout:auto}
+.srt th{background:var(--bg2);color:var(--txt2);font-weight:700;text-align:center;padding:9px 6px;border-bottom:1px solid var(--line);
+  line-height:1.3;white-space:normal;vertical-align:middle}
+.srt td{padding:8px 6px;border-bottom:1px solid var(--line2);text-align:center;vertical-align:middle;line-height:1.4}
+.srt tbody tr:hover td{background:var(--line2)}
+.srt td.code{font-weight:800;color:var(--accent);white-space:nowrap}
+.srt td.txt{text-align:left;white-space:normal;word-break:break-word;min-width:190px}
+.srt td.num{white-space:nowrap}
+.srt .pos{color:var(--green)}.srt .neg{color:var(--red)}
 .sr-ctx{background:var(--card2);border:1px solid var(--line2);border-radius:12px;padding:10px 12px;margin:2px 0 14px}
 .sr-ctx-t{font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
 .sr-chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -256,6 +266,39 @@ def _sector_metrics(_raw: pd.DataFrame, key: str):
 _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe).parameters
                else {"use_container_width": True})
 PER_VIEW = 9
+_TXT_COLS = ("Trạng thái", "Vị thế")
+
+
+def _rank_table_html(show: pd.DataFrame, period: str) -> str:
+    """Bảng xếp hạng dạng HTML: cột chữ dài (Trạng thái, Vị thế) tự xuống dòng, bảng vừa khung nên đọc hết không phải cuộn ngang.
+    Viết liền không thụt lề để Markdown không coi là khối code."""
+    esc = _html.escape
+    rank_cols = [f"Hạng RS ({period})", *[f"Hạng {p}" for p in PERIODS]]
+    fmt = {"Giá": "{:.2f}", "% phiên": "{:+.2f}%", f"Biên độ {period} (%)": "{:.1f}%", "Score": "{:.1f}", f"RS {period}": "{:.2f}",
+           "RS so với ngành (điểm %)": "{:+.1f}", f"Hiệu suất {period}": "{:+.1f}%", "GTGD 5p / TB20": "{:.2f}x", "ROE (%)": "{:.1f}%"}
+    signed = {"% phiên", "RS so với ngành (điểm %)", f"Hiệu suất {period}"}
+    head = "".join(f"<th>{esc(str(c))}</th>" for c in show.columns)
+    rows = []
+    for _, r in show.iterrows():
+        tds = []
+        for c in show.columns:
+            v = r[c]
+            if c in _TXT_COLS:
+                tds.append(f'<td class="txt">{esc("" if pd.isna(v) else str(v))}</td>')
+            elif c == "Mã":
+                tds.append(f'<td class="code">{esc(str(v))}</td>')
+            elif c in rank_cols:
+                tds.append(f'<td class="num">{"" if pd.isna(v) else f"{int(v)}"}</td>')
+            elif c in fmt:
+                if pd.isna(v):
+                    tds.append('<td class="num">-</td>')
+                else:
+                    cls = (" pos" if float(v) > 0 else " neg" if float(v) < 0 else "") if c in signed else ""
+                    tds.append(f'<td class="num{cls}">{fmt[c].format(float(v))}</td>')
+            else:
+                tds.append(f'<td class="num">{esc("" if pd.isna(v) else str(v))}</td>')
+        rows.append("<tr>" + "".join(tds) + "</tr>")
+    return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
 def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.DataFrame, groups: dict,
@@ -319,18 +362,7 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
         "Biên độ giá": f"Thấp nhất – Cao nhất ({period})", "Biên độ (%)": f"Biên độ {period} (%)", "RS": f"RS {period}",
         "RS vs ngành": "RS so với ngành (điểm %)", "Hiệu suất (%)": f"Hiệu suất {period}",
         "Thanh khoản 5p/TB20": "GTGD 5p / TB20"})
-    st.dataframe(show, hide_index=True, **_STRETCH_DF, column_config={
-        **{c: st.column_config.NumberColumn(format="%d") for c in [f"Hạng RS ({period})", *rank_cols]},
-        "Giá": st.column_config.NumberColumn(format="%.2f"),
-        "% phiên": st.column_config.NumberColumn(format="%+.2f%%"),
-        f"Biên độ {period} (%)": st.column_config.NumberColumn(format="%.1f%%"),
-        "Score": st.column_config.NumberColumn(format="%.1f"),
-        f"RS {period}": st.column_config.NumberColumn(format="%.2f"),
-        "RS so với ngành (điểm %)": st.column_config.NumberColumn(format="%+.1f"),
-        f"Hiệu suất {period}": st.column_config.NumberColumn(format="%+.1f%%"),
-        "GTGD 5p / TB20": st.column_config.NumberColumn(format="%.2fx"),
-        "ROE (%)": st.column_config.NumberColumn(format="%.1f%%"),
-    })
+    st.markdown(_rank_table_html(show, period), unsafe_allow_html=True)
     if d["ROE (%)"].isna().all():
         st.caption("Chưa có dữ liệu ROE cho ngành này (data/fundamentals.csv hoặc data/nhap_tay.csv).")
 
