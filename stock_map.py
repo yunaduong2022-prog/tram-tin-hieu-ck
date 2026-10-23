@@ -112,8 +112,10 @@ def wyckoff_points(c) -> tuple[str, str, list[str]]:
     pts.append(f"Vùng đi ngang {WYK.fmt2(c['bot'])} – {WYK.fmt2(c['top'])} ({c.get('bars')} nến, biên độ {float(c.get('amp') or 0):.1f}%), khớp mẫu {c.get('score')}%")
     fb = c.get("fb") or []
     if fb:      # phiên đóng cửa vượt khung 10% rồi quay lại khung cũ
-        part = ", ".join(f"{pd.Timestamp(x['date']):%d/%m} {'vượt biên trên' if x['dir'] == 'up' else 'thủng biên dưới'}" for x in fb[:3])
+        part = ", ".join(f"{pd.Timestamp(x['date']):%d/%m} {'vượt biên trên: bẫy tăng giá' if x['dir'] == 'up' else 'thủng biên dưới: bẫy giảm giá'}" for x in fb[:3])
         pts.append(f"Breakout giả {len(fb)} phiên ({part}{'…' if len(fb) > 3 else ''}): giá đã quay lại khung cũ nên vẫn tính là đi ngang")
+        if any(x["dir"] == "up" for x in fb):
+            pts.append("Bẫy tăng giá (Upthrust): người mua đuổi bị kẹt khi giá không giữ được trên biên. Một cú đơn lẻ, nhất là ở Pha B, chưa đủ để kết luận phân phối")
     for key, lab in (("trigger", "Xác nhận"), ("inval", "Vô hiệu")):
         d = c.get(key)
         if d and d.get("txt"):

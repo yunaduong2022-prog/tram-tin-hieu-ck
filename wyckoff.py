@@ -270,10 +270,17 @@ def analyze(g: pd.DataFrame):
     def fb_note(fbs):
         if not fbs:
             return ""
-        part = ", ".join(f"{x['date']:%d/%m} ({'vượt biên trên' if x['dir'] == 'up' else 'thủng biên dưới'})" for x in fbs[:4])
+        part = ", ".join(f"{x['date']:%d/%m} ({'vượt biên trên: bẫy tăng giá' if x['dir'] == 'up' else 'thủng biên dưới: bẫy giảm giá'})"
+                          for x in fbs[:4])
         more = f" và {len(fbs) - 4} phiên khác" if len(fbs) > 4 else ""
-        return (f"Có {len(fbs)} phiên breakout giả: {part}{more}. Giá vượt khỏi khung biên độ {MAX_AMP * 100:.0f}% nhưng các phiên sau "
-                "đã quay lại khung cũ, nên vẫn tính là đi ngang và không coi là thoát vùng.")
+        txt = (f"Có {len(fbs)} phiên breakout giả: {part}{more}. Giá vượt khỏi khung biên độ {MAX_AMP * 100:.0f}% nhưng các phiên sau "
+               "đã quay lại khung cũ, nên vẫn tính là đi ngang và không coi là thoát vùng.")
+        if any(x["dir"] == "up" for x in fbs):
+            txt += (" Vượt biên trên rồi quay lại là bẫy tăng giá (Upthrust): người mua đuổi theo cú breakout bị kẹt khi giá không giữ được. "
+                    "Một cú Upthrust đơn lẻ, nhất là ở Pha B, chưa đủ để kết luận là phân phối.")
+        if any(x["dir"] == "down" for x in fbs):
+            txt += " Thủng biên dưới rồi quay lại là bẫy giảm giá (Spring): người bán tháo bị đảo chiều khi giá bật lại."
+        return txt
 
     def span_txt(tr_):
         n = len(tr_.get("fb", ()))
@@ -502,10 +509,12 @@ def fb_line(c) -> str:
     fb = c.get("fb") or []
     if not fb:
         return ""
-    part = "; ".join(f"<b>{pd.Timestamp(x['date']):%d/%m}</b> {'vượt biên trên' if x['dir'] == 'up' else 'thủng biên dưới'} ({fmt2(x['p'])})"
+    part = "; ".join(f"<b>{pd.Timestamp(x['date']):%d/%m}</b> {'vượt biên trên (bẫy tăng giá)' if x['dir'] == 'up' else 'thủng biên dưới (bẫy giảm giá)'} {fmt2(x['p'])}"
                      for x in fb[:3])
     more = f" và {len(fb) - 3} phiên khác" if len(fb) > 3 else ""
-    return (f'<div class="wy-ev">Breakout giả: {part}{more}. Giá quay lại khung biên độ {MAX_AMP * 100:.0f}% cũ nên vẫn tính là đi ngang.</div>')
+    why = ("Người mua đuổi bị kẹt khi giá không giữ được trên biên (Upthrust); một cú đơn lẻ ở Pha B chưa đủ kết luận phân phối. "
+           if any(x["dir"] == "up" for x in fb) else "")
+    return (f'<div class="wy-ev">Breakout giả: {part}{more}. {why}Giá quay lại khung biên độ {MAX_AMP * 100:.0f}% cũ nên vẫn tính là đi ngang.</div>')
 
 
 def note_html(c, compact_view: bool = False) -> str:
