@@ -37,7 +37,7 @@ ALERTS = {
     RS_UP:   ("📈", "Ngành tăng RS liên tục", "in", f"RS ngành so với VN-Index tăng liên tiếp {CFG['rs_streak']} phiên."),
     BREADTH: ("🌊", "Độ rộng tăng nhanh", "in", f"Tỷ lệ cổ phiếu trên MA20 tăng ≥ {CFG['breadth_jump']:.0f} điểm % trong {CFG['breadth_lag']} phiên."),
     LIQ:     ("💧", "Tiền vào, giá chưa chạy xa", "in", f"GTGD ngành TB5 ≥ {CFG['liq_ratio']:.1f} lần TB20 nhưng giá ngành tăng ≤ {CFG['liq_max_gain']:.0f}% trong {CFG['liq_days']} phiên."),
-    LEADER:  ("🚀", "Cổ phiếu dẫn đầu vừa vượt nền", f"Mã nằm top {CFG['leader_top']} RS ngành, đóng cửa vượt đỉnh {CFG['brk_base']} phiên với khối lượng ≥ {CFG['brk_vol']:.1f} lần TB20."),
+    LEADER:  ("🚀", "Cổ phiếu dẫn đầu vừa vượt nền", "in", f"Mã nằm top {CFG['leader_top']} RS ngành, đóng cửa vượt đỉnh {CFG['brk_base']} phiên với khối lượng ≥ {CFG['brk_vol']:.1f} lần TB20."),
     WEAK:    ("⚠️", "Ngành mạnh bắt đầu mất RS", "out", "Ngành từng mạnh, RS đang giảm và độ rộng suy yếu / nhiều mã thủng MA20."),
 }
 ORDER = [RS_UP, BREADTH, LIQ, LEADER, WEAK]
