@@ -81,7 +81,7 @@ STATE_GROUP = {BUY_SIGNAL: G1, GOOD_ENTRY: G1, WATCH: G2, NEAR_ZONE: G2, EARLY_U
                RECOVERING: L_RECOVER, OVERBOUGHT: L_OVERBOUGHT, WEAKENING: L_RISK, NO_BUY: L_NONE}
 BUY_GROUPS = (G1, G2, G3)
 
-# ------------------------------------------------------------------ TAG TRẠNG THÁI TRÊN THẺ BỘ LỌC REALTIME
+# ------------------------------------------------------------------ TAG TRẠNG THÁI TRÊN THẺ LỌC TẤT CẢ CP
 # 13 trạng thái chi tiết -> 9 tag hiển thị (nhãn, màu nền, màu chữ). Muốn đổi cách gom tag chỉ cần sửa TAG_OF_STATE.
 TAG_STYLE = {
     "Điểm mua đẹp":            ("#DDF1EB", "#08785E"),
@@ -622,7 +622,7 @@ def sort_group(d: pd.DataFrame, group: str) -> pd.DataFrame:
 
 def ladder_html(code, price, zone_lo, zone_hi, go, sl, sl_pct, tp1, tp1_pct, tp1_tag, tp2, tp2_pct, tp2_tag, note, foot, extra="") -> str:
     """Khung Vùng mua dạng THANG GIÁ: Mục tiêu 2 > Mục tiêu 1 > Vùng mua (nổi bật) > Cắt lỗ, đúng thứ tự giá từ cao xuống thấp.
-    Dùng chung cho thẻ Chờ mua / Mua ngay / Watchlist và khối đa khung ở Bộ lọc Realtime. Các % tính so với `price`.
+    Dùng chung cho thẻ Chờ mua / Mua ngay / Watchlist và khối đa khung ở mục Lọc tất cả CP. Các % tính so với `price`.
     tp1_tag / tp2_tag: HTML nhỏ cạnh nhãn mục tiêu (vd. R:R); tp2 = None thì bỏ dòng Mục tiêu 2. Viết liền một dòng cho Markdown."""
     esc = _html.escape
     px = lambda x: "-" if x is None or pd.isna(x) else f"{round(float(x), 1):,.1f}"

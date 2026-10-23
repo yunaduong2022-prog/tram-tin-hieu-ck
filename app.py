@@ -1132,7 +1132,7 @@ def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
 def page_wait_buy():
     st.title("🛒 Chờ mua")
     header()
-    st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với Bộ lọc Realtime và Backtest. "
+    st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với mục Lọc tất cả CP và Backtest. "
                "Chỉ gồm mã có xu hướng đủ khỏe; mã đang phục hồi nằm ở mục **Đang phục hồi**; mã tăng quá đà, suy yếu hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
@@ -1588,7 +1588,7 @@ def mtf_card(conc, A, code=""):
 
 
 def rsi_card(a, tf, code):
-    """Thẻ Phân tích RSI: giá trị RSI(14) khung đang xem + phân kỳ RSI/giá khung M, W và D (cùng quy tắc thẻ ở Bộ lọc Realtime)."""
+    """Thẻ Phân tích RSI: giá trị RSI(14) khung đang xem + phân kỳ RSI/giá khung M, W và D (cùng quy tắc thẻ ở mục Lọc tất cả CP)."""
     rsi = DV.rsi14(a["g"]["Giá đóng cửa"]).dropna()
     if rsi.empty:
         head = '<div class="muted">Chưa đủ dữ liệu để tính RSI(14).</div>'
@@ -2181,7 +2181,7 @@ def route():
         return SD.render(raw)
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
-        if sub == "Bộ lọc Realtime": return page_filter()
+        if sub == "Lọc tất cả CP": return page_filter()
         if sub == "Chờ mua": return page_wait_buy()
         if sub == "Tăng mạnh": return page_surge()
         if sub == "Giảm mạnh": return page_plunge()

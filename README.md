@@ -28,7 +28,7 @@ Tab đầu tiên của mục **Thị trường** và cũng là trang mở đầu
 - Tab **Nhóm ngành** của mục Thị trường nay hiển thị trang Sức mạnh ngành (`sector_dashboard.py`) thay cho trang chờ.
 
 ## Cảnh báo phân kỳ RSI & giá (mới)
-Thẻ ở **Bộ lọc Realtime** và **Chờ mua** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
+Thẻ ở **Lọc tất cả CP** và **Chờ mua** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
 - **Cảnh báo đảo chiều**: Phân kỳ thường giảm (giá HH, RSI LH), phân kỳ thường tăng (giá LL, RSI HL), phân kỳ phóng đại (2 đỉnh / 2 đáy giá bằng nhau, RSI đỉnh sau thấp hơn / đáy sau cao hơn) → nhãn `TẠI VÙNG CẢN`.
 - **Xác nhận tiếp diễn**: Phân kỳ ẩn tăng (giá HL, RSI LL), phân kỳ ẩn giảm (giá LH, RSI HH).
 - Ngưỡng (số nến xác nhận pivot, khoảng cách giữa 2 pivot, độ "tươi" của tín hiệu, dung sai "bằng nhau", chênh lệch RSI tối thiểu) chỉnh ở `PARAMS` và `RSI_MIN_DIFF`. Khung 15m / 1h / 4h đã có sẵn tham số nhưng app chưa có dữ liệu nến này nên chưa hiển thị.
