@@ -13,6 +13,7 @@ import re
 
 import pandas as pd
 
+import action_summary as AS
 import waiting_buy as WB
 import wyckoff as WYK
 
@@ -58,7 +59,7 @@ _CSS = """
 .sc-foot{margin:-6px 16px 14px;font-size:12px;color:var(--muted);text-align:right;font-style:italic}
 .sc-why .sc-hint{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 """
-CSS = "<style>" + " ".join(_CSS.split()) + "</style>"
+CSS = "<style>" + " ".join(_CSS.split()) + " " + " ".join(AS.rules().split()) + "</style>"
 
 TONES = {
     "sell":    {"label": "BÁN / CHỐT LỜI", "hint": "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."},
@@ -143,7 +144,7 @@ def _ma_html(r) -> str:
             _ma_cell("MA50", r.get("MA50"), r.get("MA50 %")) + '</div>')
 
 
-def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot="") -> str:
+def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot="", action_of=None) -> str:
     """HTML một thẻ. Viết liền một dòng: Streamlit coi dòng thụt 4 ô trở lên là code."""
     tn = TONES.get(tone, TONES["sell"])
     esc = lambda s: html.escape(str(s if pd.notna(s) else ""))
@@ -174,6 +175,7 @@ def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot=
             r.get("Mã"), r.get("Giá vào"), r.get("Vùng mua từ"), r.get("Vùng mua đến"), r.get("Hành động") == "Vào ngay",
             r.get("Cắt lỗ"), r.get("Cắt lỗ %"), r.get("Mục tiêu 1"), r.get("Lời 1 %"), tg("R:R 1:2"),
             r.get("Mục tiêu 2"), r.get("Lời 2 %"), tg("R:R 1:3"), WB._sentence(r.get("Ghi chú hành động") or ""), ladder_foot) + "</div>")
+    action_html = f'<div style="margin:10px 16px 0">{action_of(r.get("Mã"))}</div>' if action_of else ""
     return (
         f'<article id="sc-{esc(r.get("Mã"))}" class="sc t-{tone if tone in TONES else "sell"}">'
         f'<header class="sc-head"><div><div class="sc-tkr">{esc(r.get("Mã"))}</div>{name_html}<span class="sc-grp">{esc(r.get("Nhóm"))}</span></div>'
@@ -190,16 +192,17 @@ def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot=
         f'<div style="margin:10px 16px 0">{wy_of(r.get("Mã")) if wy_of else ""}</div>'
         f'<div class="sc-why"><div class="sc-k" style="margin-bottom:3px">Lý do</div><p>{esc(reason)}</p>'
         f'<p class="sc-hint">{esc(tn["hint"])}</p></div>'
+        f'{action_html}'
         f'{foot_html}'
         '</article>'
     )
 
 
-def cards_html(d: pd.DataFrame, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot="") -> str:
+def cards_html(d: pd.DataFrame, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot="", action_of=None) -> str:
     """Lưới thẻ cho toàn bộ DataFrame (kèm CSS). as_of: ngày nến cuối (vd latest_date của app) hiện ở đáy thẻ.
     wy_of: hàm mã -> HTML ghi chú Wyckoff (pha + chú thích), bỏ trống thì không hiện.
     tone: "sell" (BÁN / CHỐT LỜI), "risk" (theo dõi suy yếu), "over" (không mua đuổi), "recover" (đang phục hồi)."""
-    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of, tone, wy_of, lean_of, ladder_foot) for _, r in d.iterrows()) + "</div>"
+    return CSS + '<div class="sc-grid">' + "".join(card_html(r, as_of, tone, wy_of, lean_of, ladder_foot, action_of) for _, r in d.iterrows()) + "</div>"
 
 
 def add_names(d: pd.DataFrame, fund_map: dict) -> pd.DataFrame:

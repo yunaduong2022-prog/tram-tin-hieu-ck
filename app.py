@@ -21,6 +21,7 @@ import brand as BR
 import stock_tabs as ST
 import mtf_levels as ML
 import waiting_buy as WB
+import action_summary as AS
 import rsi_divergence as DV
 import foreign_flow as FF
 import sector_dashboard as SD
@@ -346,6 +347,39 @@ def _lean_html(code) -> str:
         return ('<div class="lean-line" style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#C02645">'
                 '▼ DỰ BÁO NGHIÊNG GIẢM</div>')
     return ""
+
+
+@st.cache_data(show_spinner=False)
+def _wb_rows(key: str) -> dict:
+    """Trạng thái chờ mua / lý do / vùng mua của từng mã (từ bảng Chờ mua), dùng cho khối Tóm tắt nhanh."""
+    t = _wb_table()
+    cols = [c for c in ("Trạng thái", "Lý do", "Vùng mua từ", "Vùng mua đến") if c in t.columns]
+    return t.drop_duplicates("Mã", keep="first").set_index("Mã")[cols].to_dict("index")
+
+
+def _action_html(code) -> str:
+    """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
+    hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py."""
+    try:
+        code = str(code)
+        g = df[df["Mã"] == code].sort_values("Ngày")
+        c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce")
+        if c.empty:
+            return ""
+        ma = {n: (float(c.rolling(n).mean().iloc[-1]) if len(c) >= n else None) for n in (20, 50, 200)}
+        w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb12").get(code, {})
+        state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
+        a = analyze_cached(frames, code, "D", DATA_KEY)
+        d = mtf_cached(frames, code, DATA_KEY)["D"]
+        ctx = dict(close=float(c.iloc[-1]), ma20=ma[20], ma50=ma[50], ma200=ma[200],
+                   label=WB.status_tag(state, reason)[0] if state else "", state=state, reason=reason,
+                   lean=(a.get("dir", 0) if a.get("enough") else 0),
+                   div=divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"),
+                   wy=WY_TABLE.get(code), sup=d.get("sup") if d.get("ok") else None, res=d.get("res") if d.get("ok") else None,
+                   zone=(w.get("Vùng mua từ"), w.get("Vùng mua đến")) if state in WB.STATE_GROUP and WB.STATE_GROUP[state] in WB.BUY_GROUPS else None)
+        return AS.html(ctx)
+    except Exception:
+        return ""
 
 
 TABLE_COLS = ["ST", "Mã", "Nhóm", "Giá", "Score", "RS vs VNI", "% Biên độ", "Position %", "Zone", "Lực mua/bán",
@@ -1017,7 +1051,7 @@ def page_filter():
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
                         f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
                         + _ma_summary_html(code)
-                        + f'<div class="tag-container">' + chips_html + '</div>' + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '') + div_html + _wy_note(code, True) + mtf_html + '</div>')
+                        + f'<div class="tag-container">' + chips_html + '</div>' + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '') + div_html + _wy_note(code, True) + mtf_html + _action_html(code) + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
@@ -1108,7 +1142,7 @@ def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
         div_html = DV.html(divergence_cached(frames, str(r["Mã"]), DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading()), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading(), "", _action_html(r["Mã"])), unsafe_allow_html=True)
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
@@ -1259,7 +1293,7 @@ def page_sector_ranking():
         with st.container(key=f"wbcard-sr{vi}-{code}"):
             div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
             st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code),
-                                     _wy_note(code), _lean_html(code), _min_trading(), ctx_html), unsafe_allow_html=True)
+                                     _wy_note(code), _lean_html(code), _min_trading(), ctx_html, _action_html(code)), unsafe_allow_html=True)
             if st.button("📊 Xem biểu đồ", key=f"sr_chart_{vi}_{code}", use_container_width=True):
                 st.session_state["selected_code"] = code
                 for _k in ("mtf_code", "tab_code"):
@@ -1274,7 +1308,7 @@ def _wl_card(r, u, ver):
     code = str(r["Mã"])
     with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading()), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading(), "", _action_html(code)), unsafe_allow_html=True)
         pos = MW.position_html(u, r["Giá"])
         if pos:
             st.markdown(pos, unsafe_allow_html=True)
@@ -1423,7 +1457,7 @@ def _move_page(kind: str):
     st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
                 f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
                 f'{_sub}</div>{_chips}</div>', unsafe_allow_html=True)
-    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind, _wy_note, _lean_html), unsafe_allow_html=True)
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind, _wy_note, _lean_html, action_of=_action_html), unsafe_allow_html=True)
     _sell_jump_js()
     _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
@@ -1467,7 +1501,7 @@ def page_recovering():
                     "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
                     "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua (wb-*)
-    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover", _wy_note, _lean_html, _min_trading()), unsafe_allow_html=True)
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover", _wy_note, _lean_html, _min_trading(), action_of=_action_html), unsafe_allow_html=True)
     _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "MA20", "MA50", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
@@ -1517,7 +1551,7 @@ def page_alert_lists():
             st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
                         f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
                         f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
-            st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, _TONE_OF[key], _wy_note, _lean_html), unsafe_allow_html=True)
+            st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, _TONE_OF[key], _wy_note, _lean_html, action_of=_action_html), unsafe_allow_html=True)
             _sell_jump_js()
             with st.expander("Xem dạng bảng"):
                 st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
@@ -1592,7 +1626,7 @@ def page_sell_list():
                 f'<span style="color:#F5B942">CHỐT LỜI</span></div>{_chips}</div>', unsafe_allow_html=True)
     _, _fm = _wb_meta_maps(WY_KEY)
     d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
-    st.markdown(sell_card.cards_html(d, latest_date, wy_of=_wy_note, lean_of=_lean_html), unsafe_allow_html=True)
+    st.markdown(sell_card.cards_html(d, latest_date, wy_of=_wy_note, lean_of=_lean_html, action_of=_action_html), unsafe_allow_html=True)
     _sell_jump_js()
     _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):

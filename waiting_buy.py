@@ -21,6 +21,7 @@ import pandas as pd
 
 import engine as E
 import rsi_divergence as DV
+import action_summary as AS
 
 # ------------------------------------------------------------------ NGƯỠNG (chỉnh tại đây)
 CFG = {
@@ -727,7 +728,7 @@ def card_css(dark: bool) -> str:
 .wbt td small{display:block;font-weight:600;font-size:11.5px;opacity:.9}
 .wbt .up{color:var(--green);font-weight:700}.wbt .down{color:var(--red);font-weight:700}
 .wbt .go{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin-top:2px}
-""".replace("BOXBG", box)
+""".replace("BOXBG", box) + AS.rules()
 
 
 def table_html(d: pd.DataFrame, group: str, sector_of=None, ma_of=None) -> str:
@@ -783,7 +784,7 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP", "MUA": "✔ MUA"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -819,4 +820,5 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             _sentence(r["Ghi chú hành động"]), foot_text) + '</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
+    html += action_html   # "Tóm tắt nhanh · Kết luận hành động" (action_summary.html)
     return html
