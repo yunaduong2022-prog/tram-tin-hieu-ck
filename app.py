@@ -30,6 +30,7 @@ import market_view as MV
 import market_overview as MO
 import my_watchlist as MW
 import sell_card
+import dry_supply as DS
 import stock_map as SM
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
@@ -1161,6 +1162,7 @@ TONE_UI = {      # tone -> (nhãn trên huy hiệu, màu huy hiệu g/a/r/v/n, g
     "surge":   ("TĂNG MẠNH", "g", sell_card.TONES["surge"]["hint"]),
     "plunge":  ("GIẢM MẠNH", "r", sell_card.TONES["plunge"]["hint"]),
     "recover": ("ĐANG PHỤC HỒI", "v", sell_card.TONES["recover"]["hint"]),
+    "dry":     ("CẠN CUNG", "c", sell_card.TONES["dry"]["hint"]),
 }
 
 
@@ -1187,6 +1189,10 @@ def _tone_card(r, tone: str, key: str):
     else:
         v, fmt = r.get("Tăng từ đáy %"), "Đã tăng {:.0f}% từ đáy"
     gain = fmt.format(float(v)) + ". " if v is not None and pd.notna(v) else ""
+    if tone == "dry":      # thay dòng "Đã tăng ... từ đáy" bằng khối lượng phiên cuối và các nguồn báo cạn cung
+        vr_ = r.get("Vol / MA20 Vol")
+        gain = (f"Khối lượng phiên cuối = {float(vr_):.2f} lần MA20 Vol. " if vr_ is not None and pd.notna(vr_) else "") \
+            + "Nguồn: " + " · ".join(r.get("Nguồn cạn cung") or []) + ". "
     ctx = f'<div class="wb-sub" style="margin:-4px 0 12px">{htmllib.escape(gain + hint)}</div>'
     with st.container(key=f"wbcard-{tone}-{code}"):          # tiền tố wbcard- để ăn CSS thẻ và cuộn tới thẻ (_wb_scroll_to)
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
@@ -1455,7 +1461,8 @@ def page_realtime_filter():
         except Exception:
             return None, None
 
-    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf, lambda c_: WY_TABLE.get(str(c_)), wl_pos, _action_html)
+    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf, lambda c_: WY_TABLE.get(str(c_)), wl_pos, _action_html,
+              {str(r_["Mã"]): r_["Nguồn cạn cung"] for _, r_ in _dry_table().iterrows()})
 
 
 def _move_page(kind: str):
@@ -1567,6 +1574,54 @@ def page_surge():
 
 def page_plunge():
     _move_page("plunge")
+
+
+def _dry_table() -> pd.DataFrame:
+    """Bảng Cạn cung (dry_supply.py): gộp mọi mục đang nói mã cạn cung; dùng chung cho trang Cạn cung và Bộ lọc Realtime."""
+    t = _wb_table()
+    now = set(_buy_now_table(t)["Mã"])
+    return DS.build(res_df, t, WY_TABLE, df, now)
+
+
+def page_dry_supply():
+    st.title("🧊 Cạn cung")
+    header()
+    st.caption("Các mã mà **bất kỳ mục nào của app** đang ghi là cạn cung / khối lượng cạn, gộp vào một danh sách: cờ **Cạn cung** ở Lọc tất cả CP, "
+               "trạng thái **Điểm mua đẹp** và **Tích lũy / Siết nền giá** ở Chờ mua / Mua ngay, và sự kiện **Spring / Test / LPS volume thấp** của Wyckoff (tích lũy Pha C/D). "
+               "Mã được nhiều nguồn cùng báo xếp trước. Cạn cung chỉ cho biết lực bán đã yếu, chưa phải tín hiệu mua: xem vùng mua và cắt lỗ ở mục **Chờ mua**. "
+               "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    d = _dry_table()
+    m = st.columns(5)
+    m[0].metric("Tổng số mã", len(d))
+    for col, src in zip(m[1:], DS.SOURCES):
+        col.metric(src, int(d["Nguồn cạn cung"].map(lambda L, s=src: s in L).sum()) if not d.empty else 0, help=DS.SRC_HELP[src])
+    if d.empty:
+        st.info("Hiện chưa có mã nào cạn cung.")
+        return
+    d = _tone_filters(d, "dry")
+    srcs = st.multiselect("Nguồn", list(DS.SOURCES), key="dry_src", placeholder="Tất cả nguồn")
+    if srcs:
+        d = d[d["Nguồn cạn cung"].apply(lambda L: any(s in L for s in srcs))]
+    if d.empty:
+        st.info("Không có mã nào phù hợp bộ lọc.")
+        return
+    shown = _tone_limit(d, "dry")
+    _sc = set(shown["Mã"].astype(str))
+    st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã) · bấm vào mã để xuống thẻ bên dưới",
+                          DS.chips_html(d, lambda c_: _chip(c_, "var(--accent)", _sc))), unsafe_allow_html=True)
+    _tone_grid(shown, len(d), "dry", "dry")
+    _sell_jump_js()
+    _rt_focus_scroll()
+    with st.expander("Xem dạng bảng"):
+        st.dataframe(d.assign(**{"Nguồn": d["Nguồn cạn cung"].map(" · ".join)})[["Mã", "Giá", "Chg %", "Vol / MA20 Vol", "Số nguồn", "Nguồn", "Score", "RS20", "Nhóm", "Danh sách"]]
+                     .reset_index(drop=True), hide_index=True,
+                     column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
+                                    "Chg %": st.column_config.NumberColumn(format="%.2f"),
+                                    "Vol / MA20 Vol": st.column_config.NumberColumn(format="%.2f"),
+                                    "Score": st.column_config.NumberColumn(format="%.1f"),
+                                    "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
+                     **_STRETCH_DF)
 
 
 def page_recovering():
@@ -2378,6 +2433,9 @@ def _rt_go(target: str, code: str):
         st.session_state["_nav_pending"] = (BT, "Watchlist")
         st.session_state["wl_view"] = "Thẻ"
         st.session_state["rt_focus"] = {"kind": "wb", "code": code}
+    elif target == "dry":
+        st.session_state["_nav_pending"] = (BT, "Cạn cung")
+        st.session_state["rt_focus"] = {"kind": "wb", "code": code}
     elif target in ("recover", "risk", "over", "sell"):
         sub = {"recover": "Đang phục hồi", "risk": "Danh sách cảnh báo", "over": "Danh sách cảnh báo", "sell": "Bán / Chốt lời"}[target]
         st.session_state["_nav_pending"] = (BT, sub)
@@ -2438,6 +2496,7 @@ def _route_inner():
         if sub == "Chờ mua": return page_wait_buy()
         if sub == "Tăng mạnh": return page_surge()
         if sub == "Giảm mạnh": return page_plunge()
+        if sub == "Cạn cung": return page_dry_supply()
         if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
         if sub == "Danh sách cảnh báo": return page_alert_lists()

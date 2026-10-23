@@ -18,6 +18,14 @@ streamlit run app.py
 
 Trên macOS/Linux, kích hoạt môi trường bằng `source .venv/bin/activate`.
 
+## Mục Cạn cung (mới)
+Nằm ở **Bộ lọc & Backtest**, ngay sau **Giảm mạnh**. Code ở `dry_supply.py`, không đặt thêm điều kiện mới mà gom mọi nơi app đang nói mã cạn cung:
+- **Lọc CP: Cạn cung**: cờ `DryUp` ở Lọc tất cả CP (khối lượng phiên cuối < 0.7 lần MA20 Vol, giá ≥ MA20, biên độ phiên < 2%).
+- **Điểm mua đẹp** (Chờ mua / Mua ngay): test lại hỗ trợ với khối lượng 5 phiên ≤ 0.8 lần MA20 Vol.
+- **Siết nền giá** (Chờ mua): nền chặt, khối lượng 5 phiên ≤ 0.9 lần MA20 Vol.
+- **Wyckoff**: tích lũy Pha C/D, sự kiện mới nhất là Spring / Test / LPS với volume thấp, trong 10 phiên gần nhất và phiên cuối chưa nổ volume (`MAX_EV_AGE`, `MAX_LAST_VOL`).
+Mã được nhiều nguồn cùng báo xếp trước. Trạng thái chỉ ghi "khối lượng co lại" (Theo dõi điểm mua) không tính. Mục này cũng hiện trong sơ đồ của **Bộ lọc Realtime**.
+
 ## Thị trường > Tổng quan (mới)
 Tab đầu tiên của mục **Thị trường** và cũng là trang mở đầu khi vào app (đổi `DEFAULT_MAIN` trong `nav.py` nếu muốn như cũ). Code nằm trong `market_overview.py`, các ngưỡng ở đầu file.
 - **Xu hướng** (VN-Index): Tăng / Đi ngang / Giảm theo tỷ lệ điều kiện đạt: đóng cửa trên MA20, MA20 dốc lên, đóng cửa trên MA50, đáy 10 phiên sau cao hơn đáy trước. Cần mã `VNINDEX` trong `data/eod_prices.csv`.

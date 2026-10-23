@@ -361,7 +361,8 @@ def analyze(g: pd.DataFrame):
                 "SOS": f"Sign of Weakness: nến giảm mạnh đóng cửa thủng biên dưới {_fmt(-RG)} với volume gấp {vx} lần trung bình",
                 "LPS": f"Last Point of Supply: nhịp hồi yếu sau SOW, không vượt nổi vùng hỗ trợ cũ, volume cạn ({vx} lần trung bình)",
             }[x["k"]]
-        events.append({"k": x["k"], "label": label, "i": i, "date": pd.Timestamp(dates[i]), "p": p, "pos": o_pos, "txt": txt})
+        events.append({"k": x["k"], "label": label, "i": i, "date": pd.Timestamp(dates[i]), "p": p, "pos": o_pos, "txt": txt,
+                       "vx": float(vr[i]), "low_vol": bool(low_vol)})
 
     kinds = {x["k"] for x in r["ev"]}
     # pha (theo hệ quy chiếu tích lũy: kịch bản phân phối đã đảo dấu nên so sánh dùng giá đảo)
@@ -498,6 +499,8 @@ def compact(w) -> dict | None:
         "top": float(w["tr"]["top"]), "bot": float(w["tr"]["bot"]), "bars": int(w["tr"]["L"]),
         "trigger": w.get("trigger"), "inval": w.get("inval"),
         "last_ev": None if ev is None else {"label": ev["label"], "date": ev["date"], "p": ev["p"]},
+        "dry_ev": [{"k": x["k"], "label": x["label"], "date": x["date"], "p": x["p"], "vx": x.get("vx"), "low_vol": x.get("low_vol", False), "txt": x["txt"]}
+                   for x in (w.get("events") or []) if x["k"] in ("SPRING", "TEST", "LPS")],
         "notes": list(w.get("notes") or []),
         "fb": [{"date": x["date"], "p": x["p"], "dir": x["dir"]} for x in (w.get("fb") or [])],
         "amp": float((w["tr"]["top"] - w["tr"]["bot"]) / w["tr"]["bot"] * 100),

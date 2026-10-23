@@ -129,7 +129,7 @@ def wyckoff_points(c) -> tuple[str, str, list[str]]:
     return (WYK.label(c), tone, pts)
 
 
-def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None, wy=False, wc=None, wl_pos=None) -> list[dict]:
+def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None, wy=False, wc=None, wl_pos=None, dry=None) -> list[dict]:
     """Các mục mã đang nằm trong, mỗi mục: {title, icon, tag, tone, points[]}."""
     rows = t[t["Mã"].astype(str).str.upper() == code.upper()]
     if rows.empty:
@@ -186,6 +186,8 @@ def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_m
         add("🚀", "Tăng mạnh", "", "up", up_pts, "surge-s" if sess_up else "surge-l")
     if dn_pts:
         add("💥", "Giảm mạnh", "", "down", dn_pts, "plunge-s" if sess_dn else "plunge-l")
+    if dry and code in dry:      # mục Cạn cung (dry_supply.py): các nguồn đang báo mã cạn cung
+        add("🧊", "Cạn cung", f"{len(dry[code])} nguồn", "recover", [f"Nguồn: {s}" for s in dry[code]], "dry")
     if conc:      # Kết luận đa khung: thẻ ở trang Biểu đồ (cột bên phải)
         pts = [conc.get("text"), f"Điểm đa khung {float(conc['score']):+.0f}/100 (−100 đến +100)"]
         if A:
@@ -328,7 +330,7 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
 
 
 # ------------------------------------------------------------------ giao diện Streamlit
-def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None, wy_fn=None, wl_pos=None, action_fn=None) -> None:
+def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None, wy_fn=None, wl_pos=None, action_fn=None, dry_map=None) -> None:
     import streamlit as st
 
     st.caption("Chọn ngành rồi chọn mã để xem mã đang nằm ở mục nào và ý chính của từng mục. "
@@ -347,7 +349,7 @@ def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_co
             rows = []
             for c in codes:
                 r = t[t["Mã"] == c].iloc[0]
-                ms = memberships(c, t, now_codes, wl_codes, vol_map)
+                ms = memberships(c, t, now_codes, wl_codes, vol_map, dry=dry_map)
                 rows.append({"Mã": c, "Giá": _f(r.get("Giá")), "Chg %": _f(r.get("Chg %")),
                              "Đang ở mục": " · ".join(m["title"] + (f" ({m['tag']})" if m["tag"] else "") for m in ms) or "—"})
             st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
@@ -359,7 +361,7 @@ def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_co
 
     row = t[t["Mã"].astype(str).str.upper() == code.upper()].iloc[0]
     conc, A = mtf_fn(code) if mtf_fn else (None, None)
-    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A, wy_fn is not None, wy_fn(code) if wy_fn else None, wl_pos),
+    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A, wy_fn is not None, wy_fn(code) if wy_fn else None, wl_pos, dry_map),
                           fundamentals(code, row, cap_map, fund_map)), unsafe_allow_html=True)
     if action_fn is not None:      # "Tóm tắt nhanh · Kết luận hành động" (action_summary), đặt cuối sơ đồ để chụp gửi khách
         ah = action_fn(code)

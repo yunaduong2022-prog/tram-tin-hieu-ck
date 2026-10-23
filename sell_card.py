@@ -67,6 +67,7 @@ TONES = {
     "over":    {"label": "KHÔNG MUA ĐUỔI", "hint": "Cảnh báo không mua đuổi (Overbought)."},
     "surge":   {"label": "TĂNG MẠNH", "hint": "Giá tăng mạnh trong phiên. Không mua đuổi: chờ nhịp lùi về vùng hỗ trợ hoặc xem thẻ ở mục Chờ mua."},
     "plunge":  {"label": "GIẢM MẠNH", "hint": "Giá giảm mạnh trong phiên. Không bắt đáy vội: chờ giá dừng giảm, khối lượng cạn và lấy lại hỗ trợ."},
+    "dry":     {"label": "CẠN CUNG", "hint": "Lực bán đã cạn, khối lượng co hẹp. Chưa phải lệnh mua: chờ nến tăng kèm khối lượng nổ hoặc giá giữ vững vùng hỗ trợ, và xem vùng mua ở mục Chờ mua."},
     "recover": {"label": "ĐANG PHỤC HỒI", "hint": "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng)."},
 }
 

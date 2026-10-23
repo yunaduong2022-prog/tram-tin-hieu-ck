@@ -666,6 +666,7 @@ def card_css(dark: bool) -> str:
 .wb-badge.n{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}
 .wb-badge.r{background:var(--tag-red-bg);color:var(--red)}
 .wb-badge.v{background:#2A2347;color:#B9A6F5}
+.wb-badge.c{background:#12303F;color:#7CC8EE}
 .wb-badge.buy{font-size:28px;font-weight:800;line-height:1.1;letter-spacing:.5px;padding:10px 20px;border-radius:12px;
   color:#10B981;background:rgba(16,185,129,.16);border:2px solid #10B981}
 .wb-name{font-size:14px;color:var(--txt);opacity:.85;margin:-6px 0 14px;line-height:1.4}
@@ -801,7 +802,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
         cls = "ref"      # đứng đúng giá tham chiếu (bằng giá đóng cửa hôm trước): màu vàng
     html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
-            f'<span class="wb-badge {_BADGE.get(group, group if group in ("g", "a", "n", "r", "v") else "n")}{" buy" if state == "MUA" else ""}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
+            f'<span class="wb-badge {_BADGE.get(group, group if group in ("g", "a", "n", "r", "v", "c") else "n")}{" buy" if state == "MUA" else ""}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
             f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
             f'{lean_html}{ctx_html}'
             f'<div class="wb-kv">'
