@@ -179,6 +179,10 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
     # --- Tích lũy / gần điểm mua / đã vượt nền
     d["_accum"] = d["Danh sách"].isin([WB.G1, WB.G2]) & ~d["_weak"]
 
+    # Cột Trạng thái trên bảng: trạng thái Chờ mua + ghi chú Wyckoff (bỏ khi Wyckoff chưa xác định: "-" hoặc "Đi ngang")
+    wy = d["Wyckoff"].fillna("-").astype(str).str.strip() if "Wyckoff" in d else pd.Series("-", index=d.index)
+    d["Trạng thái + Wyckoff"] = [st_ if w in ("-", "", "Đi ngang") else f"{st_} · Wyckoff: {w}" for st_, w in zip(d["Trạng thái"].astype(str), wy)]
+
     d["Xu hướng"] = np.where(d["_trend_up"], "Tăng", np.where(above_ma20.fillna(False), "Trung tính", "Yếu"))
 
     def tags(r):
@@ -309,7 +313,8 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     st.caption("Cột Hạng Ngày / Tuần / Tháng / 3 Tháng cho thấy mã mạnh bền (hạng cao ở mọi khung) hay chỉ bật vài phiên gần đây.")
     rank_cols = [f"Hạng {p}" for p in PERIODS]
     show = d[["Hạng RS", "Mã", *rank_cols, "Giá", "Chg_%", "Biên độ giá", "Biên độ (%)", "Score", "RS", "RS vs ngành", "Hiệu suất (%)",
-              "Thanh khoản 5p/TB20", "ROE (%)", "Xu hướng", "Trạng thái", "Vị thế"]].rename(columns={
+              "Thanh khoản 5p/TB20", "ROE (%)", "Xu hướng", "Trạng thái + Wyckoff", "Vị thế"]].rename(columns={
+        "Trạng thái + Wyckoff": "Trạng thái",
         "Hạng RS": f"Hạng RS ({period})", "Chg_%": "% phiên",
         "Biên độ giá": f"Thấp nhất – Cao nhất ({period})", "Biên độ (%)": f"Biên độ {period} (%)", "RS": f"RS {period}",
         "RS vs ngành": "RS so với ngành (điểm %)", "Hiệu suất (%)": f"Hiệu suất {period}",
