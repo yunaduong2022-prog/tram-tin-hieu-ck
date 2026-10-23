@@ -12,7 +12,7 @@ Cách đọc quy tắc (sửa ở đây nếu muốn đổi):
   chỉ thêm / bớt ý trong câu và hiện ở dòng "Căn cứ".
 Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.
 
-ctx (dict): close, ma20, ma50, ma200 (float | None), label (nhãn tag trạng thái: "Hạ tỷ trọng", "BÁN", "CHỐT LỜI", "Điểm mua đẹp"...),
+ctx (dict): date (chuỗi dd/mm/yyyy hiện ở góc phải dưới, tuỳ chọn), close, ma20, ma50, ma200 (float | None), label (nhãn tag trạng thái: "Hạ tỷ trọng", "BÁN", "CHỐT LỜI", "Điểm mua đẹp"...),
   state (trạng thái chi tiết), reason (lý do), lean (+1 / -1 / 0: dự báo trên biểu đồ), div (list phân kỳ RSI của app),
   wy (dict wyckoff.compact | None), sup, res (hỗ trợ / kháng cự khung Ngày | None), zone (vùng mua từ-đến | None).
 """
@@ -258,12 +258,21 @@ def rules() -> str:
 .ac-tb td b{color:var(--txt2)}
 .ac-tb td.lv{color:var(--txt)}
 .ac-bs{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
-.ac-ft{font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
+.ac-ft{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 12px;font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
+.ac-dt{margin-left:auto;font-style:normal;white-space:nowrap}
 """
 
 
 def css() -> str:
     return "<style>" + rules() + "</style>"
+
+
+def _date_txt(d) -> str:
+    """Ngày cập nhật dữ liệu -> dd/mm/yyyy (nhận Timestamp / date / chuỗi)."""
+    try:
+        return d.strftime("%d/%m/%Y")
+    except AttributeError:
+        return str(d)
 
 
 def html(ctx: dict) -> str:
@@ -282,4 +291,5 @@ def html(ctx: dict) -> str:
     return ('<div class="ac-box">' + head + '<div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
             '<table class="ac-tb"><thead><tr><th>Vị thế tài khoản</th><th>Hành động</th><th>Vùng giá / Mốc lưu ý</th></tr></thead>'
             f'<tbody>{body}</tbody></table>'
-            '<div class="ac-ft">Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.</div></div>')
+            '<div class="ac-ft"><span>Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.</span>'
+            + (f'<span class="ac-dt">Đóng nến phiên ngày {esc(_date_txt(ctx["date"]))}</span>' if ctx.get("date") is not None else "") + '</div></div>')
