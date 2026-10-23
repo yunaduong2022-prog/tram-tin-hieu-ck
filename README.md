@@ -27,6 +27,9 @@ Tab đầu tiên của mục **Thị trường** và cũng là trang mở đầu
 - Bên dưới: bản đồ sức mạnh ngành (RS 1 tuần / 1 tháng / 3 tháng), nhóm dẫn dắt và suy yếu, số mã **MUA** (mục Mua ngay) và **CHỜ MUA**, kèm nút chuyển nhanh sang các mục đó.
 - Tab **Nhóm ngành** của mục Thị trường nay hiển thị trang Sức mạnh ngành (`sector_dashboard.py`) thay cho trang chờ.
 
+## Ngành > Vị thế cổ phiếu ngành (mới)
+Code trong `sector_ranking.py` (ngưỡng ở `CFG`). Chọn một ngành để xem bảng xếp hạng RS của mọi mã trong ngành (giá, Score, RS, RS so với ngành, GTGD 5p/TB20, ROE, trạng thái, vị thế) và 4 góc nhìn dạng thẻ MUA / CHỜ MUA có thêm khối **Vị thế trong ngành**: Mạnh nhất theo RS · Xu hướng tăng + thanh khoản · Tích lũy / gần điểm mua · Yếu hơn ngành / suy yếu. ROE lấy từ `data/fundamentals.csv` hoặc `data/nhap_tay.csv`; thiếu thì hiện trống.
+
 ## Cảnh báo phân kỳ RSI & giá (mới)
 Thẻ ở **Lọc tất cả CP** và **Chờ mua** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
 - **Cảnh báo đảo chiều**: Phân kỳ thường giảm (giá HH, RSI LH), phân kỳ thường tăng (giá LL, RSI HL), phân kỳ phóng đại (2 đỉnh / 2 đáy giá bằng nhau, RSI đỉnh sau thấp hơn / đáy sau cao hơn) → nhãn `TẠI VÙNG CẢN`.

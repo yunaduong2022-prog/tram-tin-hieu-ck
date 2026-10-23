@@ -24,6 +24,7 @@ import waiting_buy as WB
 import rsi_divergence as DV
 import foreign_flow as FF
 import sector_dashboard as SD
+import sector_ranking as SR
 import market_view as MV
 import market_overview as MO
 import my_watchlist as MW
@@ -1242,6 +1243,32 @@ def page_buy_now():
     _rt_focus_scroll()
 
 
+def page_sector_ranking():
+    """Ngành > Vị thế cổ phiếu ngành: dùng đúng thẻ MUA / CHỜ MUA, thêm khối Vị thế trong ngành."""
+    header()
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    t = _wb_table()
+    _now = set(_buy_now_table(t)["Mã"])      # cùng quy tắc nhãn MUA như mục Mua ngay
+    _, fund_map = _wb_meta_maps(WY_KEY)
+
+    def _card(r, ctx_html, vi):
+        r = r.copy()
+        if r["Mã"] in _now and r["Trạng thái"] in (WB.BUY_SIGNAL, WB.GOOD_ENTRY):
+            r["Trạng thái"] = "MUA"
+        code = str(r["Mã"])
+        with st.container(key=f"wbcard-sr{vi}-{code}"):
+            div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
+            st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code),
+                                     _wy_note(code), _lean_html(code), _min_trading(), ctx_html), unsafe_allow_html=True)
+            if st.button("📊 Xem biểu đồ", key=f"sr_chart_{vi}_{code}", use_container_width=True):
+                st.session_state["selected_code"] = code
+                for _k in ("mtf_code", "tab_code"):
+                    st.session_state[_k] = code
+                NAV.goto("Cổ phiếu", "Tổng quát")
+
+    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card)
+
+
 def _wl_card(r, u, ver):
     """Thẻ Watchlist: cùng thẻ với mục Chờ mua (+ khối Vị thế của tôi, nút Xem biểu đồ / Bỏ theo dõi)."""
     code = str(r["Mã"])
@@ -2289,6 +2316,8 @@ def _route_inner():
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
         return SD.render(raw)
+    if main == "Ngành" and sub == "Vị thế cổ phiếu ngành":
+        return page_sector_ranking()
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Lọc tất cả CP": return page_filter()

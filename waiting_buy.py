@@ -783,7 +783,7 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP", "MUA": "✔ MUA"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -800,7 +800,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
             f'<span class="wb-badge {_BADGE.get(group, "n")}{" buy" if state == "MUA" else ""}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
             f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
-            f'{lean_html}'
+            f'{lean_html}{ctx_html}'
             f'<div class="wb-kv">'
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
             f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
