@@ -1387,9 +1387,15 @@ def _move_page(kind: str):
     _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
                        f'style="color:{"var(--green)" if up else "var(--red)"};font-weight:600;text-decoration:none;cursor:pointer">'
                        f'{htmllib.escape(str(c_))}</a>' for c_ in d["Mã"])
+    if not up:      # Giảm mạnh: chia danh sách theo cấu trúc Wyckoff (khung Ngày), bấm mã cuộn xuống thẻ bên dưới
+        _chips = sell_card.chips_by_structure(list(d["Mã"]), WY_TABLE, "var(--red)")
+        _sub = (f'Danh sách tổng hợp ({len(d)} mã) · chia theo cấu trúc Wyckoff khung Ngày: Tích lũy, Đi ngang, Phân phối, Chưa rõ cấu trúc. '
+                'Bấm vào mã để xuống thẻ bên dưới')
+    else:
+        _sub = f'Danh sách tổng hợp ({len(d)} mã)'
     st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
                 f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
-                f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
+                f'{_sub}</div>{_chips}</div>', unsafe_allow_html=True)
     st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind, _wy_note, _lean_html), unsafe_allow_html=True)
     _sell_jump_js()
     _rt_focus_scroll()

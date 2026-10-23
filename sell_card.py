@@ -14,6 +14,7 @@ import re
 import pandas as pd
 
 import waiting_buy as WB
+import wyckoff as WYK
 
 _CSS = """
 .sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin:8px 0 18px}
@@ -204,3 +205,42 @@ def cards_html(d: pd.DataFrame, as_of=None, tone="sell", wy_of=None, lean_of=Non
 def add_names(d: pd.DataFrame, fund_map: dict) -> pd.DataFrame:
     """Gắn cột "Tên công ty" từ fund_map (kết quả của _wb_meta_maps trong app.py)."""
     return d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (fund_map.get(str(c).upper()) or {}).get("Tên công ty", ""))})
+
+
+# ------------------------------------------------------------------ DANH SÁCH TỔNG HỢP CHIA THEO CẤU TRÚC WYCKOFF
+esc = lambda x: html.escape(str(x))
+
+
+STRUCT_GROUPS = (   # (khoá, tên nhóm, màu)
+    ("acc", "Tích lũy", "var(--green)"),
+    ("unk", "Đi ngang", "var(--amber)"),
+    ("dist", "Phân phối", "var(--red)"),
+    ("none", "Chưa rõ cấu trúc", "var(--muted)"),
+)
+
+
+def structure_of(w) -> str:
+    """Nhóm cấu trúc Wyckoff khung Ngày từ wyckoff.compact(): acc / unk (đi ngang chưa phân loại) / dist / none (chưa có vùng)."""
+    if not w:
+        return "none"
+    return w.get("kind") if w.get("kind") in ("acc", "dist", "unk") else "none"
+
+
+def chips_by_structure(codes, wy_map, color: str) -> str:
+    """Các mã (đã xếp theo thứ tự ưu tiên của trang) chia thành 4 nhóm Wyckoff; mỗi mã là liên kết sc-jump cuộn tới thẻ bên dưới.
+    wy_map: {mã: wyckoff.compact() hoặc None}. Nhóm rỗng không hiển thị."""
+    buckets = {k: [] for k, _, _ in STRUCT_GROUPS}
+    for c in codes:
+        w = (wy_map or {}).get(str(c))
+        buckets[structure_of(w)].append((str(c), w))
+    out = []
+    for key, name, col in STRUCT_GROUPS:
+        items = buckets[key]
+        if not items:
+            continue
+        chips = ", ".join(
+            f'<a class="sc-jump" href="#sc-{esc(c)}" data-code="{esc(c)}" title="{esc(WYK.label(w)) if w else "Chưa có vùng đi ngang đủ rõ"}" '
+            f'style="color:{color};font-weight:600;text-decoration:none;cursor:pointer">{esc(c)}</a>' for c, w in items)
+        out.append(f'<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:{col};letter-spacing:.03em;margin-bottom:2px">'
+                   f'{esc(name)} ({len(items)} mã)</div>{chips}</div>')
+    return "".join(out)
