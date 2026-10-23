@@ -16,6 +16,7 @@ Không tính lại gì cả: mọi mục lấy đúng điều kiện của các 
   - Tăng mạnh / Giảm mạnh: theo ngưỡng mặc định của hai trang đó (xem hằng số bên dưới)
   - Watchlist     : mã có trong data/watchlist_cua_toi.csv
   - Kết luận đa khung: thẻ ở trang Biểu đồ (engine.mtf_conclusion), chỉ tính khi chọn một mã
+  - Wyckoff       : pha / vùng đi ngang / mốc xác nhận của khung Ngày (wyckoff.compact), liên kết tới thẻ Wyckoff ở Biểu đồ
 Phần dựng dữ liệu và HTML không phụ thuộc Streamlit; chỉ render() mới import streamlit.
 """
 from __future__ import annotations
@@ -26,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 import waiting_buy as WB
+import wyckoff as WYK
 
 SELL = ("BÁN", "CHỐT LỜI")
 # Ngưỡng mặc định của trang Tăng mạnh / Giảm mạnh (app.py, _move_page)
@@ -94,7 +96,34 @@ def _levels(r) -> list[str]:
     return pts
 
 
-def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None) -> list[dict]:
+def wyckoff_points(c) -> tuple[str, str, list[str]]:
+    """(nhãn, tông màu, ý chính) từ kết quả wyckoff.compact() của khung Ngày. c = None: chưa có cấu trúc."""
+    if not c:
+        return ("Chưa có cấu trúc", "none",
+                ["Chưa thấy vùng đi ngang đủ rõ (≥ 30 nến, chạm cả hai biên từ 2 lần): giá đang trong xu hướng hoặc biên quá rộng"])
+    kind, ph = c.get("kind"), c.get("phase")
+    tone = {"buy": "buy", "sell": "sell"}.get(c.get("lean"), "wait")
+    pts = []
+    if kind in ("acc", "dist") and ph:
+        txt = str(WYK.PHASE_TEXT[kind][ph]).split(". ")[0].rstrip(".")
+        pts.append(f"Pha {ph}: {WYK.PHASE_NAME[kind][ph]}. {txt}")
+    elif kind == "unk":
+        pts.append("Xu hướng trước đó không rõ nên chưa phân biệt tích lũy hay phân phối, chưa gán được pha")
+    pts.append(f"Vùng đi ngang {WYK.fmt2(c['bot'])} – {WYK.fmt2(c['top'])} ({c.get('bars')} nến), khớp mẫu {c.get('score')}%")
+    for key, lab in (("trigger", "Xác nhận"), ("inval", "Vô hiệu")):
+        d = c.get(key)
+        if d and d.get("txt"):
+            pts.append(f"{lab}: {d['txt']}")
+    ev = c.get("last_ev")
+    if ev:
+        try:
+            pts.append(f"Sự kiện mới nhất: {ev['label']} ngày {pd.Timestamp(ev['date']):%d/%m/%Y} ({WYK.fmt2(ev['p'])})")
+        except Exception:
+            pass
+    return (WYK.label(c), tone, pts)
+
+
+def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None, wy=False, wc=None) -> list[dict]:
     """Các mục mã đang nằm trong, mỗi mục: {title, icon, tag, tone, points[]}."""
     rows = t[t["Mã"].astype(str).str.upper() == code.upper()]
     if rows.empty:
@@ -164,6 +193,9 @@ def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_m
                     segs.append(f"{TF_VN[tf]} thiếu dữ liệu")
             pts.append(" · ".join(segs))
         add("📊", "Kết luận đa khung", str(conc.get("verdict") or ""), {"green": "buy", "red": "sell"}.get(conc.get("kind"), "wait"), pts, "chart")
+    if wy:        # Wyckoff khung Ngày: thẻ chi tiết ở trang Biểu đồ (cột bên phải)
+        tag, tone, pts = wyckoff_points(wc)
+        add("🧱", "Wyckoff", tag, tone, pts, "wyckoff")
     if code.upper() in wl_codes:
         add("⭐", "Watchlist", "", "watch", ["Có trong danh sách theo dõi của bạn"], "watch")
     return out
@@ -238,7 +270,7 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
             tag = f'<span class="mm-tag">{_e(m["tag"])}</span>' if m["tag"] else ""
             pts = "".join(f'<div class="mm-pt">{_e(p)}</div>' for p in m["points"])
             if m.get("go"):
-                lab = "Mở biểu đồ ›" if m["go"] == "chart" else "Mở thẻ ›"
+                lab = "Mở biểu đồ ›" if m["go"] in ("chart", "wyckoff") else "Mở thẻ ›"
                 kids += (f'<div class="mm-k"><a class="mm-card" href="?rtgo={m["go"]}~{_e(code)}" target="_self" style="--c:{TONE[m["tone"]]}">'
                          f'<div class="mm-ct">{m["icon"]} {_e(m["title"])}{tag}<span class="mm-go">{lab}</span></div>{pts}</a></div>')
             else:
@@ -261,7 +293,7 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
 
 
 # ------------------------------------------------------------------ giao diện Streamlit
-def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None) -> None:
+def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None, wy_fn=None) -> None:
     import streamlit as st
 
     st.caption("Chọn ngành rồi chọn mã để xem mã đang nằm ở mục nào và ý chính của từng mục. "
@@ -292,7 +324,7 @@ def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_co
 
     row = t[t["Mã"].astype(str).str.upper() == code.upper()].iloc[0]
     conc, A = mtf_fn(code) if mtf_fn else (None, None)
-    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A),
+    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A, wy_fn is not None, wy_fn(code) if wy_fn else None),
                           fundamentals(code, row, cap_map, fund_map)), unsafe_allow_html=True)
     st.caption("Bấm vào từng mục để mở đúng thẻ của mã ở trang đó.")
     if open_chart is not None and st.button("📈 Xem biểu đồ", key=f"rt_chart_{code}"):

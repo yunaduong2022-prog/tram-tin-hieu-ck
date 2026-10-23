@@ -1304,7 +1304,7 @@ def page_realtime_filter():
         except Exception:
             return None, None
 
-    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf)
+    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf, lambda c_: WY_TABLE.get(str(c_)))
 
 
 def _move_page(kind: str):
@@ -1713,7 +1713,7 @@ def wyckoff_card(a):
     w = a.get("wy")
     if not w:
         return card("Phân tích Wyckoff", '<div class="muted">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần). '
-                                         'Giá đang ở trạng thái xu hướng hoặc biên quá rộng.</div>')
+                                         'Giá đang ở trạng thái xu hướng hoặc biên quá rộng.</div>').replace('<div class="card">', '<div class="card" id="wyckoff-detail">', 1)
     k = {"buy": "green", "sell": "red"}.get(w["lean"], "gray")
     head = tag(WYK.label(w), k) + f' <span class="muted">khớp mẫu {w["score"]}%</span>'
     html = [head, f'<div class="muted" style="margin-top:8px">{w["summary"]}</div>']
@@ -1729,7 +1729,7 @@ def wyckoff_card(a):
     html.append('<div class="muted" style="margin-top:6px">Wyckoff đọc cấu trúc giá và volume nên mang tính chủ quan. Vùng đi ngang được tìm bằng quy tắc '
                 '(biên chạm nhiều lần, giá cắt đường giữa nhiều lần), sự kiện dò theo volume và biên độ nến. Máy có thể gắn nhãn khác cách bạn đọc, '
                 'và vẫn có thể thấy "cấu trúc" ngay trên dữ liệu ngẫu nhiên, nên chỉ dùng để quan sát cùng các chỉ báo khác, không tính vào điểm tín hiệu và backtest.</div>')
-    return card("Phân tích Wyckoff", "".join(html))
+    return card("Phân tích Wyckoff", "".join(html)).replace('<div class="card">', '<div class="card" id="wyckoff-detail">', 1)
 
 
 def zones_card(a):
@@ -2242,12 +2242,12 @@ def _rt_go(target: str, code: str):
         by_leg = target.endswith("-l")
         st.session_state[f"mv_mode_{kind}"] = ((("Tăng từ đáy" if up else "Giảm từ đỉnh")) if by_leg else ("Tăng trong phiên" if up else "Giảm trong phiên"))
         st.session_state["rt_focus"] = {"kind": "sc", "id": f"sc-{code}", "tab": ""}
-    elif target == "chart":
+    elif target in ("chart", "wyckoff"):
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
         st.session_state["_nav_pending"] = ("Biểu đồ", None)
-        st.session_state["rt_focus"] = {"kind": "id", "id": "mtf-conclusion", "tab": ""}
+        st.session_state["rt_focus"] = {"kind": "id", "id": "mtf-conclusion" if target == "chart" else "wyckoff-detail", "tab": ""}
 
 
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
