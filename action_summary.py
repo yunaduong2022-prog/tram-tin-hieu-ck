@@ -127,13 +127,11 @@ def _basis(s: dict) -> list[str]:
 
 
 def _picture(s: dict) -> str:
-    short_r = []
-    if s["sell"]:
-        short_r.append("có tín hiệu bán / hạ tỷ trọng")
-    if not s["above"][20] and _ok(s["ma"][20]):
-        short_r.append("giá dưới MA20")
-    if s["above"][20] and not s["sell"]:
-        short_r.append("giá trên MA20")
+    short_r = []      # chỉ ghi vị trí giá so với MA (không ghi tín hiệu bán / hạ tỷ trọng, mục đó đã có ở thẻ trạng thái và dòng "Căn cứ")
+    if _ok(s["ma"][20]):
+        short_r.append("giá trên MA20" if s["above"][20] else "giá dưới MA20")
+        if not s["above"][20] and _ok(s["ma"][50]) and not s["above"][50]:
+            short_r.append("dưới MA50")
     mid_r = []
     for n in (50, 200):
         if _ok(s["ma"][n]):
