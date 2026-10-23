@@ -218,6 +218,9 @@ def rules() -> str:
     """CSS thuần (không có thẻ <style>) để nhét vào waiting_buy.card_css."""
     return """
 .ac-box{margin-top:12px;border:1px solid var(--line);border-radius:14px;background:var(--card2);padding:12px 14px 10px}
+.ac-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line);
+  font-size:32px;font-weight:800;line-height:1.1;color:var(--txt2)}
+.ac-hd .sep{font-weight:400;color:var(--muted)}
 .ac-t{font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 .ac-pic{font-size:13px;line-height:1.55;color:var(--txt);margin-bottom:10px}
 .ac-pic b{color:var(--txt2)}
@@ -247,7 +250,10 @@ def html(ctx: dict) -> str:
     body = "".join(
         f'<tr><td class="pos">{esc(pos)}</td><td><b>{esc(head)}</b> {esc(why)}</td><td class="lv">{esc(zone)}</td></tr>'
         for pos, head, why, zone in _rows(ctx, s, lv))
-    return ('<div class="ac-box"><div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
+    code = esc(str(ctx.get("code") or ""))
+    head = (f'<div class="ac-hd"><span>{code}</span><span class="sep">|</span><span>{float(ctx["close"]):,.1f}</span></div>'
+            if code else "")
+    return ('<div class="ac-box">' + head + '<div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
             '<table class="ac-tb"><thead><tr><th>Vị thế tài khoản</th><th>Hành động</th><th>Vùng giá / Mốc lưu ý</th></tr></thead>'
             f'<tbody>{body}</tbody></table>'
             f'<div class="ac-bs">Căn cứ: {esc(" · ".join(_basis(s)))}</div>'

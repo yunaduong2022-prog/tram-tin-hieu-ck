@@ -371,7 +371,7 @@ def _action_html(code) -> str:
         state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
         a = analyze_cached(frames, code, "D", DATA_KEY)
         d = mtf_cached(frames, code, DATA_KEY)["D"]
-        ctx = dict(close=float(c.iloc[-1]), ma20=ma[20], ma50=ma[50], ma200=ma[200],
+        ctx = dict(code=code, close=float(c.iloc[-1]), ma20=ma[20], ma50=ma[50], ma200=ma[200],
                    label=WB.status_tag(state, reason)[0] if state else "", state=state, reason=reason,
                    lean=(a.get("dir", 0) if a.get("enough") else 0),
                    div=divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"),
