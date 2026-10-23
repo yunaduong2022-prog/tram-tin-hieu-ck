@@ -19,6 +19,11 @@ import pandas as pd
 
 OPEN, HIGH, LOW, CLOSE, VOL = "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh"
 MIN_BARS = 120
+# Vùng đi ngang chỉ tính khi (đỉnh - đáy) / đáy <= MAX_AMP. Phiên làm giá vượt khỏi khung này nhưng các phiên sau quay lại
+# trong khung cũ (cụm tối đa MAX_FB_RUN phiên liên tiếp) là BREAKOUT GIẢ: vẫn tính vào số nến đi ngang, loại khỏi biên trên/dưới.
+MAX_AMP = 0.10
+MAX_FB_RUN = 3
+MAX_FB_SHARE = 0.10      # tổng phiên breakout giả tối đa 10% độ dài vùng (tối thiểu cho phép 3 phiên): vùng phải phần lớn nằm trong khung
 OFFSETS = (0, 3, 6, 10, 15, 20, 30, 45)
 
 
@@ -40,31 +45,93 @@ def _fmt(x: float) -> str:
     return f"{x:,.2f}"
 
 
+def _edges(h, l, s, e, fb=(), frame=None):
+    """Biên trên / dưới của vùng [s, e]: bỏ các phiên breakout giả (đóng cửa vượt khung rồi quay lại) và các phiên có bóng nến
+    chọc ra ngoài khung 10% (đó là Spring / Upthrust, không phải biên của vùng)."""
+    skip = set(fb)
+    keep = [i for i in range(s, e + 1) if i not in skip and (frame is None or (l[i] >= frame[0] and h[i] <= frame[1]))]
+    if not keep:
+        keep = [i for i in range(s, e + 1) if i not in skip] or list(range(s, e + 1))
+    return float(np.max(h[keep])), float(np.min(l[keep]))
+
+
 def _find_range(h, l, c, atr, end):
+    """Tìm vùng đi ngang dài nhất kết thúc tại `end` mà phần lớn các phiên nằm trong một khung biên độ <= MAX_AMP.
+
+    Với mỗi khung ứng viên [x, x*(1+MAX_AMP)] (bước 0,5%), quét ngược từ nến cuối: phiên nằm trong khung là phiên đi ngang;
+    cụm <= MAX_FB_RUN phiên liên tiếp ĐÓNG CỬA ngoài khung rồi giá lại quay vào khung cũ là breakout giả (vẫn tính vào độ dài vùng);
+    cụm dài hơn thì vùng dừng lại ở đó. Sau đó kiểm tra như cũ: biên đủ rộng (>= 2,5 ATR), chạm mỗi biên >= 2 lần, giá cắt đường giữa >= 4 lần.
+    """
     a = atr[end]
     if not np.isfinite(a) or a <= 0 or end < 40:
         return None
-    best = None
-    for L in range(30, min(260, end + 1) + 1, 5):
-        s = end - L + 1
-        sh, sl = h[s:end + 1], l[s:end + 1]
-        hi, lo = float(np.max(sh)), float(np.min(sl))
-        if not (np.isfinite(hi) and np.isfinite(lo)):
-            continue
-        W = hi - lo
-        if W > 9 * a:          # biên quá rộng so với biến động: đã là xu hướng
+    back = min(260, end + 1)
+    s0 = end - back + 1
+    H, Lw = h[s0:end + 1], l[s0:end + 1]
+    ok = np.isfinite(H) & np.isfinite(Lw) & (Lw > 0)
+    if not ok[-1]:
+        return None
+    lo_all, hi_all = float(np.min(Lw[ok])), float(np.max(H[ok]))
+    nk = int(math.ceil(math.log(max(hi_all / lo_all, 1.0001)) / math.log(1.005))) + 1
+    xs = lo_all * 1.005 ** np.arange(0, nk + 1)
+    C = c[s0:end + 1]
+    ok &= np.isfinite(C)
+    # phiên "đi ngang" = đóng cửa nằm trong khung; bóng nến chọc ra ngoài (kiểu Spring / Upthrust) vẫn là đi ngang, chỉ không tính vào biên
+    inside = (C[None, :] >= xs[:, None]) & (C[None, :] <= xs[:, None] * (1 + MAX_AMP)) & ok[None, :]
+    full = inside & (Lw[None, :] >= xs[:, None]) & (H[None, :] <= xs[:, None] * (1 + MAX_AMP))
+    alive = inside[:, -1].copy()
+    if not alive.any():
+        return None
+    ext = np.full(len(xs), back - 1)
+    run = np.zeros(len(xs), dtype=int)
+    for j in range(back - 2, -1, -1):
+        ins = inside[:, j]
+        run = np.where(ins, 0, run + 1)
+        alive &= run <= MAX_FB_RUN
+        if not alive.any():
             break
-        if W < 2.5 * a:        # biên quá hẹp: chưa đủ ý nghĩa
-            continue
-        mid = (hi + lo) / 2
-        ti = np.flatnonzero(sh >= hi - 0.2 * W)
-        bi = np.flatnonzero(sl <= lo + 0.2 * W)
-        top_t = 1 + int((np.diff(ti) >= 5).sum()) if len(ti) else 0
-        bot_t = 1 + int((np.diff(bi) >= 5).sum()) if len(bi) else 0
-        side = np.where(c[s:end + 1] > mid, 1, -1)
-        cross = int((np.diff(side) != 0).sum())
-        if top_t >= 2 and bot_t >= 2 and cross >= 4:
-            best = {"s": s, "e": end, "L": L, "top": hi, "bot": lo, "mid": mid, "W": W}
+        ext = np.where(alive & ins, j, ext)
+    span = np.where(inside[:, -1], back - ext, 0)
+    order = [int(i) for i in np.argsort(-span, kind="stable") if span[i] >= 30][:12]
+    best = None
+    for xi in order:
+        L0 = int(span[xi])
+        for Lt in range(L0, 29, -5):
+            sl_ = back - Lt
+            m = inside[xi, sl_:]
+            if not m.any():
+                continue
+            sl_ += int(np.argmax(m))
+            m = inside[xi, sl_:]
+            L = back - sl_
+            if L < 30:
+                break
+            nfb = int((~m).sum())
+            if nfb > max(3, MAX_FB_SHARE * L):
+                continue
+            mf = full[xi, sl_:]
+            if not mf.any():
+                continue
+            sh, sl2 = H[sl_:][mf], Lw[sl_:][mf]
+            hi, lo = float(np.max(sh)), float(np.min(sl2))
+            W = hi - lo
+            if W < 2.5 * a:
+                continue
+            mid = (hi + lo) / 2
+            idx = np.flatnonzero(mf)
+            ti, bi = idx[sh >= hi - 0.2 * W], idx[sl2 <= lo + 0.2 * W]
+            top_t = 1 + int((np.diff(ti) >= 5).sum()) if len(ti) else 0
+            bot_t = 1 + int((np.diff(bi) >= 5).sum()) if len(bi) else 0
+            s = s0 + sl_
+            side = np.where(c[s:end + 1] > mid, 1, -1)
+            cross = int((np.diff(side) != 0).sum())
+            if top_t >= 2 and bot_t >= 2 and cross >= 4:
+                cand = {"s": s, "e": end, "L": L, "top": hi, "bot": lo, "mid": mid, "W": W,
+                        "fb": [s + int(i) for i in np.flatnonzero(~m)],
+                        "frame": (float(xs[xi]), float(xs[xi]) * (1 + MAX_AMP))}
+                if best is None or (L, -nfb) > (best["L"], -len(best["fb"])):
+                    best = cand
+                break
     return best
 
 
@@ -192,14 +259,35 @@ def analyze(g: pd.DataFrame):
     def tr_dict(tr_):
         return dict(tr_, s_date=pd.Timestamp(dates[tr_["s"]]), e_date=pd.Timestamp(dates[tr_["e"]]))
 
+    def fb_list(tr_):
+        out = []
+        for i in tr_.get("fb", ()):
+            up = (h[i] - tr_["top"]) >= (tr_["bot"] - l[i])
+            out.append({"i": int(i), "date": pd.Timestamp(dates[i]), "dir": "up" if up else "down",
+                        "p": float(h[i] if up else l[i])})
+        return out
+
+    def fb_note(fbs):
+        if not fbs:
+            return ""
+        part = ", ".join(f"{x['date']:%d/%m} ({'vượt biên trên' if x['dir'] == 'up' else 'thủng biên dưới'})" for x in fbs[:4])
+        more = f" và {len(fbs) - 4} phiên khác" if len(fbs) > 4 else ""
+        return (f"Có {len(fbs)} phiên breakout giả: {part}{more}. Giá vượt khỏi khung biên độ {MAX_AMP * 100:.0f}% nhưng các phiên sau "
+                "đã quay lại khung cũ, nên vẫn tính là đi ngang và không coi là thoát vùng.")
+
+    def span_txt(tr_):
+        n = len(tr_.get("fb", ()))
+        return f"{tr_['L']} nến, biên độ không quá {MAX_AMP * 100:.0f}%" + (f", gồm {n} phiên breakout giả" if n else "")
+
     base = {"kind": kind, "re": re_, "post": post, "prior": prior, "events": [], "phase": None,
             "phase_text": None, "lean": "wait", "score": 0, "notes": [], "kind_name": kind_name,
             "bars": n}
 
     if kind == "unk":
-        base.update(tr=tr_dict(tr), pos=(lc - bot) / W,
+        fbs = fb_list(tr)
+        base.update(tr=tr_dict(tr), pos=(lc - bot) / W, fb=fbs, notes=[fb_note(fbs)] if fbs else [],
                     title=f"Vùng {kind_name} {_fmt(bot)}–{_fmt(top)}",
-                    summary=(f"Có vùng đi ngang {_fmt(bot)}–{_fmt(top)} kéo dài {tr['L']} nến, nhưng xu hướng trước đó không rõ "
+                    summary=(f"Có vùng đi ngang {_fmt(bot)}–{_fmt(top)} kéo dài {span_txt(tr)}, nhưng xu hướng trước đó không rõ "
                              "nên chưa phân biệt được tích lũy hay phân phối. Theo dõi hướng giá thoát khỏi biên: đóng cửa trên "
                              f"{_fmt(top)} kèm volume lớn nghiêng về tích lũy, dưới {_fmt(bot)} kèm volume lớn nghiêng về phân phối."),
                     trigger={"p": top, "txt": f"Đóng cửa trên {_fmt(top)} kèm volume lớn"},
@@ -220,9 +308,10 @@ def analyze(g: pd.DataFrame):
     r = _events(*P, vr, spr, mir_tr(tr), prior_g, last)
     if r["sc"] > s + 3:  # thu hẹp vùng về đúng điểm bắt đầu (SC/BC) rồi dò lại
         s = r["sc"]
-        top, bot = float(np.max(h[s:e + 1])), float(np.min(l[s:e + 1]))
+        top, bot = _edges(h, l, s, e, tr.get("fb", ()), tr.get("frame"))
         W, mid = top - bot, (top + bot) / 2
-        tr = {"s": s, "e": e, "L": e - s + 1, "top": top, "bot": bot, "mid": mid, "W": W}
+        tr = {"s": s, "e": e, "L": e - s + 1, "top": top, "bot": bot, "mid": mid, "W": W,
+              "fb": [i for i in tr.get("fb", ()) if i >= s], "frame": tr.get("frame")}
         r = _events(*P, vr, spr, mir_tr(tr), prior_g, last)
     pos = (lc - bot) / W
     title = f"Vùng {kind_name} {_fmt(bot)}–{_fmt(top)}"
@@ -293,7 +382,8 @@ def analyze(g: pd.DataFrame):
     pts += (2 if r["sp"] >= 0 else 0) + (1 if "TEST" in kinds else 0) + (2 if r["sos"] >= 0 else 0) + (1 if "LPS" in kinds else 0)
     score = min(100, int(round(pts / 10 * 100)))
 
-    notes = []
+    fbs = fb_list(tr)
+    notes = [fb_note(fbs)] if fbs else []
     if r["sc"] < 0 and prior != "flat":
         notes.append(f"Chưa thấy {'BC' if dist else 'SC'} rõ ràng (cần nến volume lớn, biên độ rộng gần {'đỉnh' if dist else 'đáy'} của vùng).")
     if r["weak"] >= 0:
@@ -320,10 +410,10 @@ def analyze(g: pd.DataFrame):
     else:
         where = f"Giá đang ở {round(min(1.0, max(0.0, pos)) * 100)}% biên độ vùng (đáy 0%, đỉnh 100%)"
     prior_txt = {"down": "giảm", "up": "tăng", "flat": "đi ngang"}[prior]
-    summary = (f"{title}, kéo dài {tr['L']} nến, xu hướng trước đó {prior_txt}. "
+    summary = (f"{title}, kéo dài {span_txt(tr)}, xu hướng trước đó {prior_txt}. "
                + (PH[phase] if phase else f"Chưa thấy đủ dấu hiệu đặc trưng của Wyckoff ({'BC, AR, UT, SOW' if dist else 'SC, AR, Spring, SOS'}), nên coi đây mới là vùng đi ngang.")
                + f" {where}.")
-    base.update(tr=tr_dict(tr), pos=float(pos), title=title, events=events, phase=phase,
+    base.update(tr=tr_dict(tr), pos=float(pos), title=title, events=events, phase=phase, fb=fbs,
                 phase_text=PH[phase] if phase else None, lean=lean, score=score, notes=notes,
                 trigger=trigger, inval=inval, summary=summary, where=where,
                 resistance=float(res_lv), support=float(sup_lv))
@@ -402,7 +492,20 @@ def compact(w) -> dict | None:
         "trigger": w.get("trigger"), "inval": w.get("inval"),
         "last_ev": None if ev is None else {"label": ev["label"], "date": ev["date"], "p": ev["p"]},
         "notes": list(w.get("notes") or []),
+        "fb": [{"date": x["date"], "p": x["p"], "dir": x["dir"]} for x in (w.get("fb") or [])],
+        "amp": float((w["tr"]["top"] - w["tr"]["bot"]) / w["tr"]["bot"] * 100),
     }
+
+
+def fb_line(c) -> str:
+    """Dòng ghi chú breakout giả (rỗng nếu không có)."""
+    fb = c.get("fb") or []
+    if not fb:
+        return ""
+    part = "; ".join(f"<b>{pd.Timestamp(x['date']):%d/%m}</b> {'vượt biên trên' if x['dir'] == 'up' else 'thủng biên dưới'} ({fmt2(x['p'])})"
+                     for x in fb[:3])
+    more = f" và {len(fb) - 3} phiên khác" if len(fb) > 3 else ""
+    return (f'<div class="wy-ev">Breakout giả: {part}{more}. Giá quay lại khung biên độ {MAX_AMP * 100:.0f}% cũ nên vẫn tính là đi ngang.</div>')
 
 
 def note_html(c, compact_view: bool = False) -> str:
@@ -413,18 +516,18 @@ def note_html(c, compact_view: bool = False) -> str:
     foot = '<div class="wy-ft">Quy tắc mang tính chủ quan; chỉ để quan sát, không phải khuyến nghị.</div>'
     if not c:
         return (f'<div class="wy none">{head}<span class="wy-tag">Chưa có cấu trúc</span></div>'
-                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần): '
+                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 10%, chạm cả hai biên từ 2 lần): '
                 'giá đang trong xu hướng hoặc biên quá rộng, nên chưa xác định được pha Wyckoff.</div>' + foot + '</div>')
     kind = c["kind"]
     cls = kind if kind in ("acc", "dist") else "unk"
     tag = esc(label(c))
     tagline = f'<span class="wy-tag">{tag}</span>'
     if kind == "unk":
-        body = (f'<div class="wy-ph">Vùng đi ngang {fmt2(c["bot"])}–{fmt2(c["top"])} ({c["bars"]} nến)</div>'
+        body = (f'<div class="wy-ph">Vùng đi ngang {fmt2(c["bot"])}–{fmt2(c["top"])} ({c["bars"]} nến, biên độ ≤ {MAX_AMP * 100:.0f}%)</div>'
                 '<div class="wy-tx">Xu hướng trước đó không rõ nên chưa phân biệt tích lũy hay phân phối, và chưa gán được pha.</div>'
                 f'<div class="wy-hint">Theo dõi hướng thoát: đóng cửa trên {fmt2(c["top"])} kèm volume lớn nghiêng về tích lũy; '
                 f'dưới {fmt2(c["bot"])} nghiêng về phân phối.</div>')
-        return f'<div class="wy {cls}">{head}{tagline}</div>{body}{foot}</div>'
+        return f'<div class="wy {cls}">{head}{tagline}</div>{body}{fb_line(c)}{foot}</div>'
     ph = c["phase"]
     steps = ""
     if ph:
@@ -450,7 +553,7 @@ def note_html(c, compact_view: bool = False) -> str:
            f' · khớp mẫu {c["score"]}%</div>') if ev else f'<div class="wy-ev">Khớp mẫu {c["score"]}%</div>'
     if compact_view:
         lv = ""
-    return f'<div class="wy {cls}">{head}{tagline}</div>{steps}{body}{lv}{evh}{foot}</div>'
+    return f'<div class="wy {cls}">{head}{tagline}</div>{steps}{body}{lv}{evh}{fb_line(c)}{foot}</div>'
 
 
 def fmt2(x) -> str:

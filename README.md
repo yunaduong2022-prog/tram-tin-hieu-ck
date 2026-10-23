@@ -45,6 +45,8 @@ Lớp **Wyckoff** trên biểu đồ (bật/tắt cùng các lớp khác, mặc 
 - Tích lũy: SC, AR, ST, Spring, Test, SOS, LPS.
 - Phân phối: BC, AR, ST, UT/UTAD, Test, SOW, LPSY.
 
+Vùng đi ngang chỉ tính khi biên độ (đỉnh − đáy) / đáy không quá **10%** (`MAX_AMP` trong `wyckoff.py`). Phiên đóng cửa vượt khung này rồi các phiên sau quay lại khung cũ (tối đa 3 phiên liên tiếp) được ghi là **breakout giả**: vẫn tính vào số nến đi ngang nhưng không tính vào biên trên/dưới.
+
 Thẻ **Phân tích Wyckoff** ở cột bên phải cho biết pha A–E, mức khớp mẫu, mốc xác nhận, mốc vô hiệu và giải thích từng sự kiện. Code nằm trong `wyckoff.py`; ngưỡng (volume từ 1,5 lần cho SC, biên độ từ 1,2 ATR, biên tối thiểu 30 nến…) chỉnh ngay trong file đó.
 
 Lưu ý: đây là quy tắc máy tính nên mang tính chủ quan, có thể gắn nhãn khác cách bạn đọc, và vẫn có thể cho ra "cấu trúc" trên dữ liệu ngẫu nhiên (thử trên 40 chuỗi giá ngẫu nhiên có khoảng 9 chuỗi hiện pha C–E). Chỉ dùng để quan sát cùng các chỉ báo khác, không tính vào điểm tín hiệu và backtest. Nến ngày đang chạy trong phiên có thể chưa đóng nên nhãn có thể đổi.

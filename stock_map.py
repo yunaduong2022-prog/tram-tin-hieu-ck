@@ -100,7 +100,7 @@ def wyckoff_points(c) -> tuple[str, str, list[str]]:
     """(nhãn, tông màu, ý chính) từ kết quả wyckoff.compact() của khung Ngày. c = None: chưa có cấu trúc."""
     if not c:
         return ("Chưa có cấu trúc", "none",
-                ["Chưa thấy vùng đi ngang đủ rõ (≥ 30 nến, chạm cả hai biên từ 2 lần): giá đang trong xu hướng hoặc biên quá rộng"])
+                ["Chưa thấy vùng đi ngang đủ rõ (≥ 30 nến trong khung biên độ không quá 10%, chạm cả hai biên từ 2 lần): giá đang trong xu hướng hoặc biên quá rộng"])
     kind, ph = c.get("kind"), c.get("phase")
     tone = {"buy": "buy", "sell": "sell"}.get(c.get("lean"), "wait")
     pts = []
@@ -109,7 +109,11 @@ def wyckoff_points(c) -> tuple[str, str, list[str]]:
         pts.append(f"Pha {ph}: {WYK.PHASE_NAME[kind][ph]}. {txt}")
     elif kind == "unk":
         pts.append("Xu hướng trước đó không rõ nên chưa phân biệt tích lũy hay phân phối, chưa gán được pha")
-    pts.append(f"Vùng đi ngang {WYK.fmt2(c['bot'])} – {WYK.fmt2(c['top'])} ({c.get('bars')} nến), khớp mẫu {c.get('score')}%")
+    pts.append(f"Vùng đi ngang {WYK.fmt2(c['bot'])} – {WYK.fmt2(c['top'])} ({c.get('bars')} nến, biên độ {float(c.get('amp') or 0):.1f}%), khớp mẫu {c.get('score')}%")
+    fb = c.get("fb") or []
+    if fb:      # phiên đóng cửa vượt khung 10% rồi quay lại khung cũ
+        part = ", ".join(f"{pd.Timestamp(x['date']):%d/%m} {'vượt biên trên' if x['dir'] == 'up' else 'thủng biên dưới'}" for x in fb[:3])
+        pts.append(f"Breakout giả {len(fb)} phiên ({part}{'…' if len(fb) > 3 else ''}): giá đã quay lại khung cũ nên vẫn tính là đi ngang")
     for key, lab in (("trigger", "Xác nhận"), ("inval", "Vô hiệu")):
         d = c.get(key)
         if d and d.get("txt"):

@@ -1040,7 +1040,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb11")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb12")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 @st.cache_data(show_spinner=False)
@@ -1712,13 +1712,14 @@ def elliott_card(a):
 def wyckoff_card(a):
     w = a.get("wy")
     if not w:
-        return card("Phân tích Wyckoff", '<div class="muted">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần). '
+        return card("Phân tích Wyckoff", '<div class="muted">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 10%, chạm cả hai biên từ 2 lần). '
                                          'Giá đang ở trạng thái xu hướng hoặc biên quá rộng.</div>').replace('<div class="card">', '<div class="card" id="wyckoff-detail">', 1)
     k = {"buy": "green", "sell": "red"}.get(w["lean"], "gray")
     head = tag(WYK.label(w), k) + f' <span class="muted">khớp mẫu {w["score"]}%</span>'
     html = [head, f'<div class="muted" style="margin-top:8px">{w["summary"]}</div>']
     if w["kind"] != "unk" or w["trigger"]:
         html.append('<div class="box">' + row("Biên trên / dưới", f'{fp(w["tr"]["top"])} / {fp(w["tr"]["bot"])}')
+                    + row("Số nến đi ngang · biên độ", f'{w["tr"]["L"]} nến · {(w["tr"]["top"] / w["tr"]["bot"] - 1) * 100:.1f}%')
                     + row(w["trigger"]["txt"], f'<b>{fp(w["trigger"]["p"])}</b>')
                     + row(w["inval"]["txt"], f'<b>{fp(w["inval"]["p"])}</b>') + "</div>")
     for e in sorted(w["events"], key=lambda x: -x["i"]):
@@ -1726,8 +1727,8 @@ def wyckoff_card(a):
                     f'<div class="muted" style="margin-left:50px">{e["txt"]}</div></div>')
     if w["notes"]:
         html.append(f'<div class="muted" style="margin-top:6px">{" ".join(w["notes"])}</div>')
-    html.append('<div class="muted" style="margin-top:6px">Wyckoff đọc cấu trúc giá và volume nên mang tính chủ quan. Vùng đi ngang được tìm bằng quy tắc '
-                '(biên chạm nhiều lần, giá cắt đường giữa nhiều lần), sự kiện dò theo volume và biên độ nến. Máy có thể gắn nhãn khác cách bạn đọc, '
+    html.append('<div class="muted" style="margin-top:6px">Wyckoff đọc cấu trúc giá và volume nên mang tính chủ quan. Vùng đi ngang chỉ tính khi biên độ không quá 10%; phiên đóng cửa vượt khung rồi quay lại khung cũ được ghi là breakout giả. '
+                'Vùng còn cần biên chạm nhiều lần và giá cắt đường giữa nhiều lần; sự kiện dò theo volume và biên độ nến. Máy có thể gắn nhãn khác cách bạn đọc, '
                 'và vẫn có thể thấy "cấu trúc" ngay trên dữ liệu ngẫu nhiên, nên chỉ dùng để quan sát cùng các chỉ báo khác, không tính vào điểm tín hiệu và backtest.</div>')
     return card("Phân tích Wyckoff", "".join(html)).replace('<div class="card">', '<div class="card" id="wyckoff-detail">', 1)
 
