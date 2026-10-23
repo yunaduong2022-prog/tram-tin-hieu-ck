@@ -1348,9 +1348,11 @@ def page_realtime_filter():
     now = set(_buy_now_table(t)["Mã"])
     vol = res_df.set_index("Mã")["Vol/Avg10"] if "Vol/Avg10" in res_df.columns else None
     try:
-        wl = set(MW.load()["Mã"].astype(str).str.upper())
+        _wl_df = MW.load()
+        wl = set(_wl_df["Mã"].astype(str).str.upper())
+        wl_pos = _wl_df.set_index("Mã").to_dict("index")
     except Exception:
-        wl = set()
+        wl, wl_pos = set(), {}
 
     def _open_chart(code: str):
         st.session_state["selected_code"] = code
@@ -1365,7 +1367,7 @@ def page_realtime_filter():
         except Exception:
             return None, None
 
-    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf, lambda c_: WY_TABLE.get(str(c_)))
+    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf, lambda c_: WY_TABLE.get(str(c_)), wl_pos, _action_html)
 
 
 def _move_page(kind: str):
@@ -1485,10 +1487,8 @@ def page_recovering():
     header()
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: đang hồi phục hoặc có dấu hiệu tích lũy sau nhịp giảm. "
                "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng). "
-               "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
+               "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")
     t = _wb_table()
-    if "Hành động bán" in t.columns:
-        t = t[~t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     d = t[t["Danh sách"] == WB.L_RECOVER].sort_values("Score", ascending=False)
     st.metric("Tổng số mã", len(d))
     if d.empty:
@@ -1517,11 +1517,8 @@ def page_alert_lists():
     st.title("⚠️ Danh sách cảnh báo")
     header()
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: xu hướng suy yếu, tăng quá đà. Mã đang phục hồi có mục riêng **Đang phục hồi**. "
-               "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
-    t_all = _wb_table()
-    t = t_all
-    if "Hành động bán" in t_all.columns:      # mỗi mã chỉ nằm một nơi: có tín hiệu BÁN / CHỐT LỜI thì thuộc trang Bán / Chốt lời
-        t = t_all[~t_all["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
+               "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")
+    t_all = t = _wb_table()      # một mã có thể nằm ở nhiều mục: mã có tín hiệu BÁN / CHỐT LỜI vẫn hiện ở đây nếu Danh sách của nó là cảnh báo
     lists = [(WB.L_RISK, "Xu hướng suy yếu", "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."),
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought).")]
     _, _fm = _wb_meta_maps(WY_KEY)

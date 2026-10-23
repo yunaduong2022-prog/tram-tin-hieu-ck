@@ -10,8 +10,8 @@ Chọn một mã, trang vẽ một cây nhánh (giống sơ đồ tư duy, xếp
 Không tính lại gì cả: mọi mục lấy đúng điều kiện của các trang tương ứng (cùng bảng waiting_buy):
   - Mua ngay      : Danh sách thuộc BUY_GROUPS, Hành động = Vào ngay, có vùng mua, không có tín hiệu BÁN/CHỐT LỜI
   - Chờ mua       : Danh sách thuộc BUY_GROUPS và không nằm ở Mua ngay
-  - Đang phục hồi : Danh sách = L_RECOVER, không có tín hiệu bán
-  - Cảnh báo      : L_RISK (xu hướng suy yếu) hoặc L_OVERBOUGHT (tăng quá đà), không có tín hiệu bán
+  - Đang phục hồi : Danh sách = L_RECOVER
+  - Cảnh báo      : L_RISK (xu hướng suy yếu) hoặc L_OVERBOUGHT (tăng quá đà); một mã có thể nằm đồng thời ở nhiều mục
   - Bán / Chốt lời: Hành động bán là BÁN hoặc CHỐT LỜI
   - Tăng mạnh / Giảm mạnh: theo ngưỡng mặc định của hai trang đó (xem hằng số bên dưới)
   - Watchlist     : mã có trong data/watchlist_cua_toi.csv
@@ -129,7 +129,7 @@ def wyckoff_points(c) -> tuple[str, str, list[str]]:
     return (WYK.label(c), tone, pts)
 
 
-def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None, wy=False, wc=None) -> list[dict]:
+def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_map=None, conc=None, A=None, wy=False, wc=None, wl_pos=None) -> list[dict]:
     """Các mục mã đang nằm trong, mỗi mục: {title, icon, tag, tone, points[]}."""
     rows = t[t["Mã"].astype(str).str.upper() == code.upper()]
     if rows.empty:
@@ -152,11 +152,11 @@ def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_m
         if lv and gap is not None:
             lv[0] += f" · giá cách vùng mua {_pc(gap)}"
         add("🛒", "Chờ mua", f"{dsh} · {r.get('Trạng thái')}", "wait", pts + lv, "wait")
-    if dsh == WB.L_RECOVER and not sell:
+    if dsh == WB.L_RECOVER:
         add("🌱", "Đang phục hồi", str(r.get("Trạng thái") or ""), "recover", _parts(r.get("Lý do")) + _levels(r), "recover")
-    if dsh == WB.L_RISK and not sell:
-        add("⚠️", "Danh sách cảnh báo", "Xu hướng suy yếu", "warn", _parts(r.get("Lý do")), "risk")
-    if dsh == WB.L_OVERBOUGHT and not sell:
+    if dsh == WB.L_RISK:       # đúng với mục: Danh sách = L_RISK; mã có thể nằm đồng thời ở Bán / Chốt lời
+        add("⚠️", "Danh sách cảnh báo", str(r.get("Trạng thái") or "Xu hướng suy yếu"), "warn", _parts(r.get("Lý do")), "risk")
+    if dsh == WB.L_OVERBOUGHT:
         add("⚠️", "Danh sách cảnh báo", "Tăng quá đà", "warn", _parts(r.get("Lý do")), "over")
     if sell:
         add("🔴", "Bán / Chốt lời", str(hd), "sell", _parts(r.get("Lý do")), "sell")
@@ -203,7 +203,27 @@ def memberships(code: str, t: pd.DataFrame, now_codes: set, wl_codes: set, vol_m
         tag, tone, pts = wyckoff_points(wc)
         add("🧱", "Wyckoff", tag, tone, pts, "wyckoff")
     if code.upper() in wl_codes:
-        add("⭐", "Watchlist", "", "watch", ["Có trong danh sách theo dõi của bạn"], "watch")
+        # Chỉ ghi phần chưa có ở mục khác: vị thế riêng của bạn (giá vốn, cắt lỗ / mục tiêu tự đặt, ghi chú). Chưa nhập gì thì không thêm dòng thừa.
+        u = (wl_pos or {}).get(code.upper(), {}) or {}
+        px_ = _f(r.get("Giá"))
+        gv, sl, tp = _f(u.get("Giá vốn")), _f(u.get("Cắt lỗ")), _f(u.get("Mục tiêu"))
+        pts, tag, tone = [], "", "watch"
+        if gv and gv > 0:
+            pts.append(f"Giá vốn {_px(gv)}" + (f" ({'lãi' if px_ >= gv else 'lỗ'} {_pc((px_ / gv - 1) * 100, False).lstrip('-')})" if px_ else ""))
+        if sl and sl > 0:
+            hit = bool(px_ and px_ <= sl)
+            pts.append(f"Cắt lỗ của bạn {_px(sl)}" + (f" (giá đang cao hơn {_pc((px_ / sl - 1) * 100, False)})" if px_ and not hit else "") + (": ĐÃ CHẠM" if hit else ""))
+            if hit:
+                tag, tone = "Chạm cắt lỗ", "sell"
+        if tp and tp > 0:
+            hit = bool(px_ and px_ >= tp)
+            pts.append(f"Mục tiêu của bạn {_px(tp)}" + (f" (còn {_pc((tp / px_ - 1) * 100, False)} nữa)" if px_ and not hit else "") + (": ĐÃ ĐẠT" if hit else ""))
+            if hit and not tag:
+                tag, tone = "Đạt mục tiêu", "buy"
+        note = str(u.get("Ghi chú", "") or "").strip()
+        if note:
+            pts.append(f"Ghi chú: {note}")
+        add("⭐", "Watchlist", tag, tone, pts, "watch")
     return out
 
 
@@ -230,6 +250,7 @@ CSS = """<style>
 .mm-root{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
 .mm-code{font-size:28px;font-weight:700;color:var(--txt2);letter-spacing:.5px}
 .mm-px{font-size:15px;color:var(--txt)}
+.mm-st{margin-left:auto;padding:5px 13px;border-radius:999px;border:1px solid var(--c);color:var(--c);font-size:12px;font-weight:800;letter-spacing:.3px}
 .mm-sub{flex-basis:100%;font-size:13px;color:var(--muted)}
 .mm-tree{margin:0 0 0 26px;border-left:2px solid var(--line);padding-top:4px}
 .mm-b{position:relative;padding:12px 0 2px 24px}
@@ -267,7 +288,15 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
         chg_html = f' <span style="color:{col};font-weight:600">{chg:+.2f}%</span>'
     name = dict(funda).get("Tên công ty", "")
     sub = f'<div class="mm-sub">{_e(name)}</div>' if name and name != "Chưa có" else ""
-    root = f'<div class="mm-root"><span class="mm-code">{_e(code)}</span><span class="mm-px">Giá {price}{chg_html}</span>{sub}</div>'
+    stt = str(row.get("Trạng thái") or "").strip() if row is not None else ""
+    if stt:      # nhãn trạng thái ở góc phải, giống thẻ Watchlist / Chờ mua
+        dsh = row.get("Danh sách")
+        col = ("var(--red)" if dsh in (WB.L_RISK,) or row.get("Hành động bán") in SELL else "var(--amber)" if dsh in (WB.L_OVERBOUGHT, WB.G2, WB.G3)
+               else "var(--green)" if dsh == WB.G1 else "var(--muted)")
+        stt_html = f'<span class="mm-st" style="--c:{col}">{_e(WB.BADGE_TEXT.get(stt, stt).upper())}</span>'
+    else:
+        stt_html = ""
+    root = f'<div class="mm-root"><span class="mm-code">{_e(code)}</span><span class="mm-px">Giá {price}{chg_html}</span>{stt_html}{sub}</div>'
 
     # nhánh 1: các mục mã đang nằm trong
     if mems:
@@ -299,7 +328,7 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
 
 
 # ------------------------------------------------------------------ giao diện Streamlit
-def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None, wy_fn=None) -> None:
+def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_codes: set, vol_map, open_chart=None, mtf_fn=None, wy_fn=None, wl_pos=None, action_fn=None) -> None:
     import streamlit as st
 
     st.caption("Chọn ngành rồi chọn mã để xem mã đang nằm ở mục nào và ý chính của từng mục. "
@@ -330,8 +359,13 @@ def render(t: pd.DataFrame, cap_map: dict, fund_map: dict, now_codes: set, wl_co
 
     row = t[t["Mã"].astype(str).str.upper() == code.upper()].iloc[0]
     conc, A = mtf_fn(code) if mtf_fn else (None, None)
-    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A, wy_fn is not None, wy_fn(code) if wy_fn else None),
+    st.markdown(tree_html(code, row, memberships(code, t, now_codes, wl_codes, vol_map, conc, A, wy_fn is not None, wy_fn(code) if wy_fn else None, wl_pos),
                           fundamentals(code, row, cap_map, fund_map)), unsafe_allow_html=True)
+    if action_fn is not None:      # "Tóm tắt nhanh · Kết luận hành động" (action_summary), đặt cuối sơ đồ để chụp gửi khách
+        ah = action_fn(code)
+        if ah:
+            import action_summary as AS
+            st.markdown(AS.css() + ah, unsafe_allow_html=True)
     st.caption("Bấm vào từng mục để mở đúng thẻ của mã ở trang đó.")
     if open_chart is not None and st.button("📈 Xem biểu đồ", key=f"rt_chart_{code}"):
         open_chart(code)      # NAV.goto đã tự chạy lại trang
