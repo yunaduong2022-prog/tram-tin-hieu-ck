@@ -138,18 +138,18 @@ def build(res: pd.DataFrame, t: pd.DataFrame, wy_map: dict, df_d: pd.DataFrame, 
     return d.sort_values(["Số nguồn", "Score"], ascending=[False, False]).reset_index(drop=True)
 
 
-def chips_html(d: pd.DataFrame, chip) -> str:
-    """Danh sách tổng hợp chia theo số nguồn xác nhận. chip(mã) -> HTML của mã (app._chip: liên kết sc-jump cuộn tới thẻ)."""
+def chips_html(d: pd.DataFrame, chip, lean: dict) -> str:
+    """Danh sách tổng hợp chia theo DỰ BÁO của biểu đồ (khung Ngày): nghiêng tăng / nghiêng giảm.
+    lean: {mã: +1 / -1 / 0} (cùng phép tính với dòng "DỰ BÁO NGHIÊNG TĂNG / GIẢM" trên thẻ). Mã không nghiêng rõ (0) xếp nhóm cuối, nhóm rỗng không hiện.
+    chip(mã) -> HTML của mã (app._chip: liên kết sc-jump cuộn tới thẻ). Thứ tự trong nhóm giữ theo bảng (nhiều nguồn báo trước)."""
     if d.empty:
         return ""
-    esc = _h.escape
-    groups = ((2, "Nhiều nguồn cùng báo cạn cung (≥ 2)"), (1, "Một nguồn báo cạn cung"))
+    groups = ((1, "▲ DỰ BÁO NGHIÊNG TĂNG", "var(--green)"), (-1, "▼ DỰ BÁO NGHIÊNG GIẢM", "var(--red)"), (0, "Chưa nghiêng rõ", "var(--muted)"))
     out = []
-    for n, name in groups:
-        sub = d[d["Số nguồn"] >= 2] if n == 2 else d[d["Số nguồn"] == 1]
-        if sub.empty:
+    for k, name, col in groups:
+        codes = [str(c) for c in d["Mã"] if int(lean.get(str(c), 0) or 0) == k]
+        if not codes:
             continue
-        chips = ", ".join(chip(str(c)) for c in sub["Mã"])
-        out.append(f'<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.03em;margin-bottom:2px">'
-                   f'{esc(name)} · {len(sub)} mã</div>{chips}</div>')
+        out.append(f'<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:{col};letter-spacing:.03em;margin-bottom:2px">'
+                   f'{_h.escape(name)} · {len(codes)} mã</div>{", ".join(chip(c) for c in codes)}</div>')
     return "".join(out)

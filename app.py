@@ -1583,6 +1583,18 @@ def _dry_table() -> pd.DataFrame:
     return DS.build(res_df, t, WY_TABLE, df, now)
 
 
+def _lean_of(codes) -> dict:
+    """{mã: +1 / -1 / 0}: dự báo nghiêng tăng / giảm của biểu đồ khung Ngày (cùng phép tính với _lean_html)."""
+    out = {}
+    for c_ in codes:
+        try:
+            a = analyze_cached(frames, str(c_), "D", DATA_KEY)
+            out[str(c_)] = int(a.get("dir", 0)) if a.get("enough") else 0
+        except Exception:
+            out[str(c_)] = 0
+    return out
+
+
 def page_dry_supply():
     st.title("🧊 Cạn cung")
     header()
@@ -1608,8 +1620,8 @@ def page_dry_supply():
         return
     shown = _tone_limit(d, "dry")
     _sc = set(shown["Mã"].astype(str))
-    st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã) · bấm vào mã để xuống thẻ bên dưới",
-                          DS.chips_html(d, lambda c_: _chip(c_, "var(--accent)", _sc))), unsafe_allow_html=True)
+    st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã) · chia theo dự báo nghiêng tăng / nghiêng giảm (khung Ngày) · bấm vào mã để xuống thẻ bên dưới",
+                          DS.chips_html(d, lambda c_: _chip(c_, "var(--accent)", _sc), _lean_of(d["Mã"]))), unsafe_allow_html=True)
     _tone_grid(shown, len(d), "dry", "dry")
     _sell_jump_js()
     _rt_focus_scroll()
