@@ -229,9 +229,9 @@ def structure_of(w) -> str:
     return w.get("kind") if w.get("kind") in ("acc", "dist", "unk") else "none"
 
 
-def chips_by_structure(codes, wy_map, color: str) -> str:
+def chips_by_structure(codes, wy_map, color: str, linked=None) -> str:
     """Các mã (đã xếp theo thứ tự ưu tiên của trang) chia thành 4 nhóm Wyckoff; mỗi mã là liên kết sc-jump cuộn tới thẻ bên dưới.
-    wy_map: {mã: wyckoff.compact() hoặc None}. Nhóm rỗng không hiển thị."""
+    wy_map: {mã: wyckoff.compact() hoặc None}. linked: tập mã có thẻ đang hiển thị (mã khác chỉ là chữ, không bấm được). Nhóm rỗng không hiển thị."""
     buckets = {k: [] for k, _, _ in STRUCT_GROUPS}
     for c in codes:
         w = (wy_map or {}).get(str(c))
@@ -242,8 +242,10 @@ def chips_by_structure(codes, wy_map, color: str) -> str:
         if not items:
             continue
         chips = ", ".join(
-            f'<a class="sc-jump" href="#sc-{esc(c)}" data-code="{esc(c)}" title="{esc(WYK.label(w)) if w else "Chưa có vùng đi ngang đủ rõ"}" '
-            f'style="color:{color};font-weight:600;text-decoration:none;cursor:pointer">{esc(c)}</a>' for c, w in items)
+            (f'<a class="sc-jump" href="#sc-{esc(c)}" data-code="{esc(c)}" title="{esc(WYK.label(w)) if w else "Chưa có vùng đi ngang đủ rõ"}" '
+             f'style="color:{color};font-weight:600;text-decoration:none;cursor:pointer">{esc(c)}</a>')
+            if linked is None or c in linked else f'<span style="color:{color};font-weight:600;opacity:.7">{esc(c)}</span>'
+            for c, w in items)
         out.append(f'<div style="margin-top:10px"><div style="font-size:12px;font-weight:700;color:{col};letter-spacing:.03em;margin-bottom:2px">'
                    f'{esc(name)} ({len(items)} mã)</div>{chips}</div>')
     return "".join(out)

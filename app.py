@@ -1150,6 +1150,94 @@ def _wb_card(r, group):
             NAV.goto("Cổ phiếu", "Tổng quát")
 
 
+# ------------------------------------------------------------------ THẺ DÙNG CHUNG CHO CÁC TRANG DANH SÁCH
+# Tăng mạnh / Giảm mạnh / Đang phục hồi / Danh sách cảnh báo / Bán - Chốt lời dùng đúng thẻ của Chờ mua, Mua ngay, Watchlist
+# (waiting_buy.card_html + nút "Xem biểu đồ", lưới 3 cột, ô lọc, "Hiện tất cả"). Chỉ khác nhãn huy hiệu và một dòng ghi chú.
+TONE_UI = {      # tone -> (nhãn trên huy hiệu, màu huy hiệu g/a/r/v/n, gợi ý hành động)
+    "sell":    ("BÁN", "r", "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."),
+    "tp":      ("CHỐT LỜI", "a", "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."),
+    "risk":    ("THEO DÕI SUY YẾU", "r", sell_card.TONES["risk"]["hint"]),
+    "over":    ("KHÔNG MUA ĐUỔI", "a", sell_card.TONES["over"]["hint"]),
+    "surge":   ("TĂNG MẠNH", "g", sell_card.TONES["surge"]["hint"]),
+    "plunge":  ("GIẢM MẠNH", "r", sell_card.TONES["plunge"]["hint"]),
+    "recover": ("ĐANG PHỤC HỒI", "v", sell_card.TONES["recover"]["hint"]),
+}
+
+
+def _open_chart_of(code: str):
+    st.session_state["selected_code"] = code
+    for _k in ("mtf_code", "tab_code"):
+        st.session_state[_k] = code
+    NAV.goto("Cổ phiếu", "Tổng quát")
+
+
+def _tone_card(r, tone: str, key: str):
+    """Một thẻ ở các trang danh sách. tone = sell (tự tách BÁN / CHỐT LỜI theo cột 'Hành động bán'), tp, risk, over, surge, plunge, recover."""
+    r = r.copy()
+    code = str(r["Mã"])
+    if tone == "sell" and str(r.get("Hành động bán")) == "CHỐT LỜI":
+        tone = "tp"
+    label, badge, hint = TONE_UI[tone]
+    r["Trạng thái"] = label
+    r["Lý do"] = re.sub(r"^\s*(BÁN|CHỐT LỜI)\s*:\s*", "", str(r.get("Lý do") or ""), flags=re.I)      # nhãn huy hiệu đã nói rõ, bỏ tiền tố
+    if tone == "plunge":
+        v, fmt = r.get("Giảm từ đỉnh %"), "Đã giảm {:.0f}% từ đỉnh"
+    elif tone == "surge":
+        v, fmt = r.get("Tăng từ đáy hiện tại %"), "Đã tăng {:.0f}% từ đáy"
+    else:
+        v, fmt = r.get("Tăng từ đáy %"), "Đã tăng {:.0f}% từ đáy"
+    gain = fmt.format(float(v)) + ". " if v is not None and pd.notna(v) else ""
+    ctx = f'<div class="wb-sub" style="margin:-4px 0 12px">{htmllib.escape(gain + hint)}</div>'
+    with st.container(key=f"wbcard-{tone}-{code}"):          # tiền tố wbcard- để ăn CSS thẻ và cuộn tới thẻ (_wb_scroll_to)
+        div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
+        st.markdown(WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
+                                 _min_trading(), ctx, _action_html(code)), unsafe_allow_html=True)
+        if st.button("📊 Xem biểu đồ", key=f"{key}_chart_{code}", use_container_width=True):
+            _open_chart_of(code)
+
+
+def _tone_limit(d: pd.DataFrame, key: str) -> pd.DataFrame:
+    """Giống Mua ngay: hiện WB_PER_GROUP thẻ đầu, tick 'Hiện tất cả' để xem hết."""
+    show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key=f"{key}_all")
+    return d if show_all else d.head(WB_PER_GROUP)
+
+
+def _tone_grid(shown: pd.DataFrame, total: int, tone, key: str):
+    cols = st.columns(3)
+    for i, (_, r) in enumerate(shown.iterrows()):
+        with cols[i % 3]:
+            _tone_card(r, tone(r) if callable(tone) else tone, key)
+    if total > len(shown):
+        st.caption(f"Đang hiển thị {len(shown)}/{total} mã có thứ tự ưu tiên cao nhất.")
+
+
+def _tone_filters(d: pd.DataFrame, key: str) -> pd.DataFrame:
+    """Ô Tìm mã + Nhóm ngành, cùng bố cục với Mua ngay."""
+    f1, f2 = st.columns([1.2, 3])
+    q = f1.text_input("Tìm mã", "", key=f"{key}_q", placeholder="🔍 Tìm mã...").upper().strip()
+    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                          key=f"{key}_ind", placeholder="Tất cả nhóm")
+    if q:
+        d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+    if inds:
+        d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+    return d
+
+
+def _chip(code, color: str, linked) -> str:
+    """Mã trong 'Danh sách tổng hợp': bấm để cuộn tới thẻ (chỉ khi thẻ đang hiển thị)."""
+    c = htmllib.escape(str(code))
+    if linked is not None and str(code) not in linked:
+        return f'<span style="color:{color};font-weight:600;opacity:.7">{c}</span>'
+    return (f'<a class="sc-jump" href="#sc-{c}" data-code="{c}" '
+            f'style="color:{color};font-weight:600;text-decoration:none;cursor:pointer">{c}</a>')
+
+
+def _chip_box(sub: str, chips: str) -> str:
+    return (f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+            f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">{sub}</div>{chips}</div>')
+
+
 def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
     c1, c2, c3 = st.columns([1.2, 2, 2])
     q = c1.text_input("Tìm mã", "", key="wb_q", placeholder="🔍 Tìm mã...").upper().strip()
@@ -1447,19 +1535,18 @@ def _move_page(kind: str):
                 else f'{head}{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
         return f'{"Tăng" if up else "Giảm"} {abs(float(r["Chg %"])):.2f}% trong phiên gần nhất{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
     d = d.assign(**{"Lý do": d.apply(_why, axis=1)})
-    _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
-                       f'style="color:{"var(--green)" if up else "var(--red)"};font-weight:600;text-decoration:none;cursor:pointer">'
-                       f'{htmllib.escape(str(c_))}</a>' for c_ in d["Mã"])
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    shown = _tone_limit(d, f"mv_{kind}_{int(by_leg)}")
+    _sc = set(shown["Mã"].astype(str))
+    _chips = ", ".join(_chip(c_, "var(--green)" if up else "var(--red)", _sc) for c_ in d["Mã"])
     if not up:      # Giảm mạnh: chia danh sách theo cấu trúc Wyckoff (khung Ngày), bấm mã cuộn xuống thẻ bên dưới
-        _chips = sell_card.chips_by_structure(list(d["Mã"]), WY_TABLE, "var(--red)")
+        _chips = sell_card.chips_by_structure(list(d["Mã"]), WY_TABLE, "var(--red)", linked=_sc)
         _sub = (f'Danh sách tổng hợp ({len(d)} mã) · chia theo cấu trúc Wyckoff khung Ngày: Tích lũy, Đi ngang, Phân phối, Chưa rõ cấu trúc. '
                 'Bấm vào mã để xuống thẻ bên dưới')
     else:
         _sub = f'Danh sách tổng hợp ({len(d)} mã)'
-    st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
-                f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
-                f'{_sub}</div>{_chips}</div>', unsafe_allow_html=True)
-    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind, _wy_note, _lean_html, action_of=_action_html), unsafe_allow_html=True)
+    st.markdown(_chip_box(_sub, _chips), unsafe_allow_html=True)
+    _tone_grid(shown, len(d), kind, f"mv_{kind}")
     _sell_jump_js()
     _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
@@ -1500,8 +1587,13 @@ def page_recovering():
                     "MA20 %": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[1]),
                     "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
                     "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua (wb-*)
-    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover", _wy_note, _lean_html, _min_trading(), action_of=_action_html), unsafe_allow_html=True)
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS thẻ (wb-*)
+    d = _tone_filters(d, "rc")
+    if d.empty:
+        st.info("Không có mã nào phù hợp bộ lọc.")
+        return
+    shown = _tone_limit(d, "rc")
+    _tone_grid(shown, len(d), "recover", "rc")
     _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "MA20", "MA50", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
@@ -1521,7 +1613,7 @@ def page_alert_lists():
     t_all = t = _wb_table()      # một mã có thể nằm ở nhiều mục: mã có tín hiệu BÁN / CHỐT LỜI vẫn hiện ở đây nếu Danh sách của nó là cảnh báo
     lists = [(WB.L_RISK, "Xu hướng suy yếu", "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."),
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought).")]
-    _, _fm = _wb_meta_maps(WY_KEY)
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over"}
     _CHIP_COL = {WB.L_RISK: "var(--txt2)", WB.L_OVERBOUGHT: "#F5B942"}
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
@@ -1531,24 +1623,15 @@ def page_alert_lists():
             if d.empty:
                 st.info("Không có mã nào.")
                 continue
-            f1, f2 = st.columns([1.2, 3])      # bộ lọc nằm ngay trên Danh sách tổng hợp (mỗi tab có bộ lọc riêng)
-            q = f1.text_input("Tìm mã", "", key=f"alert_q_{key}", placeholder="🔍 Tìm mã...").upper().strip()
-            inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
-                                  key=f"alert_ind_{key}", placeholder="Tất cả nhóm")
-            if q:
-                d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
-            if inds:
-                d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+            d = _tone_filters(d, f"alert_{key}")      # bộ lọc nằm ngay trên Danh sách tổng hợp (mỗi tab có bộ lọc riêng)
             if d.empty:
                 st.info("Không có mã nào khớp bộ lọc.")
                 continue
-            _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
-                               f'style="color:{_CHIP_COL[key]};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
-                               for c_ in d["Mã"])
-            st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
-                        f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
-                        f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
-            st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, _TONE_OF[key], _wy_note, _lean_html, action_of=_action_html), unsafe_allow_html=True)
+            shown = _tone_limit(d, f"alert_{key}")
+            _sc = set(shown["Mã"].astype(str))
+            _chips = ", ".join(_chip(c_, _CHIP_COL[key], _sc) for c_ in d["Mã"])
+            st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã)", _chips), unsafe_allow_html=True)
+            _tone_grid(shown, len(d), _TONE_OF[key], f"alert_{key}")
             _sell_jump_js()
             with st.expander("Xem dạng bảng"):
                 st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
@@ -1565,13 +1648,15 @@ def _sell_jump_js():
     import streamlit.components.v1 as components
     components.html("""<script>
 const d=window.parent.document;
-if(!d.__scJump){d.__scJump=true;
+if(!d.__scJump2){d.__scJump2=true;
  d.addEventListener('click',function(e){
   const a=e.target.closest&&e.target.closest('a.sc-jump');if(!a)return;
   e.preventDefault();
-  const el=d.getElementById('sc-'+a.dataset.code);if(!el)return;
+  const code=a.dataset.code;
+  const el=[...d.querySelectorAll('[class*="st-key-wbcard-"]')].find(x=>[...x.classList].some(c=>c.startsWith('st-key-wbcard-')&&c.endsWith('-'+code)));
+  if(!el)return;
   el.scrollIntoView({behavior:'smooth',block:'center'});
-  el.classList.add('sc-flash');setTimeout(()=>el.classList.remove('sc-flash'),2000);
+  el.classList.add('wb-focus');setTimeout(()=>el.classList.remove('wb-focus'),2000);
  });}
 </script>""", height=0)
 
@@ -1614,16 +1699,13 @@ def page_sell_list():
         return
     d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1})).sort_values(["_o", "Score"], ascending=[True, False])
           .drop(columns="_o"))
-    _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
-                       f'style="color:{"var(--red)" if a_ == "BÁN" else "#F5B942"};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
-                       for c_, a_ in zip(d["Mã"], d["Hành động bán"]))
-    st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
-                f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
-                f'Danh sách tổng hợp ({len(d)} mã) · <span style="color:var(--red)">BÁN</span> · '
-                f'<span style="color:#F5B942">CHỐT LỜI</span></div>{_chips}</div>', unsafe_allow_html=True)
-    _, _fm = _wb_meta_maps(WY_KEY)
-    d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
-    st.markdown(sell_card.cards_html(d, latest_date, wy_of=_wy_note, lean_of=_lean_html, action_of=_action_html), unsafe_allow_html=True)
+    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    shown = _tone_limit(d, "sell")
+    _sc = set(shown["Mã"].astype(str))
+    _chips = ", ".join(_chip(c_, "var(--red)" if a_ == "BÁN" else "#F5B942", _sc) for c_, a_ in zip(d["Mã"], d["Hành động bán"]))
+    st.markdown(_chip_box('Danh sách tổng hợp ({} mã) · <span style="color:var(--red)">BÁN</span> · '
+                          '<span style="color:#F5B942">CHỐT LỜI</span>'.format(len(d)), _chips), unsafe_allow_html=True)
+    _tone_grid(shown, len(d), "sell", "sell")
     _sell_jump_js()
     _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
