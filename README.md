@@ -18,6 +18,15 @@ streamlit run app.py
 
 Trên macOS/Linux, kích hoạt môi trường bằng `source .venv/bin/activate`.
 
+## Ngành > Cảnh báo luân chuyển dòng tiền (mới)
+Code ở `sector_rotation.py`, ngưỡng ở `CFG`. Chỉ số ngành = bình quân đều các mã trong `watchlist.GROUPS`; RS ngành = chỉ số ngành / VN-Index. Năm cảnh báo:
+- **Ngành tăng RS liên tục**: RS ngành tăng 5 phiên liền nhau.
+- **Độ rộng tăng nhanh**: tỷ lệ mã trên MA20 tăng ≥ 15 điểm % trong 5 phiên.
+- **Tiền vào, giá chưa chạy xa**: GTGD ngành TB5 ≥ 1.2 lần TB20 nhưng giá ngành tăng ≤ 8% trong 10 phiên.
+- **Cổ phiếu dẫn đầu vừa vượt nền**: mã top 3 RS ngành, trong 3 phiên gần nhất đóng cửa vượt đỉnh 20 phiên với khối lượng ≥ 1.5 lần TB20.
+- **Ngành mạnh bắt đầu mất RS**: RS 20 phiên cách đây 10 phiên > 1, RS ngành nay thấp hơn 10 phiên trước, và độ rộng giảm ≥ 15 điểm % hoặc ≥ 25% mã vừa thủng MA20.
+Bốn cảnh báo đầu là dòng tiền đang vào, cảnh báo cuối là dòng tiền đang rời. Ngành dưới 3 mã có dữ liệu bị bỏ qua.
+
 ## Mục Cạn cung (mới)
 Nằm ở **Bộ lọc & Backtest**, ngay sau **Giảm mạnh**. Code ở `dry_supply.py`, không đặt thêm điều kiện mới mà gom mọi nơi app đang nói mã cạn cung:
 - **Lọc CP: Cạn cung**: cờ `DryUp` ở Lọc tất cả CP (khối lượng phiên cuối < 0.7 lần MA20 Vol, giá ≥ MA20, biên độ phiên < 2%).

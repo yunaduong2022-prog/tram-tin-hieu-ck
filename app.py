@@ -26,6 +26,7 @@ import rsi_divergence as DV
 import foreign_flow as FF
 import sector_dashboard as SD
 import sector_ranking as SR
+import sector_rotation as SRT
 import market_view as MV
 import market_overview as MO
 import my_watchlist as MW
@@ -2499,6 +2500,9 @@ def _route_inner():
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
         return SD.render(raw)
+    if main == "Ngành" and sub == "Cảnh báo luân chuyển dòng tiền":
+        header()
+        return SRT.render(raw, mkt, WL.GROUPS, mkt_src)
     if main == "Ngành" and sub == "Vị thế cổ phiếu ngành":
         return page_sector_ranking()
     if main == "Bộ lọc & Backtest":
