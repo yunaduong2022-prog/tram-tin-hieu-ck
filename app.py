@@ -28,6 +28,7 @@ import market_view as MV
 import market_overview as MO
 import my_watchlist as MW
 import sell_card
+import stock_map as SM
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
@@ -1275,6 +1276,28 @@ def page_watchlist():
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
 
 
+def page_realtime_filter():
+    """Bộ lọc Realtime: chọn ngành / mã -> sơ đồ tư duy: mã đang nằm ở mục nào, ý chính của mục, và nhánh cơ bản."""
+    st.title("🧭 Bộ lọc Realtime")
+    header()
+    t = _wb_table()
+    cap_map, fund_map = _wb_meta_maps(WY_KEY)
+    now = set(_buy_now_table(t)["Mã"])
+    vol = res_df.set_index("Mã")["Vol/Avg10"] if "Vol/Avg10" in res_df.columns else None
+    try:
+        wl = set(MW.load()["Mã"].astype(str).str.upper())
+    except Exception:
+        wl = set()
+
+    def _open_chart(code: str):
+        st.session_state["selected_code"] = code
+        for _k in ("mtf_code", "tab_code"):
+            st.session_state[_k] = code
+        NAV.goto("Cổ phiếu", "Tổng quát")
+
+    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart)
+
+
 def _move_page(kind: str):
     """Tăng mạnh / Giảm mạnh. Hai chế độ: biến động trong phiên cuối, hoặc so với đáy (tăng) / đỉnh (giảm) trong 120 phiên."""
     up = kind == "surge"
@@ -2182,6 +2205,7 @@ def route():
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Lọc tất cả CP": return page_filter()
+        if sub == "Bộ lọc Realtime": return page_realtime_filter()
         if sub == "Chờ mua": return page_wait_buy()
         if sub == "Tăng mạnh": return page_surge()
         if sub == "Giảm mạnh": return page_plunge()
