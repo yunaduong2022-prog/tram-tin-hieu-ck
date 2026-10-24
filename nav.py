@@ -21,7 +21,7 @@ ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ
 MARKET_DESC = {
     "Tổng quan": ["Xu hướng, độ rộng, dòng tiền, mức độ rủi ro", "Bản đồ sức mạnh ngành", "Số cổ phiếu phát tín hiệu MUA / CHỜ MUA"],
     "Góc nhìn thị trường": ["Bản tin nhận định thị trường theo ngày"],
-    "Nhận định VNINDEX": ["Biểu đồ VNINDEX kèm vùng mua, kịch bản, tin tức, dòng tiền, hành động"],
+    "Nhận định VNINDEX": ["Biểu đồ nến VNINDEX kèm khối lượng, đường MA", "Nhận định tự động: tin tức, dòng tiền, hành động"],
     "Dòng tiền khối ngoại": ["Mua/bán ròng", "Top cổ phiếu được mua/bán ròng", "Lũy kế 5–20 phiên"],
     "Dòng tiền tự doanh": ["Theo dõi giao dịch tự doanh (chỉ hiển thị khi có dữ liệu)"],
     "Thanh khoản & độ rộng": ["Giá trị giao dịch", "Số mã tăng / giảm"],
