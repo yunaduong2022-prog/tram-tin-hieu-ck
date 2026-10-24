@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import supertrend as SPT
+import hull_suite as HUL
 import watchlist as WL
 import wyckoff as WYK
 import nav as NAV
@@ -134,8 +135,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"]
+              "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -2029,6 +2030,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
     if "Supertrend" in layers:     # tính trên toàn bộ lịch sử của khung rồi cắt đúng phần đang hiển thị
         for _tr in SPT.traces(x, SPT.compute(g).iloc[-len(t):]):
+            fig.add_trace(_tr, row=1, col=1)
+    if "Hull Suite" in layers:     # tính trên toàn bộ lịch sử của khung rồi cắt đúng phần đang hiển thị
+        for _tr in HUL.traces(x, HUL.compute(g).iloc[-len(t):]):
             fig.add_trace(_tr, row=1, col=1)
     if "Ichimoku" in layers:
         fig.add_trace(line("Tenkan", "Tenkan", "#E4572E", 1), row=1, col=1)

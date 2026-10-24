@@ -19,6 +19,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import supertrend as SPT
+import hull_suite as HUL
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 EOD_CSV = os.path.join(_HERE, "data", "eod_prices.csv")
@@ -92,7 +93,7 @@ def prep_chart(d: pd.DataFrame, tf: str, n_show: int) -> dict | None:
     mas = MA_SET[tf]
     for m in mas:
         g[f"MA{m}"] = g[C].rolling(m).mean()
-    g = g.join(SPT.compute(g)).tail(max(10, n_show)).reset_index(drop=True)     # Supertrend tính trên toàn bộ lịch sử
+    g = g.join(SPT.compute(g)).join(HUL.compute(g)).tail(max(10, n_show)).reset_index(drop=True)     # Supertrend tính trên toàn bộ lịch sử
     dates = g["Ngày"]
     if tf in ("D", "W"):       # nhãn tháng ở nến đầu tháng; tháng 1 (và nhãn đầu tiên) kèm năm
         ticks = [(i, f"Th{m}/{y}" if (m == 1 or i == 0) else f"Th{m}") for i, (m, y, pm) in
@@ -117,7 +118,7 @@ def _plot(fig, key: str):
     st.plotly_chart(fig, key=key, **kw)
 
 
-def build_chart(P: dict, supertrend: bool = True):
+def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
     g, tf = P["g"], P["tf"]
     n = len(g)
     x = P["labels"]
@@ -134,6 +135,9 @@ def build_chart(P: dict, supertrend: bool = True):
         if s.notna().any():
             fig.add_trace(go.Scatter(x=x, y=s, mode="lines", name=f"MA{m}", line=dict(color=col, width=1.6),
                                      hovertemplate=f"MA{m}: %{{y:,.2f}}<extra></extra>"), row=1, col=1)
+    if hull and "HU_M" in g:
+        for _tr in HUL.traces(x, g[["HU_M", "HU_S", "HU_up"]]):
+            fig.add_trace(_tr, row=1, col=1)
     if supertrend and "ST_trend" in g:
         for _tr in SPT.traces(x, g[[c for c in g.columns if c.startswith("ST_")]]):
             fig.add_trace(_tr, row=1, col=1)
@@ -298,7 +302,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     trend = " · ".join(f"{'trên' if s['close'] >= s[k] else 'dưới'} {k.upper()}" for k in ("ma20", "ma50") if s[k] is not None)
     m4.metric("Vị trí so với MA", trend or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
 
-    c1, c2, c3, c4 = st.columns([2.2, 1.4, 1.0, 1.2])
+    c1, c2, c3, c4, c5 = st.columns([2.0, 1.3, 0.9, 1.2, 1.2])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
                               label_visibility="collapsed") or "D"
     choices = BAR_CHOICES[tf]
@@ -307,10 +311,11 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     use_news = c3.checkbox("Tin RSS", value=True, key="vnv_news", help="Lấy tin từ các RSS trong data/rss_feeds.txt (làm mới mỗi 30 phút)")
 
     show_st = c4.checkbox("Supertrend", value=True, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
+    show_hull = c5.checkbox("Hull Suite", value=True, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH}): dải xanh = Hull đang hướng lên, đỏ = hướng xuống")
     P = prep_chart(d_all, tf, int(n_show))
-    _plot(build_chart(P, show_st), f"vnv_chart_{tf}")
+    _plot(build_chart(P, show_st, show_hull), f"vnv_chart_{tf}")
     st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
-               f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else ""))
+               f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
 
     entries, _ = _entries()
     view, info = _auto_view(raw, key, tf, use_news, int(time.time() // 1800), len(entries))
