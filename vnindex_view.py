@@ -18,12 +18,16 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
-import vnindex_auto as A
-import watchlist as WL
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 EOD_CSV = os.path.join(_HERE, "data", "eod_prices.csv")
-OHLC = ["Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"]
+O, H, L, C = "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"
+V = getattr(E, "VOL", "Khối lượng khớp lệnh")
+OHLC = [O, H, L, C]
+INDEX_CODES = getattr(E, "INDEX_CODES", {"VNINDEX", "VN-INDEX", "VNI", "VN INDEX", "^VNINDEX"})
+TF_LABEL = {"D": "Phiên", "W": "Tuần", "M": "Tháng", "Q": "Quý"}
+TF_NOUN = {"D": "phiên", "W": "tuần", "M": "tháng", "Q": "quý"}
+MA_SET = {"D": (20, 50, 200), "W": (10, 30, 52), "M": (6, 12, 24), "Q": (4, 8, 12)}      # đường MA theo khung
 UP, DN = "#2BD6A2", "#F2506E"
 MA_COLORS = ["#F5A623", "#6EA8FF", "#C792EA"]
 BAR_CHOICES = {"D": [60, 120, 250, 500], "W": [26, 52, 104, 260], "M": [24, 60, 120], "Q": [20, 40, 80]}      # số nến cho chọn, theo khung
@@ -36,14 +40,14 @@ TONE_ICON = {"xanh": "🟢", "do": "🔴", "vang": "🟡"}
 @st.cache_data(show_spinner=False)
 def _csv_index(path: str, mtime: float) -> pd.DataFrame:
     d = pd.read_csv(path, dtype={"Mã": str})
-    return d[d["Mã"].astype(str).str.upper().str.strip().isin(E.INDEX_CODES)]
+    return d[d["Mã"].astype(str).str.upper().str.strip().isin(INDEX_CODES)]
 
 
 def index_daily(raw: pd.DataFrame | None) -> pd.DataFrame:
     """Chuỗi VNINDEX theo ngày. Ưu tiên bảng dữ liệu đang chạy của app, không có thì đọc thẳng data/eod_prices.csv."""
     d = pd.DataFrame()
     if raw is not None and not raw.empty:
-        m = raw["Mã"].astype(str).str.upper().str.strip().isin(E.INDEX_CODES)
+        m = raw["Mã"].astype(str).str.upper().str.strip().isin(INDEX_CODES)
         d = raw[m]
     if d.empty and os.path.exists(EOD_CSV):
         d = _csv_index(EOD_CSV, os.path.getmtime(EOD_CSV))
@@ -51,14 +55,24 @@ def index_daily(raw: pd.DataFrame | None) -> pd.DataFrame:
         return d
     d = d.copy()
     d["Ngày"] = pd.to_datetime(d["Ngày"], errors="coerce", format="mixed", dayfirst=True).dt.normalize()
-    for c in OHLC + [E.VOL]:
+    for c in OHLC + [V]:
         d[c] = pd.to_numeric(d[c], errors="coerce")
-    d[E.VOL] = d[E.VOL].fillna(0)
+    d[V] = d[V].fillna(0)
     d = d.dropna(subset=["Ngày"] + OHLC)
-    return d[["Ngày"] + OHLC + [E.VOL]].drop_duplicates("Ngày", keep="last").sort_values("Ngày").reset_index(drop=True)
+    return d[["Ngày"] + OHLC + [V]].drop_duplicates("Ngày", keep="last").sort_values("Ngày").reset_index(drop=True)
 
 
 # ------------------------------------------------------------------ CHUẨN BỊ DỮ LIỆU BIỂU ĐỒ (hàm thuần, dễ kiểm tra)
+def resample_period(d: pd.DataFrame, tf: str) -> pd.DataFrame:
+    """Gộp nến Ngày thành Tuần (T2-T6) / Tháng / Quý. Nến kỳ cuối có thể chưa đủ kỳ (đang hình thành)."""
+    if tf == "D":
+        return d.reset_index(drop=True)
+    key = {"W": d["Ngày"].dt.to_period("W-FRI"), "M": d["Ngày"].dt.to_period("M"), "Q": d["Ngày"].dt.to_period("Q")}[tf]
+    g = d.groupby(key)
+    return pd.DataFrame({"Ngày": g["Ngày"].last(), O: g[O].first(), H: g[H].max(), L: g[L].min(), C: g[C].last(),
+                         V: g[V].sum()}).reset_index(drop=True)
+
+
 def _label(ts: pd.Timestamp, tf: str) -> str:
     if tf == "D":
         return f"{ts:%d/%m/%Y}"
@@ -73,10 +87,10 @@ def prep_chart(d: pd.DataFrame, tf: str, n_show: int) -> dict | None:
     """Gộp nến theo khung, tính MA trên TOÀN BỘ lịch sử (để nến đầu cửa sổ vẫn có MA), rồi lấy n_show nến cuối."""
     if d is None or d.empty:
         return None
-    g = A.resample_period(d, tf)
-    mas = A.MA_SET[tf]
+    g = resample_period(d, tf)
+    mas = MA_SET[tf]
     for m in mas:
-        g[f"MA{m}"] = g[A.C].rolling(m).mean()
+        g[f"MA{m}"] = g[C].rolling(m).mean()
     g = g.tail(max(10, n_show)).reset_index(drop=True)
     dates = g["Ngày"]
     if tf in ("D", "W"):       # nhãn tháng ở nến đầu tháng; tháng 1 (và nhãn đầu tiên) kèm năm
@@ -106,11 +120,11 @@ def build_chart(P: dict):
     g, tf = P["g"], P["tf"]
     n = len(g)
     x = P["labels"]
-    up = (g[A.C] >= g[A.O]).to_numpy()
-    hover = [f"<b>{lb}</b><br>Mở {r[A.O]:,.2f} · Cao {r[A.H]:,.2f}<br>Thấp {r[A.L]:,.2f} · Đóng {r[A.C]:,.2f}"
-             f"<br>KL {r[A.V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(x, g.iterrows())]
+    up = (g[C] >= g[O]).to_numpy()
+    hover = [f"<b>{lb}</b><br>Mở {r[O]:,.2f} · Cao {r[H]:,.2f}<br>Thấp {r[L]:,.2f} · Đóng {r[C]:,.2f}"
+             f"<br>KL {r[V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(x, g.iterrows())]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=0.03)
-    fig.add_trace(go.Candlestick(x=x, open=g[A.O], high=g[A.H], low=g[A.L], close=g[A.C], text=hover, hoverinfo="text",
+    fig.add_trace(go.Candlestick(x=x, open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
                                  showlegend=False, whiskerwidth=0,
                                  increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
                                  decreasing=dict(line=dict(color=DN, width=1), fillcolor=DN)), row=1, col=1)
@@ -119,16 +133,16 @@ def build_chart(P: dict):
         if s.notna().any():
             fig.add_trace(go.Scatter(x=x, y=s, mode="lines", name=f"MA{m}", line=dict(color=col, width=1.6),
                                      hovertemplate=f"MA{m}: %{{y:,.2f}}<extra></extra>"), row=1, col=1)
-    fig.add_trace(go.Bar(x=x, y=g[A.V], marker=dict(color=np.where(up, UP, DN), line=dict(width=0)), showlegend=False,
+    fig.add_trace(go.Bar(x=x, y=g[V], marker=dict(color=np.where(up, UP, DN), line=dict(width=0)), showlegend=False,
                          hovertext=hover, hoverinfo="text"), row=2, col=1)
 
-    last_c = float(g[A.C].iloc[-1])
+    last_c = float(g[C].iloc[-1])
     tag = UP if up[-1] else DN
     fig.add_shape(type="line", xref="paper", x0=0, x1=1, yref="y", y0=last_c, y1=last_c, line=dict(color=tag, width=1, dash="dot"))
     fig.add_annotation(xref="paper", yref="y", x=1, y=last_c, xanchor="left", xshift=2, showarrow=False, text=f"<b>{last_c:,.2f}</b>",
                        bgcolor=tag, font=dict(size=12, color="#0A1122"), borderpad=3)
 
-    lo, hi = float(g[A.L].min()), float(g[A.H].max())
+    lo, hi = float(g[L].min()), float(g[H].max())
     pad = max(hi - lo, 1.0) * 0.06
     fig.update_xaxes(type="category", rangeslider_visible=False, showgrid=False, showline=True, linecolor="rgba(128,128,128,.35)")
     if P["ticks"]:
@@ -139,7 +153,7 @@ def build_chart(P: dict):
     fig.update_xaxes(showticklabels=False, row=1, col=1)
     fig.update_yaxes(range=[lo - pad, hi + pad], side="right", tickformat=",d", showgrid=True, gridcolor="rgba(128,128,128,.18)",
                      zeroline=False, showline=True, linecolor="rgba(128,128,128,.35)", row=1, col=1)
-    fig.update_yaxes(range=[0, float(g[A.V].max()) * 1.08], showticklabels=False, showgrid=False, zeroline=False,
+    fig.update_yaxes(range=[0, float(g[V].max()) * 1.08], showticklabels=False, showgrid=False, zeroline=False,
                      showline=True, linecolor="rgba(128,128,128,.35)", row=2, col=1)
     fig.update_layout(height=620, margin=dict(l=8, r=72, t=8, b=34), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       dragmode=False, hovermode="closest", bargap=0.25,
@@ -151,21 +165,21 @@ def build_chart(P: dict):
 # ------------------------------------------------------------------ SỐ LIỆU PHIÊN MỚI NHẤT
 def _stats(d: pd.DataFrame) -> dict:
     last, prev = d.iloc[-1], (d.iloc[-2] if len(d) > 1 else None)
-    c = float(last[A.C])
-    out = {"date": pd.Timestamp(last["Ngày"]), "close": c, "chg": None, "pct": None, "vol": float(last[A.V]), "vol_vs": None,
+    c = float(last[C])
+    out = {"date": pd.Timestamp(last["Ngày"]), "close": c, "chg": None, "pct": None, "vol": float(last[V]), "vol_vs": None,
            "from_hi": None, "ma20": None, "ma50": None}
-    if prev is not None and float(prev[A.C]) > 0:
-        out["chg"] = c - float(prev[A.C])
-        out["pct"] = (c / float(prev[A.C]) - 1) * 100
-    v20 = d[A.V].tail(21).iloc[:-1].mean() if len(d) > 21 else np.nan
+    if prev is not None and float(prev[C]) > 0:
+        out["chg"] = c - float(prev[C])
+        out["pct"] = (c / float(prev[C]) - 1) * 100
+    v20 = d[V].tail(21).iloc[:-1].mean() if len(d) > 21 else np.nan
     if pd.notna(v20) and v20 > 0:
         out["vol_vs"] = (out["vol"] / v20 - 1) * 100
-    hi52 = float(d[A.H].tail(250).max())
+    hi52 = float(d[H].tail(250).max())
     if hi52 > 0:
         out["from_hi"] = (c / hi52 - 1) * 100
     for m in (20, 50):
         if len(d) >= m:
-            out[f"ma{m}"] = float(d[A.C].tail(m).mean())
+            out[f"ma{m}"] = float(d[C].tail(m).mean())
     return out
 
 
@@ -185,13 +199,26 @@ def _feed_items(bucket: int):
 def _csv_all(path: str, mtime: float) -> pd.DataFrame:
     d = pd.read_csv(path, dtype={"Mã": str})
     d["Ngày"] = pd.to_datetime(d["Ngày"], errors="coerce", format="mixed", dayfirst=True)
-    for c in OHLC + [E.VOL]:
+    for c in OHLC + [V]:
         d[c] = pd.to_numeric(d[c], errors="coerce")
     return d
 
 
+def _auto_mods():
+    """(vnindex_auto, watchlist), hoặc (None, None) nếu repo chưa có vnindex_auto.py: khi đó chỉ ẩn phần nhận định, biểu đồ vẫn chạy."""
+    try:
+        import vnindex_auto as A
+        import watchlist as WL
+        return A, WL
+    except Exception:  # noqa: BLE001
+        return None, None
+
+
 @st.cache_data(show_spinner="Đang tính dòng tiền theo nhóm ngành...")
 def _panel(_raw, data_key: str):
+    A, _ = _auto_mods()
+    if A is None:
+        return None
     src = _raw if _raw is not None else (_csv_all(EOD_CSV, os.path.getmtime(EOD_CSV)) if os.path.exists(EOD_CSV) else None)
     return A.build_panel(src) if src is not None else None
 
@@ -207,6 +234,9 @@ def _entries():
 @st.cache_data(show_spinner="Đang tự soạn nhận định...")
 def _auto_view(_raw, data_key: str, tf: str, use_news: bool, bucket: int, entries_stamp: float):
     """-> ({"title", "sections", "session"}, thông tin phụ) hoặc (None, lý do). Cache theo dữ liệu + khung + 30 phút."""
+    A, WL = _auto_mods()
+    if A is None:
+        return None, "Chưa có file vnindex_auto.py trong repo nên chưa hiện nhận định tự động (biểu đồ nến vẫn dùng bình thường)."
     d = index_daily(_raw)
     if d.empty:
         return None, "Không có dữ liệu VNINDEX."
@@ -220,7 +250,7 @@ def _auto_view(_raw, data_key: str, tf: str, use_news: bool, bucket: int, entrie
             foreign = None
     res = A.compose(d, _panel(_raw, data_key), WL.GROUPS, tf, items, entries, foreign)
     if res is None:
-        return None, f"Chưa đủ lịch sử VNINDEX để tính khung {A.TF_NOUN[tf]} (cần ít nhất {A.MIN_BARS[tf]} nến)."
+        return None, f"Chưa đủ lịch sử VNINDEX để tính khung {TF_NOUN[tf]} (cần ít nhất {A.MIN_BARS[tf]} nến)."
     return ({"title": res["title"], "sections": res["sections"], "session": res["session"]},
             dict(feeds=(ok, total), news=use_news, state=A.STATE_TXT[res["view"]["state"]]))
 
@@ -265,7 +295,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     m4.metric("Vị trí so với MA", trend or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
 
     c1, c2, c3 = st.columns([2.2, 1.6, 1.2])
-    tf = c1.segmented_control("Khung", list(A.TF_LABEL), default="D", key="vnv_tf", format_func=A.TF_LABEL.get,
+    tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
                               label_visibility="collapsed") or "D"
     choices = BAR_CHOICES[tf]
     n_show = c2.selectbox("Số nến hiển thị", choices, index=choices.index(BAR_DEFAULT[tf]), key=f"vnv_n_{tf}",
@@ -275,7 +305,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     P = prep_chart(d_all, tf, int(n_show))
     _plot(build_chart(P), f"vnv_chart_{tf}")
     st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
-               f"Đường MA tính theo khung {A.TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá.")
+               f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá.")
 
     entries, _ = _entries()
     view, info = _auto_view(raw, key, tf, use_news, int(time.time() // 1800), len(entries))
@@ -283,7 +313,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         st.warning(info)
         return
     st.subheader(view["title"].replace("VNINDEX · ", "").capitalize())
-    note = f"🤖 Tự động từ giá VNINDEX, khối lượng, độ rộng, nhóm ngành · trạng thái {A.TF_NOUN[tf]}: {info['state']}."
+    note = f"🤖 Tự động từ giá VNINDEX, khối lượng, độ rộng, nhóm ngành · trạng thái {TF_NOUN[tf]}: {info['state']}."
     if use_news:
         ok, total = info["feeds"]
         note += f" Tin RSS: {ok}/{total} nguồn tải được." if total else " Tin RSS: không tải được nguồn nào, dùng bản tin gần nhất và bối cảnh kỹ thuật."
