@@ -82,39 +82,55 @@ def compute(df: pd.DataFrame, period: int = PERIOD, mult: float = MULTIPLIER, wi
     return out
 
 
+def runs(mask) -> list[tuple[int, int]]:
+    """Các đoạn liên tiếp (chỉ số đầu, chỉ số cuối) nơi mask = True."""
+    idx = np.flatnonzero(np.asarray(mask, dtype=bool))
+    if not idx.size:
+        return []
+    return [(int(g[0]), int(g[-1])) for g in np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)]
+
+
 def traces(x, st: pd.DataFrame, price_fmt: str = ",.2f", period: int = PERIOD, mult: float = MULTIPLIER,
-           show_signals: bool = SHOW_SIGNALS, highlight: bool = HIGHLIGHT) -> list:
-    """Các trace Plotly (đặt vào hàng giá). x: trục x của biểu đồ; st: kết quả compute() đã cắt đúng phần hiển thị."""
+           highlight: bool = HIGHLIGHT) -> list:
+    """Các trace Plotly (đặt vào hàng giá). x: trục x của biểu đồ; st: kết quả compute() đã cắt đúng phần hiển thị.
+
+    Mỗi pha xu hướng là MỘT trace riêng, không có ô trống (NaN) và không dùng fill='tonexty', để dải tô
+    không bao giờ bị nối sai sang pha khác. Dải tô là đa giác kín giữa ohlc4 và đường Supertrend."""
     import plotly.graph_objects as go
     x = list(x)
     name = f"Supertrend ({period}, {mult:g})"
-    out = []
     ht = f"Supertrend: %{{y:{price_fmt}}}<extra></extra>"
-
-    def _pair(col, color, fill_rgba, label, show_legend):
-        y = st[col].to_numpy()
-        if highlight and np.isfinite(y).any():
-            mid = np.where(np.isfinite(y), st["ST_ohlc4"].to_numpy(), np.nan)
-            out.append(go.Scatter(x=x, y=mid, mode="lines", line=dict(width=0, color="rgba(0,0,0,0)"), showlegend=False,
-                                  hoverinfo="skip", connectgaps=False))
-            out.append(go.Scatter(x=x, y=y, mode="lines", name=label, legendgroup="supertrend", showlegend=show_legend,
-                                  line=dict(width=2, color=color), fill="tonexty", fillcolor=fill_rgba, connectgaps=False,
-                                  hovertemplate=ht))
-        else:
-            out.append(go.Scatter(x=x, y=y, mode="lines", name=label, legendgroup="supertrend", showlegend=show_legend,
-                                  line=dict(width=2, color=color), connectgaps=False, hovertemplate=ht))
-
-    _pair("ST_up", GREEN, "rgba(31,169,122,0.13)", name, True)
-    _pair("ST_dn", RED, "rgba(229,88,106,0.13)", name + " giảm", False)
-
-    for col, line_col, color, text, pos in (("ST_buy", "ST_up", GREEN, "Buy", "bottom center"),
-                                            ("ST_sell", "ST_dn", RED, "Sell", "top center")):
+    ohlc4 = st["ST_ohlc4"].to_numpy(float)
+    out, first = [], True
+    for col, color, fill_rgba in (("ST_up", GREEN, "rgba(31,169,122,0.12)"), ("ST_dn", RED, "rgba(229,88,106,0.12)")):
+        y = st[col].to_numpy(float)
+        for i0, i1 in runs(np.isfinite(y)):
+            xs, ys = x[i0:i1 + 1], y[i0:i1 + 1]
+            if highlight and i1 > i0:
+                out.append(go.Scatter(x=xs + xs[::-1], y=np.r_[ys, ohlc4[i0:i1 + 1][::-1]], mode="none", fill="toself",
+                                      fillcolor=fill_rgba, hoverinfo="skip", showlegend=False))
+            out.append(go.Scatter(x=xs, y=ys, mode="lines", line=dict(width=2, color=color), name=name,
+                                  legendgroup="supertrend", showlegend=first, hovertemplate=ht))
+            first = False
+    for col, line_col, color in (("ST_buy", "ST_up", GREEN), ("ST_sell", "ST_dn", RED)):
         m = st[col].to_numpy(bool)
         if m.any():
-            xs = [xi for xi, mi in zip(x, m) if mi]
-            out.append(go.Scatter(x=xs, y=st[line_col].to_numpy()[m], mode="markers+text" if show_signals else "markers",
-                                  text=[text] * int(m.sum()), textposition=pos, textfont=dict(size=11, color=color),
-                                  marker=dict(symbol="circle", size=7, color=color), name=f"Supertrend {text}",
-                                  legendgroup="supertrend", showlegend=False,
-                                  hovertemplate=f"{text} · %{{y:{price_fmt}}}<extra></extra>"))
+            out.append(go.Scatter(x=[xi for xi, mi in zip(x, m) if mi], y=st[line_col].to_numpy(float)[m], mode="markers",
+                                  marker=dict(symbol="circle", size=7, color=color), legendgroup="supertrend",
+                                  showlegend=False, hoverinfo="skip"))
+    return out
+
+
+def annotations(x, st: pd.DataFrame, show_signals: bool = SHOW_SIGNALS) -> list[dict]:
+    """Nhãn hộp "Buy" (dưới đường xanh) và "Sell" (trên đường đỏ) như TradingView; dùng với fig.add_annotation(**d, row=1, col=1)."""
+    if not show_signals:
+        return []
+    x = list(x)
+    out = []
+    for col, line_col, color, text, shift in (("ST_buy", "ST_up", GREEN, "Buy", -16), ("ST_sell", "ST_dn", RED, "Sell", 16)):
+        m = st[col].to_numpy(bool)
+        y = st[line_col].to_numpy(float)
+        for i in np.flatnonzero(m):
+            out.append(dict(x=x[i], y=float(y[i]), text=text, showarrow=False, yshift=shift, bgcolor=color,
+                            font=dict(size=10, color="#FFFFFF"), borderpad=2, opacity=0.95))
     return out

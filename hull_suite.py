@@ -71,25 +71,37 @@ def compute(df: pd.DataFrame, mode: str = MODE, length: int = LENGTH, mult: floa
     return out
 
 
+def _runs(mask) -> list[tuple[int, int]]:
+    idx = np.flatnonzero(np.asarray(mask, dtype=bool))
+    if not idx.size:
+        return []
+    return [(int(g[0]), int(g[-1])) for g in np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)]
+
+
 def traces(x, h: pd.DataFrame, width: int = LINE_WIDTH, band_transp: int = BAND_TRANSP, name: str | None = None) -> list:
-    """Trace Plotly cho hàng giá: mỗi màu (xanh/đỏ) một cặp đường SHULL + MHULL, MHULL tô dải xuống SHULL."""
+    """Trace Plotly cho hàng giá. Mỗi đoạn cùng màu (xanh/đỏ) là một đa giác kín giữa MHULL và SHULL cộng hai đường viền.
+    Không có ô trống (NaN) và không dùng fill='tonexty' nên dải không bị tô nối sai giữa các đoạn."""
     import plotly.graph_objects as go
     x = list(x)
     m, s = h["HU_M"].to_numpy(float), h["HU_S"].to_numpy(float)
-    up = h["HU_up"].to_numpy(bool) & np.isfinite(m) & np.isfinite(s)
-    dn = ~h["HU_up"].to_numpy(bool) & np.isfinite(m) & np.isfinite(s)
+    ok = np.isfinite(m) & np.isfinite(s)
+    up = h["HU_up"].to_numpy(bool)
     label = name or f"Hull {MODE.upper()} {int(LENGTH * LENGTH_MULT)}"
-    out = []
-    for mask, rgb, nm in ((up, UP, label), (dn, DOWN, label + " giảm")):
-        seg = mask | np.r_[mask[1:], False]            # nối đoạn chuyển màu: đoạn i-1 -> i mang màu của nến i
-        seg &= np.isfinite(m) & np.isfinite(s)
-        if not mask.any():
-            continue
+    out, first = [], True
+    for flag, rgb in ((True, UP), (False, DOWN)):
+        mask = ok & (up == flag)
+        seg = mask | (np.r_[mask[1:], False] & ok)          # nối đoạn chuyển màu: đoạn i-1 -> i mang màu của nến i
         line = dict(width=width, color=f"rgba({rgb[0]},{rgb[1]},{rgb[2]},{LINE_ALPHA})")
         fill = f"rgba({rgb[0]},{rgb[1]},{rgb[2]},{(100 - band_transp) / 100:.2f})"
-        out.append(go.Scatter(x=x, y=np.where(seg, s, np.nan), mode="lines", line=line, showlegend=False,
-                              hoverinfo="skip", connectgaps=False))
-        out.append(go.Scatter(x=x, y=np.where(seg, m, np.nan), mode="lines", line=line, fill="tonexty", fillcolor=fill,
-                              name=nm, legendgroup="hull", showlegend=(rgb == UP), connectgaps=False,
-                              hovertemplate="Hull: %{y:,.2f}<extra></extra>"))
+        for i0, i1 in _runs(seg):
+            if i1 == i0:
+                continue
+            xs = x[i0:i1 + 1]
+            out.append(go.Scatter(x=xs + xs[::-1], y=np.r_[m[i0:i1 + 1], s[i0:i1 + 1][::-1]], mode="none", fill="toself",
+                                  fillcolor=fill, hoverinfo="skip", showlegend=False))
+            out.append(go.Scatter(x=xs, y=s[i0:i1 + 1], mode="lines", line=line, hoverinfo="skip", showlegend=False,
+                                  legendgroup="hull"))
+            out.append(go.Scatter(x=xs, y=m[i0:i1 + 1], mode="lines", line=line, name=label, legendgroup="hull",
+                                  showlegend=first and flag, hovertemplate="Hull: %{y:,.2f}<extra></extra>"))
+            first = first and not flag
     return out

@@ -139,8 +139,11 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
         for _tr in HUL.traces(x, g[["HU_M", "HU_S", "HU_up"]]):
             fig.add_trace(_tr, row=1, col=1)
     if supertrend and "ST_trend" in g:
-        for _tr in SPT.traces(x, g[[c for c in g.columns if c.startswith("ST_")]]):
+        _stv = g[[c for c in g.columns if c.startswith("ST_")]]
+        for _tr in SPT.traces(x, _stv):
             fig.add_trace(_tr, row=1, col=1)
+        for _an in SPT.annotations(x, _stv):
+            fig.add_annotation(**_an, row=1, col=1)
     fig.add_trace(go.Bar(x=x, y=g[V], marker=dict(color=np.where(up, UP, DN), line=dict(width=0)), showlegend=False,
                          hovertext=hover, hoverinfo="text"), row=2, col=1)
 
