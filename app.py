@@ -36,6 +36,7 @@ import my_watchlist as MW
 import sell_card
 import dry_supply as DS
 import stock_map as SM
+import crosshair as CH
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
@@ -335,6 +336,24 @@ res_df = screener_cached(frames, mkt, WY_KEY + "|" + E.ENGINE_VERSION).copy()
 res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
 res_df["_wy"] = res_df["Mã"].map(WY_TABLE.get)
 res_df["Wyckoff"] = res_df["_wy"].map(WYK.label)
+
+# VNINDEX không nằm trong bảng lọc cổ phiếu (res_df) nhưng vẫn xem được ở trang Cổ phiếu / Đa khung: tính riêng một dòng cho chỉ số
+INDEX_LIST = sorted({str(c_) for c_ in df["Mã"].unique() if str(c_).upper() in E.INDEX_CODES} - set(res_df["Mã"]))
+
+
+@st.cache_data(show_spinner=False)
+def index_row_cached(_frames: dict, _mkt: pd.Series, code: str, key: str):
+    sub_ = {tf_: g_[g_["Mã"] == code] for tf_, g_ in _frames.items()}
+    r_ = E.build_screener(sub_, _mkt, skip_index=False)
+    return r_.iloc[0] if len(r_) else None
+
+
+def stock_row(code):
+    """Dòng thông tin của mã: cổ phiếu lấy từ bảng lọc, chỉ số (VNINDEX) tính riêng. Không có dữ liệu thì trả None."""
+    r_ = res_df[res_df["Mã"] == code]
+    if len(r_):
+        return r_.iloc[0]
+    return index_row_cached(frames, mkt, code, WY_KEY + "|" + E.ENGINE_VERSION) if code in INDEX_LIST else None
 
 
 def _wy_note(code, compact_view: bool = False) -> str:
@@ -2045,178 +2064,6 @@ DATE_TICK_STOPS = [
     dict(dtickrange=[31000000000, None], value="%Y"),
 ]
 
-# Đường gióng kiểu TradingView, chạy ở trình duyệt: khi rê chuột hiện đường dọc (bám vào nến gần nhất) + đường ngang theo chuột,
-# nhãn "Thứ 4 16 Tháng 9 '26" ở dải ngày dưới biểu đồ nến và nhãn giá/giá trị ở cột bên phải. Tự gắn vào mọi biểu đồ nến Plotly trong trang.
-CROSSHAIR_JS = r"""
-(function () {
-  var P = window;
-  try { if (window.frameElement) P = window.parent; } catch (e) {}
-  var D = P.document;
-  try { if (P.__vnCross) P.__vnCross(); } catch (e) {}          // gỡ bản cũ (khi Streamlit chạy lại script)
-  if (!P.matchMedia || !P.matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // cảm ứng: không có con trỏ để gióng
-
-  var LINE = 'rgba(230,239,233,.6)', BOX_BG = '#E6EFE9', BOX_FG = '#0E1C18';
-  var DAY = 86400000, cleanups = [];
-
-  function axName(id, letter) { id = id || letter; return letter + 'axis' + (id.length > 1 ? id.slice(1) : ''); }
-  function candleOf(gd) {
-    var d = gd.data || [];
-    for (var i = 0; i < d.length; i++) if (d[i] && d[i].type === 'candlestick') return d[i];
-    return null;
-  }
-  function mk(css) {
-    var e = D.createElement('div');
-    e.style.cssText = 'position:absolute;pointer-events:none;display:none;box-sizing:border-box;' + css;
-    return e;
-  }
-  function put(el, css) { for (var k in css) el.style[k] = css[k]; }
-  function boxCss() {
-    return 'background:' + BOX_BG + ';color:' + BOX_FG + ';font:600 11px/16px "Source Sans Pro","Open Sans",Arial,sans-serif;' +
-           'padding:1px 6px;border-radius:3px;white-space:nowrap;z-index:1002;';
-  }
-  function fmtDate(ms) {
-    var d = new Date(ms), w = d.getUTCDay();
-    return (w === 0 ? 'Chủ nhật' : 'Thứ ' + (w + 1)) + ' ' + d.getUTCDate() + ' Tháng ' + (d.getUTCMonth() + 1) + " '" + String(d.getUTCFullYear()).slice(-2);
-  }
-  function fmtVal(v, ya, isPrice) {
-    if (!isFinite(v)) return '';
-    var r = ya.range || [0, 1], big = Math.max(Math.abs(r[0]), Math.abs(r[1]));
-    if (!isPrice && big >= 1e4) {
-      var a = Math.abs(v);
-      return a >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toFixed(0);
-    }
-    return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  function attach(gd) {
-    var st = { xs: null, key: null };
-    var ov = mk('left:0;top:0;width:0;height:0;z-index:1001;');
-    ov.style.display = 'block';
-    var vl = mk('width:0;border-left:1px dashed ' + LINE + ';z-index:1001;');
-    var hl = mk('height:0;border-top:1px dashed ' + LINE + ';z-index:1001;');
-    var dl = mk(boxCss()), pl = mk(boxCss());
-    [vl, hl, dl, pl].forEach(function (e) { ov.appendChild(e); });
-
-    function host() { return gd.querySelector('.plot-container') || gd; }
-    function hideAll() { [vl, hl, dl, pl].forEach(function (e) { e.style.display = 'none'; }); }
-
-    function times(tr, xa) {                                       // mốc thời gian (ms) của các nến, lưu tạm theo mảng x
-      var key = tr.x;
-      if (st.key !== key || !st.xs || st.xs.length !== tr.x.length) {
-        var out = [];
-        for (var i = 0; i < tr.x.length; i++) { var m = xa.d2l(tr.x[i]); if (isFinite(m)) out.push(m); }
-        out.sort(function (p, q) { return p - q; });
-        st.xs = out; st.key = key;
-      }
-      return st.xs;
-    }
-    function snap(xs, ms) {                                        // mốc nến gần nhất; vượt nến cuối (vùng dự báo) thì chia theo bước phiên
-      var n = xs.length;
-      if (!n) return ms;
-      var lo = 0, hi = n - 1;
-      while (lo < hi) { var mid = (lo + hi) >> 1; if (xs[mid] < ms) lo = mid + 1; else hi = mid; }
-      var best = lo;
-      if (lo > 0 && Math.abs(xs[lo - 1] - ms) <= Math.abs(xs[lo] - ms)) best = lo - 1;
-      var last = xs[n - 1];
-      if (ms <= last || n < 2) return xs[best];
-      var step = Math.round((last - xs[Math.max(0, n - 6)]) / Math.min(5, n - 1) / DAY);     // ~1 ngày / 7 ngày / ~30 ngày
-      var k = Math.max(1, Math.round((ms - last) / (Math.max(1, step) * DAY)));
-      if (step >= 25) { var d = new Date(last); d.setUTCMonth(d.getUTCMonth() + k); return d.getTime(); }
-      var t = last + k * Math.max(1, step) * DAY;
-      var wd = new Date(t).getUTCDay();
-      if (step < 5) { if (wd === 6) t += 2 * DAY; else if (wd === 0) t += DAY; }              // khung ngày: bỏ qua thứ 7, chủ nhật
-      return t;
-    }
-
-    function onMove(e) {
-      try {
-        var fl = gd._fullLayout, tr = candleOf(gd), pc = host();
-        if (!fl || !tr || !fl._plots || !tr.x || !tr.x.length) return hideAll();
-        if (ov.parentNode !== pc) pc.appendChild(ov);
-        var ref = gd.querySelector('.svg-container') || gd.querySelector('.main-svg') || pc;
-        var rr = ref.getBoundingClientRect(), pr = pc.getBoundingClientRect();
-        var ox = rr.left - pr.left, oy = rr.top - pr.top;
-        var mx = e.clientX - rr.left, my = e.clientY - rr.top;
-
-        var cx = fl[axName(tr.xaxis, 'x')], cy = fl[axName(tr.yaxis, 'y')];
-        if (!cx || !cy || typeof cx.p2l !== 'function') return hideAll();
-        var left = cx._offset, right = cx._offset + cx._length, top = 1e9, bot = -1e9, hov = null;
-        Object.keys(fl._plots).forEach(function (k) {
-          var p = fl._plots[k], ya = p.yaxis;
-          if (!ya) return;
-          top = Math.min(top, ya._offset); bot = Math.max(bot, ya._offset + ya._length);
-          if (my >= ya._offset && my <= ya._offset + ya._length) hov = ya;
-        });
-        if (mx < left || mx > right || my < top || my > bot) return hideAll();
-
-        var xs = times(tr, cx);
-        var ms = snap(xs, cx.p2l(mx - left));
-        var px = left + cx.l2p(ms);
-        if (!isFinite(px)) return hideAll();
-        px = Math.max(left, Math.min(right, px));
-
-        put(vl, { display: 'block', left: (ox + px) + 'px', top: (oy + top) + 'px', height: (bot - top) + 'px' });
-        dl.textContent = fmtDate(ms);
-        put(dl, { display: 'block' });
-        var dw = dl.offsetWidth, dx = Math.max(left, Math.min(right - dw, px - dw / 2));
-        put(dl, { left: (ox + dx) + 'px', top: (oy + cy._offset + cy._length + 2) + 'px' });   // ngay trên dải ngày, dưới biểu đồ nến
-
-        if (hov) {
-          put(hl, { display: 'block', left: (ox + left) + 'px', top: (oy + my) + 'px', width: (right - left) + 'px' });
-          pl.textContent = fmtVal(hov.p2l(my - hov._offset), hov, hov === cy);
-          put(pl, { display: 'block', left: (ox + right + 3) + 'px', top: (oy + my - 9) + 'px' });
-        } else { hl.style.display = 'none'; pl.style.display = 'none'; }
-      } catch (err) { hideAll(); }
-    }
-
-    gd.addEventListener('mousemove', onMove);
-    gd.addEventListener('mouseleave', hideAll);
-    gd.__vnCrossOn = true;
-    cleanups.push(function () {
-      gd.removeEventListener('mousemove', onMove);
-      gd.removeEventListener('mouseleave', hideAll);
-      gd.__vnCrossOn = false;
-      if (ov.parentNode) ov.parentNode.removeChild(ov);
-    });
-  }
-
-  function scan() {
-    var list = D.querySelectorAll('.js-plotly-plot');
-    for (var i = 0; i < list.length; i++) {
-      var gd = list[i];
-      if (!gd.__vnCrossOn && gd._fullLayout && candleOf(gd)) attach(gd);
-    }
-  }
-  scan();
-  var timer = P.setInterval(scan, 1000);                          // biểu đồ vẽ sau / được vẽ lại khi đổi mã, khung thời gian
-  var obs = null;
-  try { obs = new P.MutationObserver(function () { scan(); }); obs.observe(D.body, { childList: true, subtree: true }); } catch (e) {}
-  P.__vnCross = function () {
-    P.clearInterval(timer);
-    if (obs) obs.disconnect();
-    cleanups.forEach(function (f) { try { f(); } catch (e) {} });
-    P.__vnCross = null;
-  };
-})();
-"""
-
-
-def inject_crosshair():
-    """Gắn đường gióng ngày/giá vào biểu đồ nến. Streamlit mới: st.html chạy JS thẳng trong trang; bản cũ: qua iframe components."""
-    html = "<script>" + CROSSHAIR_JS + "</script>"
-    try:
-        if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
-            st.html(html, unsafe_allow_javascript=True)
-            return
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import streamlit.components.v1 as components
-        components.html(html, height=0)
-    except Exception:  # noqa: BLE001
-        pass
-
-
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan"):
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
@@ -2228,8 +2075,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
-                                 close=t["Giá đóng cửa"], name=code, increasing_line_color="#0E8A6D",
-                                 decreasing_line_color="#C93A52"), row=1, col=1)
+                                 close=t["Giá đóng cửa"], name=code, whiskerwidth=0,      # thân nến đặc, cùng màu với biểu đồ VNINDEX
+                                 increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
+                                 decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=1, col=1)
 
     def line(col, name, color, w=1.2, dash=None):
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
@@ -2240,9 +2088,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     if "Ichimoku" in layers:
         fig.add_trace(line("Tenkan", "Tenkan", "#E4572E", 1), row=1, col=1)
         fig.add_trace(line("Kijun", "Kijun", "#1D4ED8", 1), row=1, col=1)
-        fig.add_trace(go.Scatter(x=x, y=t["SpanA"], line=dict(width=0.6, color="rgba(14,138,109,.5)"),
+        fig.add_trace(go.Scatter(x=x, y=t["SpanA"], line=dict(width=0.6, color="rgba(43,214,162,.5)"),
                                  showlegend=False, hoverinfo="skip"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=x, y=t["SpanB"], line=dict(width=0.6, color="rgba(201,58,82,.5)"), fill="tonexty",
+        fig.add_trace(go.Scatter(x=x, y=t["SpanB"], line=dict(width=0.6, color="rgba(242,80,110,.5)"), fill="tonexty",
                                  fillcolor="rgba(100,150,200,0.18)", name="Mây Kumo", hoverinfo="skip"), row=1, col=1)
     if "Bollinger" in layers:
         fig.add_trace(go.Scatter(x=x, y=t["BB_up"], line=dict(width=0.8, color="rgba(59,130,246,.7)"),
@@ -2260,9 +2108,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         for z in a["zones"]:
             red = z["kind"] == "Kháng cự"
             fig.add_hrect(y0=z["lo"], y1=z["hi"], row=1, col=1, line_width=0,
-                          fillcolor="rgba(201,58,82,.10)" if red else "rgba(14,138,109,.12)",
+                          fillcolor="rgba(242,80,110,.10)" if red else "rgba(43,214,162,.12)",
                           annotation_text=f'{z["kind"]} {z["n"]}x', annotation_position="top left",
-                          annotation_font=dict(size=9, color="#C93A52" if red else "#0E8A6D"))
+                          annotation_font=dict(size=9, color="#F2506E" if red else "#2BD6A2"))
     if enough and "Elliott" in layers and a["elliott"]["points"]:
         pts = a["elliott"]["points"]
         fig.add_trace(go.Scatter(x=[g["Ngày"].iat[i] for i, _, _ in pts], y=[p for _, p, _ in pts],
@@ -2271,7 +2119,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     wy = a.get("wy") if enough and "Wyckoff" in layers else None
     if wy and wy["tr"]["e_date"] >= x.iloc[0]:
         tr_ = wy["tr"]
-        wc = {"acc": "14,138,109", "dist": "201,58,82"}.get(wy["kind"], "107,114,128")
+        wc = {"acc": "43,214,162", "dist": "242,80,110"}.get(wy["kind"], "107,114,128")
         xs0 = max(tr_["s_date"], x.iloc[0])
         fig.add_shape(type="rect", x0=xs0, x1=tr_["e_date"], y0=tr_["bot"], y1=tr_["top"], row=1, col=1,
                       line=dict(width=1.3, color=f"rgb({wc})"), fillcolor=f"rgba({wc},0.07)", layer="below")
@@ -2289,8 +2137,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                      marker=dict(symbol="diamond", size=8, color=f"rgb({wc})"),
                                      hovertext=[f'{e["label"]}: {e["txt"]}' for e in evs], hoverinfo="text+x"), row=1, col=1)
     if "Tín hiệu quá khứ" in layers:
-        for d, sym, color, col, off, nm in ((1, "triangle-up", "#0E8A6D", "Giá thấp nhất", 0.985, "Mua"),
-                                            (-1, "triangle-down", "#C93A52", "Giá cao nhất", 1.015, "Bán")):
+        for d, sym, color, col, off, nm in ((1, "triangle-up", "#2BD6A2", "Giá thấp nhất", 0.985, "Mua"),
+                                            (-1, "triangle-down", "#F2506E", "Giá cao nhất", 1.015, "Bán")):
             s_ = t[t["PV_signal"] == d]
             if not s_.empty:
                 fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers", name=nm,
@@ -2299,9 +2147,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                                     for c, v in zip(s_["PV_code"], s_["Vol_vs_MA10"])],
                                          hoverinfo="text+x"), row=1, col=1)
     if fc:
-        lx, col_ = x.iloc[-1], ("#C93A52" if fc["dir"] < 0 else "#0E8A6D")
-        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#C93A52", "dash"),
-                                     ("Mục tiêu 1", fc["t1"], "#0E8A6D", "dash"), ("Mục tiêu 2", fc["t2"], "#0E8A6D", "dot")):
+        lx, col_ = x.iloc[-1], ("#F2506E" if fc["dir"] < 0 else "#2BD6A2")
+        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#F2506E", "dash"),
+                                     ("Mục tiêu 1", fc["t1"], "#2BD6A2", "dash"), ("Mục tiêu 2", fc["t2"], "#2BD6A2", "dot")):
             fig.add_trace(go.Scatter(x=[lx, fx], y=[y, y], mode="lines+text", text=["", f"{name} {y:,.2f}"],
                                      textposition="top left", textfont=dict(size=9, color=color),
                                      line=dict(width=1, dash=dash, color=color), showlegend=False, hoverinfo="skip"),
@@ -2330,13 +2178,13 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         vol = vol_all.loc[t.index]
         up_ = (t["Giá đóng cửa"] >= t["Giá mở cửa"]).to_numpy()
         fig.add_trace(go.Bar(x=x, y=vol, name="Khối lượng", showlegend=False,
-                             marker_color=np.where(up_, "rgba(14,138,109,.75)", "rgba(201,58,82,.75)")), row=r, col=1)
+                             marker_color=np.where(up_, "#2BD6A2", "#F2506E")), row=r, col=1)
         fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
         fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
         r += 1
     if "MACD" in subs:
         fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
-                             marker_color=np.where(t["MACD_hist"] >= 0, "#0E8A6D", "#C93A52")), row=r, col=1)
+                             marker_color=np.where(t["MACD_hist"] >= 0, "#2BD6A2", "#F2506E")), row=r, col=1)
         fig.add_trace(line("MACD", "MACD", "#3B82F6", 1), row=r, col=1)
         fig.add_trace(line("MACD_sig", "Tín hiệu", "#F59E0B", 1), row=r, col=1)
         fig.update_yaxes(title_text="MACD 12-26-9", title_font_size=10, row=r, col=1)
@@ -2352,7 +2200,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             for s_ in DV.detect(g, tf):
                 if pd.Timestamp(s_["d2"]) < x.iloc[0]:
                     continue
-                cl_ = "#0E8A6D" if s_["dir"] == "up" else "#C93A52"
+                cl_ = "#2BD6A2" if s_["dir"] == "up" else "#F2506E"
                 fig.add_trace(go.Scatter(x=[s_["d1"], s_["d2"]], y=[s_["r1"], s_["r2"]], mode="lines+markers", showlegend=False,
                                          line=dict(width=1.6, color=cl_), marker=dict(size=6, color=cl_),
                                          hovertext=s_["name"], hoverinfo="text"), row=r, col=1)
@@ -2375,7 +2223,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_yaxes(side="right", title_text=None)
     last_c = float(t["Giá đóng cửa"].iloc[-1])
     prev_c = float(t["Giá đóng cửa"].iloc[-2]) if len(t) > 1 else last_c
-    tag_col = "#0E8A6D" if last_c >= prev_c else "#C93A52"
+    tag_col = "#2BD6A2" if last_c >= prev_c else "#F2506E"
     fig.add_hline(y=last_c, line_dash="dot", line_color=tag_col, line_width=1, row=1, col=1)
     fig.add_annotation(xref="paper", yref="y", x=1, y=last_c, xanchor="left", yanchor="middle", showarrow=False,
                        text=f"<b>{last_c:,.2f}</b>", font=dict(size=11, color="#FFFFFF"), bgcolor=tag_col, borderpad=3)
@@ -2490,7 +2338,7 @@ def page_stock():
     st.title("📊 Cổ phiếu")
     header()
 
-    codes = sorted(res_df["Mã"].unique())
+    codes = sorted(list(res_df["Mã"].unique()) + INDEX_LIST)      # gồm cả VNINDEX
     saved = st.session_state.get("selected_code")
     c1, c2, c3 = st.columns([1.2, 2, 1.8])
     code = c1.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0)
@@ -2501,7 +2349,10 @@ def page_stock():
     layers = pick_layers()
 
     A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
-    info = res_df[res_df["Mã"] == code].iloc[0]
+    info = stock_row(code)
+    if info is None:
+        st.warning(f"Chưa đủ dữ liệu để phân tích {code}.")
+        return
     a = A[tf]
 
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
@@ -2535,7 +2386,7 @@ def page_stock():
         st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag),
                         config=_cfg, **_STRETCH)
         if not _mob:
-            inject_crosshair()         # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+            CH.inject()                # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
@@ -2619,7 +2470,7 @@ def mtf_strategy_card(s):
 def page_mtf_levels():
     st.title("📐 Đa khung Ngày · Tuần · Tháng")
     header()
-    codes = sorted(res_df["Mã"].unique())
+    codes = sorted(list(res_df["Mã"].unique()) + INDEX_LIST)      # gồm cả VNINDEX
     saved = st.session_state.get("selected_code")
     code = st.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0, key="mtf_code")
     st.session_state["selected_code"] = code
