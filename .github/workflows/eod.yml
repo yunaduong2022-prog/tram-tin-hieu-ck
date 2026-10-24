@@ -1,8 +1,10 @@
 name: Cập nhật dữ liệu cuối phiên
 
 on:
-  schedule:
-    - cron: "45 8 * * 1-5"      # 15:45 giờ Việt Nam (UTC+7), thứ Hai đến thứ Sáu
+  # Đã tắt lịch tự chạy: gói vnstock Bronze chỉ cho 1 thiết bị Linux mà máy chạy GitHub là máy mới mỗi lần.
+  # Cập nhật dữ liệu bằng update_eod.bat trên máy Windows. Muốn bật lại, bỏ dấu # ở 2 dòng dưới.
+  # schedule:
+  #   - cron: "45 8 * * 1-5"      # 15:45 giờ Việt Nam (UTC+7), thứ Hai đến thứ Sáu
   workflow_dispatch:
     inputs:
       full:
