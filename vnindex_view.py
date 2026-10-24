@@ -136,11 +136,12 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
     n = len(g)
     x = P["labels"]
     up = (g[C] >= g[O]).to_numpy()
+    cross = [_cross_label(pd.Timestamp(t), tf) for t in g["Ngày"]]          # "T6, 24/10/2026"
     hover = [f"<b>{lb}</b><br>Mở {r[O]:,.2f} · Cao {r[H]:,.2f}<br>Thấp {r[L]:,.2f} · Đóng {r[C]:,.2f}"
-             f"<br>KL {r[V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(x, g.iterrows())]
+             f"<br>KL {r[V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(cross, g.iterrows())]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=DATE_GAP_PX / 620)
     fig.add_trace(go.Candlestick(x=x, open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
-                                 showlegend=False, whiskerwidth=0, meta=[_cross_label(pd.Timestamp(t), tf) for t in g["Ngày"]],
+                                 showlegend=False, whiskerwidth=0, meta=cross,
                                  increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
                                  decreasing=dict(line=dict(color=DN, width=1), fillcolor=DN)), row=1, col=1)
     for m, col in zip(P["mas"], MA_COLORS):

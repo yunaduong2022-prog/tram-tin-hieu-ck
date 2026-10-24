@@ -176,13 +176,13 @@ def inject():
     """Streamlit mới: st.html chạy JS thẳng trong trang; bản cũ: qua iframe components (cùng nguồn nên chạm được trang cha)."""
     html = "<script>" + CROSSHAIR_JS + "</script>"
     try:
-        if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
-            st.html(html, unsafe_allow_javascript=True)
-            return
+        import streamlit.components.v1 as components
+        components.html(html, height=0)          # cùng cách các đoạn cuộn trang trong app.py đang dùng (iframe cùng nguồn)
+        return
     except Exception:  # noqa: BLE001
         pass
     try:
-        import streamlit.components.v1 as components
-        components.html(html, height=0)
+        if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
+            st.html(html, unsafe_allow_javascript=True)
     except Exception:  # noqa: BLE001
         pass
