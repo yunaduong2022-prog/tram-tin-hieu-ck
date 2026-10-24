@@ -267,11 +267,13 @@ def css() -> str:
     return "<style>" + rules() + "</style>"
 
 
-def _date_txt(d) -> str:
-    """Ngày cập nhật dữ liệu -> dd/mm/yyyy (nhận Timestamp / date / chuỗi)."""
+def _date_label(d) -> str:
+    """Dòng ngày ở chân thẻ: chuỗi thì giữ nguyên; ngày (Timestamp / date) thì ghi 'Đóng nến phiên ngày dd/mm/yyyy'."""
+    if isinstance(d, str):
+        return d
     try:
-        return d.strftime("%d/%m/%Y")
-    except AttributeError:
+        return f"Đóng nến phiên ngày {d:%d/%m/%Y}"
+    except (TypeError, ValueError):
         return str(d)
 
 
@@ -292,4 +294,4 @@ def html(ctx: dict) -> str:
             '<table class="ac-tb"><thead><tr><th>Vị thế tài khoản</th><th>Hành động</th><th>Vùng giá / Mốc lưu ý</th></tr></thead>'
             f'<tbody>{body}</tbody></table>'
             '<div class="ac-ft"><span>Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.</span>'
-            + (f'<span class="ac-dt">Đóng nến phiên ngày {esc(_date_txt(ctx["date"]))}</span>' if ctx.get("date") is not None else "") + '</div></div>')
+            + (f'<span class="ac-dt">{esc(_date_label(ctx["date"]))}</span>' if ctx.get("date") is not None else "") + '</div></div>')
