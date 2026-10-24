@@ -28,6 +28,7 @@ import sector_dashboard as SD
 import sector_ranking as SR
 import sector_rotation as SRT
 import market_view as MV
+import vnindex_view as VV
 import market_overview as MO
 import my_watchlist as MW
 import sell_card
@@ -2506,6 +2507,8 @@ def _route_inner():
         return MO.render(raw, DATA_KEY, buy_n=_buy_n, wait_n=_wait_n)
     if main == "Thị trường" and sub == "Góc nhìn thị trường":
         return MV.render()
+    if main == "Thị trường" and sub == "Nhận định VNINDEX":
+        return VV.render(raw)
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
