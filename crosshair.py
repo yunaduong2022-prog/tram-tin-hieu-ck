@@ -1,7 +1,7 @@
 """Đường gióng kiểu TradingView cho biểu đồ nến Plotly trong Streamlit (dùng chung cho biểu đồ cổ phiếu và VN-Index).
 
 Chạy ở trình duyệt: khi rê chuột hiện đường dọc (bám vào nến gần nhất) + đường ngang theo chuột, nhãn ngày
-("Thứ 4 16 Tháng 9 '26") ở dải ngày ngay dưới biểu đồ nến và nhãn giá / giá trị của khung đang trỏ ở cột bên phải.
+("T4, 16/09/2026") ở dải ngày ngay dưới biểu đồ nến và nhãn giá / giá trị của khung đang trỏ ở cột bên phải.
 Tự gắn vào mọi biểu đồ Plotly có trace 'candlestick' trong trang. Trục thời gian (date) lấy ngày từ chính trục;
 trục nhóm (category) lấy chữ nhãn từ trace.meta (danh sách chữ, mỗi nến một mục), không có thì dùng nhãn trục.
 """
@@ -38,7 +38,8 @@ CROSSHAIR_JS = r"""
   }
   function fmtDate(ms) {
     var d = new Date(ms), w = d.getUTCDay();
-    return (w === 0 ? 'Chủ nhật' : 'Thứ ' + (w + 1)) + ' ' + d.getUTCDate() + ' Tháng ' + (d.getUTCMonth() + 1) + " '" + String(d.getUTCFullYear()).slice(-2);
+    function z(n) { return n < 10 ? '0' + n : '' + n; }
+    return (w === 0 ? 'CN' : 'T' + (w + 1)) + ', ' + z(d.getUTCDate()) + '/' + z(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear();
   }
   function fmtVal(v, ya, isPrice) {
     if (!isFinite(v)) return '';

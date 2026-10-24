@@ -20,6 +20,7 @@ from plotly.subplots import make_subplots
 import engine as E
 import supertrend as SPT
 import hull_suite as HUL
+import crosshair as CH
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 EOD_CSV = os.path.join(_HERE, "data", "eod_prices.csv")
@@ -75,6 +76,18 @@ def resample_period(d: pd.DataFrame, tf: str) -> pd.DataFrame:
                          V: g[V].sum()}).reset_index(drop=True)
 
 
+_WD = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+DATE_GAP_PX = 34       # khe (px) giữa biểu đồ nến và khung khối lượng: chứa dải nhãn tháng + nhãn ngày của đường gióng
+
+
+def _cross_label(ts: pd.Timestamp, tf: str) -> str:
+    """Nhãn ngày hiện trên đường gióng: 'T4, 16/09/2026' (khung Tuần: ngày cuối tuần; Tháng / Quý: tên kỳ)."""
+    if tf in ("D", "W"):
+        d = f"{_WD[ts.weekday()]}, {ts:%d/%m/%Y}"
+        return d if tf == "D" else f"Tuần kết thúc {d}"
+    return _label(ts, tf)
+
+
 def _label(ts: pd.Timestamp, tf: str) -> str:
     if tf == "D":
         return f"{ts:%d/%m/%Y}"
@@ -125,9 +138,9 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
     up = (g[C] >= g[O]).to_numpy()
     hover = [f"<b>{lb}</b><br>Mở {r[O]:,.2f} · Cao {r[H]:,.2f}<br>Thấp {r[L]:,.2f} · Đóng {r[C]:,.2f}"
              f"<br>KL {r[V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(x, g.iterrows())]
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=0.03)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=DATE_GAP_PX / 620)
     fig.add_trace(go.Candlestick(x=x, open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
-                                 showlegend=False, whiskerwidth=0,
+                                 showlegend=False, whiskerwidth=0, meta=[_cross_label(pd.Timestamp(t), tf) for t in g["Ngày"]],
                                  increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
                                  decreasing=dict(line=dict(color=DN, width=1), fillcolor=DN)), row=1, col=1)
     for m, col in zip(P["mas"], MA_COLORS):
@@ -157,11 +170,11 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
     pad = max(hi - lo, 1.0) * 0.06
     fig.update_xaxes(type="category", rangeslider_visible=False, showgrid=False, showline=True, linecolor="rgba(128,128,128,.35)")
     if P["ticks"]:
+        # nhãn tháng hiện cả dưới biểu đồ nến (trên khối lượng) lẫn ở đáy
         fig.update_xaxes(tickmode="array", tickvals=[x[i] for i, _ in P["ticks"]], ticktext=[t for _, t in P["ticks"]],
-                         ticks="outside", row=2, col=1)
+                         ticks="outside", ticklen=4, tickangle=0, tickfont=dict(size=11), showticklabels=True)
     else:
-        fig.update_xaxes(showticklabels=False, row=2, col=1)
-    fig.update_xaxes(showticklabels=False, row=1, col=1)
+        fig.update_xaxes(showticklabels=False)
     fig.update_yaxes(range=[lo - pad, hi + pad], side="right", tickformat=",d", showgrid=True, gridcolor="rgba(128,128,128,.18)",
                      zeroline=False, showline=True, linecolor="rgba(128,128,128,.35)", row=1, col=1)
     fig.update_yaxes(range=[0, float(g[V].max()) * 1.08], showticklabels=False, showgrid=False, zeroline=False,
@@ -317,6 +330,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     show_hull = c5.checkbox("Hull Suite", value=True, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH}): dải xanh = Hull đang hướng lên, đỏ = hướng xuống")
     P = prep_chart(d_all, tf, int(n_show))
     _plot(build_chart(P, show_st, show_hull), f"vnv_chart_{tf}")
+    CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
     st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
                f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
 
