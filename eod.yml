@@ -61,8 +61,8 @@ jobs:
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: |
-          ARGS=""
-          if [ "${{ inputs.full }}" = "true" ]; then ARGS="--full --max-minutes 80"; fi
+          ARGS="--max-minutes 80"
+          if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
           if [ -n "${{ inputs.start }}" ]; then ARGS="$ARGS --start ${{ inputs.start }}"; fi
           python eod_fetch.py $ARGS
 

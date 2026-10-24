@@ -208,6 +208,9 @@ def main(argv=None) -> int:
     sources = tuple(s.strip() for s in args.sources.split(",") if s.strip())
     store = read_store()
     by_sym = {s: g for s, g in store.groupby("Mã")}
+    if not args.full and by_sym:      # mã chưa có / cũ nhất làm trước: chạy lại nhiều lần thì lần sau làm tiếp phần còn dở, không lặp lại từ đầu
+        last_of = {s: g["Ngày"].max() for s, g in by_sym.items()}
+        symbols.sort(key=lambda s: last_of.get(s, pd.Timestamp.min))
     market = Market()
     print(f"Rổ {len(symbols)} mã · kho hiện có {len(by_sym)} mã · nguồn thử: {', '.join(sources)} · "
           f"{'PHIÊN CHƯA ĐÓNG, sẽ bỏ nến hôm nay' if session_open else 'đã sau giờ đóng cửa'}")
@@ -274,6 +277,9 @@ def main(argv=None) -> int:
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(f"### Dữ liệu cuối phiên\n\n{line}\n\n" + ("\n".join(f"- {x}" for x in failed[:20]) if failed else "") + "\n")
+    if fatal and fatal.startswith("Quá ") and updated:      # chỉ hết thời gian chạy: không phải lỗi, lần chạy sau sẽ làm tiếp các mã còn dở
+        print(f"Còn {len(skipped)} mã chưa cập nhật trong lần này: chạy lại workflow để làm tiếp (mã cũ nhất được làm trước).")
+        return 0
     return 0 if (not fatal and len(updated) >= 0.7 * len(symbols)) else 1
 
 
