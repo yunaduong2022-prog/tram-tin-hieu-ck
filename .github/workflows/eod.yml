@@ -61,8 +61,8 @@ jobs:
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: |
-          ARGS=""
-          if [ "${{ inputs.full }}" = "true" ]; then ARGS="--full"; fi
+          ARGS="--max-minutes 80"
+          if [ "${{ inputs.full }}" = "true" ]; then ARGS="$ARGS --full"; fi
           if [ -n "${{ inputs.start }}" ]; then ARGS="$ARGS --start ${{ inputs.start }}"; fi
           python eod_fetch.py $ARGS
 
@@ -110,18 +110,3 @@ jobs:
           done
           echo "Push thất bại sau 5 lần thử."
           exit 1
-      - name: Gửi Telegram danh sách nghiêng tăng / nghiêng giảm
-        if: ${{ inputs.probe == '' }}
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python telegram_alert.py
-
-      - name: Gửi Telegram các mã đang ở vùng mua (vào ngay / chờ mua / phục hồi)
-        if: ${{ inputs.probe == '' }}
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python telegram_buy_alert.py
