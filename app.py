@@ -2074,8 +2074,12 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
     # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
+    # hộp thông tin khi rê chuột vào nến: "T6, 24/10/2026" + Mở / Cao / Thấp / Đóng (giống biểu đồ VNINDEX)
+    _kl = pd.to_numeric(t["Khối lượng khớp lệnh"], errors="coerce").fillna(0).to_numpy()
+    _tip = [f"<b>{VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}<br>KL {v_ / 1e6:,.2f} triệu cp"
+            for d_, o_, h_, l_, c_, v_ in zip(x, t["Giá mở cửa"], t["Giá cao nhất"], t["Giá thấp nhất"], t["Giá đóng cửa"], _kl)]
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
-                                 close=t["Giá đóng cửa"], name=code, whiskerwidth=0,      # thân nến đặc, cùng màu với biểu đồ VNINDEX
+                                 close=t["Giá đóng cửa"], name=code, whiskerwidth=0, text=_tip, hoverinfo="text",      # thân nến đặc, cùng màu với biểu đồ VNINDEX
                                  increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
                                  decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=1, col=1)
 
@@ -2250,6 +2254,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
     # Trục ngày: hiện ngay dưới biểu đồ nến (trên khung khối lượng), không chỉ ở đáy cùng; nhãn tự đổi theo mức zoom
+    fig.update_xaxes(hoverformat="%d/%m/%Y")        # ngày trong hộp rê chuột của các đường chỉ báo luôn đầy đủ, không theo nhãn tháng của trục
     fig.update_xaxes(tickformatstops=DATE_TICK_STOPS, tickangle=0, ticks="outside", ticklen=4, tickfont=dict(size=11))
     fig.update_xaxes(showticklabels=True, row=1, col=1)
     if metrics:
