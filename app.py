@@ -13,6 +13,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import supertrend as SPT
 import watchlist as WL
 import wyckoff as WYK
 import nav as NAV
@@ -133,8 +134,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "RSI", "StochRSI"]
+              "Wyckoff", "EMA 50/200", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -2026,6 +2027,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     if "EMA 50/200" in layers:
         fig.add_trace(line("EMA50", "EMA50", "#8B5CF6"), row=1, col=1)
         fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
+    if "Supertrend" in layers:     # tính trên toàn bộ lịch sử của khung rồi cắt đúng phần đang hiển thị
+        for _tr in SPT.traces(x, SPT.compute(g).iloc[-len(t):]):
+            fig.add_trace(_tr, row=1, col=1)
     if "Ichimoku" in layers:
         fig.add_trace(line("Tenkan", "Tenkan", "#E4572E", 1), row=1, col=1)
         fig.add_trace(line("Kijun", "Kijun", "#1D4ED8", 1), row=1, col=1)
@@ -2508,7 +2512,7 @@ def _route_inner():
     if main == "Thị trường" and sub == "Góc nhìn thị trường":
         return MV.render()
     if main == "Thị trường" and sub == "Nhận định VNINDEX":
-        return VV.render(raw)
+        return VV.render(raw, DATA_KEY)
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
