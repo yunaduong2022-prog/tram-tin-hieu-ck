@@ -1,15 +1,15 @@
 {
- "updated_at": "24/10/2026 05:54 (giờ VN)",
+ "updated_at": "24/10/2026 10:47 (giờ VN)",
  "latest_date": "2026-10-23",
  "symbols": 203,
  "symbols_on_latest_date": 201,
  "rows": 384044,
  "sources": {
-  "vci": 60,
+  "vci": 45,
   "kbs": 42
  },
  "failed": [],
- "skipped": 101,
+ "skipped": 116,
  "adjusted": [],
- "stopped": "Quá 45 phút, dừng ở mã thứ 103/203"
+ "stopped": "Quá 45 phút, dừng ở mã thứ 88/203"
 }
