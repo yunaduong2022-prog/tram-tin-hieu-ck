@@ -2,7 +2,7 @@
 
 - Gộp nến Ngày -> Tuần -> Tháng từ chính dữ liệu người dùng đưa vào
 - Chỉ báo: MA/EMA, Ichimoku, Bollinger, MACD, RSI, StochRSI, ATR
-- Chấm điểm đa chỉ báo (thang -6.5 .. +6.5), dự báo, backtest, vùng giá, Fibonacci, Elliott
+- Chấm điểm đa chỉ báo (thang -5.5 .. +5.5), dự báo, backtest, vùng giá, Elliott
 """
 from __future__ import annotations
 
@@ -23,10 +23,10 @@ PIVOT_K = {"D": 5, "W": 3, "M": 2}
 MIN_BARS = 35          # tối thiểu để chấm điểm (MACD cần ~34 nến)
 FULL_BARS = 80         # đủ cho Ichimoku (52 + 26)
 SIG_TH = 2.0           # ngưỡng điểm sinh tín hiệu Mua/Bán
-MAX_SCORE = 6.5   # = tổng MAX_PTS (đã bỏ KDJ, thêm RSI)
 HORIZON = 10           # số nến của kịch bản dự báo
 MAX_PTS = {"Ichimoku": 1.5, "MACD": 1.0, "RSI": 0.5, "StochRSI": 0.5,
-           "Bollinger": 0.5, "Fibonacci": 1.0, "Xu hướng": 1.5}
+           "Bollinger": 0.5, "Xu hướng": 1.5}
+MAX_SCORE = sum(MAX_PTS.values())   # 5.5
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v14"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v15"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -469,33 +469,6 @@ def swing_label(sw: dict) -> str:
     return " → ".join(parts)
 
 
-def fib_eval(prev, last, price):
-    if prev is None or last is None or prev[2] == last[2]:
-        return 0.0, "Chưa đủ nhịp sóng để áp dụng Fibonacci"
-    p0, p1, leg = prev[2], last[2], abs(last[2] - prev[2])
-    if last[1] == "H":                      # nhịp tăng p0 -> p1
-        ret = (p1 - price) / leg
-        if price > p1:
-            return 1.0, f"Giá vượt đỉnh nhịp tăng gần nhất ({p1:.2f}): xu hướng tăng tiếp diễn"
-        if ret < 0.382:
-            return 1.0, f"Giá hồi nông (<38,2%) sau nhịp tăng {p0:.2f}-{p1:.2f}: cấu trúc tăng còn mạnh"
-        if ret < 0.618:
-            return 0.5, f"Giá hồi {ret:.0%} sau nhịp tăng {p0:.2f}-{p1:.2f}: nhịp hồi bình thường"
-        if ret <= 1:
-            return 0.0, f"Giá hồi sâu {ret:.0%} nhịp tăng {p0:.2f}-{p1:.2f}: cấu trúc tăng yếu đi"
-        return -1.0, f"Giá đã đi ngược và phá hết nhịp tăng gần nhất ({p0:.2f}-{p1:.2f}): cấu trúc tăng bị vô hiệu"
-    ret = (price - p1) / leg                # nhịp giảm p0 -> p1
-    if price < p1:
-        return -1.0, f"Giá phá đáy nhịp giảm gần nhất ({p1:.2f}): xu hướng giảm tiếp diễn"
-    if ret < 0.382:
-        return -0.5, f"Giá hồi yếu (<38,2%) sau nhịp giảm {p0:.2f}-{p1:.2f}: phe bán còn áp đảo"
-    if ret < 0.618:
-        return 0.0, f"Giá hồi {ret:.0%} sau nhịp giảm {p0:.2f}-{p1:.2f}: chưa rõ hướng"
-    if ret <= 1:
-        return 0.5, f"Giá hồi mạnh {ret:.0%} nhịp giảm {p0:.2f}-{p1:.2f}: lực cầu đang tốt dần"
-    return 1.0, f"Giá vượt hết nhịp giảm gần nhất ({p0:.2f}-{p1:.2f}): cấu trúc giảm bị vô hiệu"
-
-
 def elliott(stack):
     note = ("Nhận diện bằng quy tắc cứng (sóng 2 không thủng đáy sóng 1, sóng 3 không ngắn nhất, "
             "sóng 4 không chồng sóng 1). Elliott mang tính chủ quan cao nên chỉ để tham khảo, không cộng vào điểm.")
@@ -605,15 +578,13 @@ def score_frame(g: pd.DataFrame, tf: str):
                                  (diff < -0.01) & (c < g["EMA50"]), diff < -0.01],
                                 [1.5, 0.5, -1.5, -0.5], 0.0)
     last, prev, stack = swing_state(g["Giá cao nhất"].values, g["Giá thấp nhất"].values, PIVOT_K[tf])
-    fib = [fib_eval(prev[i], last[i], c.iat[i]) for i in range(len(g))]
-    g["S_Fibonacci"] = [x[0] for x in fib]
     cols = [f"S_{k}" for k in MAX_PTS]
     g["Total"] = g[cols].sum(axis=1)
     g["Bias"] = g["Total"] / MAX_SCORE * 100
-    return g, stack, fib[-1][1], (prev[-1], last[-1])
+    return g, stack
 
 
-def describe_items(g, fib_text):
+def describe_items(g):
     r = g.iloc[-1]
     c = r["Giá đóng cửa"]
     f = lambda x: f"{x:.2f}"
@@ -669,7 +640,7 @@ def describe_items(g, fib_text):
                 f"xu hướng {'tăng' if d > 0 else 'giảm'}")
     texts = {"Ichimoku": t_ichi, "MACD": t_macd, "RSI": t_rsi,
              "StochRSI": osc("StochRSI", r["SRSI_K"], r["SRSI_D"]), "Bollinger": t_bb,
-             "Fibonacci": fib_text, "Xu hướng": t_tr}
+             "Xu hướng": t_tr}
     return [(k, float(r[f"S_{k}"]), MAX_PTS[k], texts[k]) for k in MAX_PTS]
 
 
@@ -732,17 +703,17 @@ def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
     out = {"tf": tf, "g": g, "n": n, "enough": n >= MIN_BARS, "partial": n < FULL_BARS,
            "total": 0.0, "bias": 0.0, "dir": 0, "items": [], "fc": None,
            "trades": pd.DataFrame(columns=["idx", "Ngày", "dir", "R", "open", "code"]),
-           "zones": [], "fib": None, "wy": None,
+           "zones": [], "wy": None,
            "elliott": {"title": "", "tag": "gray", "points": [], "text": ""}}
     out["trades"] = run_backtest(g)
     out["pv_now"], out["pv_prev"] = latest_pv(g)
     if not out["enough"]:
         return out
-    g, stack, fib_text, (fprev, flast) = score_frame(g, tf)
+    g, stack = score_frame(g, tf)
     out["g"] = g
     out["total"], out["bias"] = float(g["Total"].iat[-1]), float(g["Bias"].iat[-1])
     out["dir"] = 1 if out["total"] >= 1.0 else -1 if out["total"] <= -1.0 else 0
-    out["items"] = describe_items(g, fib_text)
+    out["items"] = describe_items(g)
     out["zones"] = price_zones(g, k=3)
     out["elliott"] = elliott(stack)
     try:
@@ -750,8 +721,6 @@ def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
     except Exception:   # Wyckoff chỉ để quan sát, không được làm hỏng phần phân tích còn lại
         out["wy"] = None
     out["stack"] = stack
-    if fprev and flast:
-        out["fib"] = {"A": fprev, "B": flast}
 
     d = out["dir"]
     if d != 0:

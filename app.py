@@ -52,6 +52,9 @@ st.markdown("""
  .big{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0 6px}
  .mtf-top{display:flex;justify-content:space-between;align-items:stretch;gap:12px}
  .mtf-code{display:flex;align-items:center;font-size:56px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--txt2)}
+ .mtf-right{display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap}
+ .mtf-px{display:flex;flex-direction:column;justify-content:center;line-height:1.2;text-align:right}
+ .mtf-px b{font-size:30px;font-weight:800}.mtf-px span{font-size:12.5px;font-weight:600}
  .c-red{color:var(--red)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-gray{color:var(--muted)}
  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
  .tag-red{background:var(--tag-red-bg);color:var(--red)}.tag-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}
@@ -134,7 +137,7 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
 LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
@@ -1825,8 +1828,30 @@ def dir_kind(d):
     return "green" if d > 0 else "red" if d < 0 else "gray"
 
 
-def mtf_card(conc, A, code=""):
+def _mtf_price_html(price, chg) -> str:
+    """Giá phiên gần nhất cạnh mã: xanh nếu tăng so với phiên trước, đỏ nếu giảm, xám nếu đứng giá / chưa có phiên so sánh."""
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        return ""
+    if pd.isna(price):
+        return ""
+    chg = float(chg) if chg is not None and pd.notna(chg) else None
+    if chg is None:
+        col, sub = "var(--muted)", ""
+    elif chg > 1e-9:
+        col, sub = "var(--green)", f"▲ {price - price / (1 + chg / 100):+,.2f} ({chg:+.2f}%)"
+    elif chg < -1e-9:
+        col, sub = "var(--red)", f"▼ {price - price / (1 + chg / 100):+,.2f} ({chg:+.2f}%)"
+    else:
+        col, sub = "var(--muted)", "— 0.00 (0.00%)"
+    return (f'<div class="mtf-px" style="color:{col}"><b>{price:,.2f}</b>' + (f"<span>{sub}</span>" if sub else "") + "</div>")
+
+
+def mtf_card(conc, A, code="", price=None, chg=None):
     code_html = f'<div class="mtf-code">{htmllib.escape(str(code))}</div>' if code else ""
+    if code_html:       # giá hiện tại nằm cạnh mã
+        code_html = f'<div class="mtf-right">{code_html}{_mtf_price_html(price, chg)}</div>'
     if conc is None:
         return card("Kết luận đa khung", f'<div class="mtf-top"><div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>{code_html}</div>')
     k = conc["kind"]
@@ -2047,17 +2072,6 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fx = future_date(x.iloc[-1], tf, E.HORIZON)
     ys = [t["Giá thấp nhất"].min(), t["Giá cao nhất"].max()]
 
-    if enough and "Fibonacci" in layers and a["fib"]:
-        (ia, _, pa), (ib, _, pb) = a["fib"]["A"], a["fib"]["B"]
-        x0 = max(g["Ngày"].iat[ia], x.iloc[0])
-        lv = [(f"{r * 100:.1f}%", pb - (pb - pa) * r) for r in (0, 0.236, 0.382, 0.5, 0.618, 0.786, 1)]
-        lv += [("Fib 127.2%", pa + (pb - pa) * 1.272), ("Fib 161.8%", pa + (pb - pa) * 1.618)]
-        for name, y in lv:
-            fig.add_trace(go.Scatter(x=[x0, x.iloc[-1]], y=[y, y], mode="lines+text", text=["", name],
-                                     textposition="middle right", textfont=dict(size=9, color="#B7791F"),
-                                     line=dict(width=0.8, dash="dot", color="rgba(183,121,31,.7)"),
-                                     showlegend=False, hoverinfo="skip"), row=1, col=1)
-        ys += [pa, pb]
     if enough and "Vùng giá" in layers:
         for z in a["zones"]:
             red = z["kind"] == "Kháng cự"
@@ -2336,7 +2350,7 @@ def page_stock():
                         config=_cfg, **_STRETCH)
 
     with col_side:
-        st.markdown(mtf_card(E.mtf_conclusion(A), A, code), unsafe_allow_html=True)
+        st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
         if a["enough"]:
             st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
