@@ -61,7 +61,7 @@ Thẻ ở **Lọc tất cả CP** và **Chờ mua** có thêm khối cảnh báo
 - Trang **Bộ lọc** có thêm cột **Nhóm** và **Wyckoff**, cùng hai bộ lọc **Nhóm ngành** và **Wyckoff** (Tích lũy, Phân phối, hoặc đã có Spring/UT/SOS/SOW ở pha C–E). Bộ lọc nhóm hoạt động cả khi dùng file Excel.
 
 ## Phân tích Wyckoff (mới)
-Lớp **Wyckoff** trên biểu đồ (bật/tắt cùng các lớp khác, mặc định bật) tự tìm vùng đi ngang gần nhất, phân loại tích lũy hoặc phân phối theo xu hướng trước đó và hướng thoát, rồi vẽ hộp vùng, các đường biên kéo dài và nhãn sự kiện:
+Lớp **Wyckoff** trên biểu đồ (bật/tắt cùng các lớp khác, mặc định tắt, bấm vào mới hiện) tự tìm vùng đi ngang gần nhất, phân loại tích lũy hoặc phân phối theo xu hướng trước đó và hướng thoát, rồi vẽ hộp vùng, các đường biên kéo dài và nhãn sự kiện:
 - Tích lũy: SC, AR, ST, Spring, Test, SOS, LPS.
 - Phân phối: BC, AR, ST, UT/UTAD, Test, SOW, LPSY.
 
