@@ -103,6 +103,7 @@ jobs:
           git config user.name "eod-bot"
           git config user.email "eod-bot@users.noreply.github.com"
           git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv data/index_prices.csv
+          for f in data/nhom_von_hoa_gia.csv; do [ -f "$f" ] && git add "$f"; done || true
           if git diff --cached --quiet; then
             echo "Không có thay đổi dữ liệu."
             exit 0
