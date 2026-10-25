@@ -1,14 +1,14 @@
 """Dual Ichimoku: hai bộ Ichimoku cùng hiển thị trên biểu đồ giá (chuyển từ Pine v5 "Min Invest - Dual Ichimoku Setup").
 
-Bộ 1 (9 - 26 - 52, dịch 26): chỉ vẽ MÂY KUMO, gồm Lead 1 (Senkou Span A), Leading Span B (Senkou Span B) và nền mây.
+Bộ 1 (9 - 17 - 26, dịch 26; đúng thông số Ichimoku 1 trên TradingView): chỉ vẽ MÂY KUMO, gồm Lead 1 (Senkou Span A), Leading Span B (Senkou Span B) và nền mây.
                               Tắt Tenkan, Kijun, Chikou.
-Bộ 2 (65 - 129):              chỉ vẽ Tenkan-sen (xanh dương) và Kijun-sen (cam); không có mây, không có Chikou, không dịch.
+Bộ 2 (65 - 129, Span B 52):             chỉ vẽ Tenkan-sen (xanh dương) và Kijun-sen (cam); không có mây, không có Chikou, không dịch.
 
 Tenkan / Kijun / Span đều là trung điểm Donchian: (cao nhất N nến + thấp nhất N nến) / 2.
 Mây vẽ lệch về tương lai `displacement - 1` nến, đúng như Pine (offset = displacement - 1), nên 25 nến cuối nằm
 phía bên phải nến cuối cùng. Tham số chỉnh ở CFG.
 
-Cần đủ lịch sử: Kijun 129 cần 129 nến, mây cần 52 nến. Khung Tháng thường không đủ 129 nến nên chỉ hiện phần có dữ liệu.
+Cần đủ lịch sử: Kijun 129 cần 129 nến, mây cần 26 nến. Khung Tháng thường không đủ 129 nến nên chỉ hiện phần có dữ liệu.
 """
 from __future__ import annotations
 
@@ -16,16 +16,16 @@ import numpy as np
 import pandas as pd
 
 CFG = {
-    "t1": 9, "k1": 26, "b1": 52, "disp1": 26,   # bộ 1: Tenkan, Kijun, Span B, độ dịch của mây
+    "t1": 9, "k1": 17, "b1": 26, "disp1": 26,   # bộ 1: Tenkan, Kijun, Span B, độ dịch của mây
     "t2": 65, "k2": 129,                         # bộ 2: Tenkan, Kijun
 }
 COL = {
-    "span_a": "#A5D6A7",      # Lead 1 (Span A): xanh lá nhạt, như TradingView
-    "span_b": "#EF9A9A",      # Leading Span B: hồng nhạt
+    "span_a": "#A8D5B6",      # Lead 1 (Span A): xanh lá nhạt, như TradingView
+    "span_b": "#FABAA1",      # Leading Span B: cam đào nhạt
     "up": "rgba(76,175,80,0.38)",     # mây tăng: xanh lá
     "down": "rgba(242,54,69,0.35)",   # mây giảm: đỏ
-    "tenkan2": "#2962FF",     # xanh dương
-    "kijun2": "#FFEB3B",      # vàng (đúng màu hiển thị trên TradingView)
+    "tenkan2": "#2822F4",     # xanh dương đậm (đúng màu Ichimoku 2)
+    "kijun2": "#FFB74D",      # cam vàng (đúng màu Ichimoku 2)
 }
 W_EDGE = 1       # viền mây (Span A / Span B)
 W_LINE = 2       # Tenkan / Kijun bộ 2
@@ -121,7 +121,7 @@ def traces(g: pd.DataFrame, n_show: int, future_fn, cfg: dict | None = None) -> 
         if px:
             show, first = first, False          # chỉ một mục chú thích cho cả mây
             out.append(go.Scatter(x=px, y=py, mode="lines", fill="toself", fillcolor=color, line=dict(width=0),
-                                  name="Ichimoku 1 · Mây Kumo (9-26-52)", showlegend=show, hoverinfo="skip", legendgroup="dich1"))
+                                  name="Ichimoku 1 · Mây Kumo (9-17-26)", showlegend=show, hoverinfo="skip", legendgroup="dich1"))
     x, a, b = d["x"], d["a"], d["b"]
     out.append(go.Scatter(x=x, y=a, name="Ichi 1 · Lead 1 (Span A)", line=dict(width=W_EDGE, color=COL["span_a"]), legendgroup="dich1",
                           showlegend=False, hovertemplate="Lead 1: %{y:,.2f}<extra></extra>"))
