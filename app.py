@@ -2303,6 +2303,26 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=30, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
+    if "Dual Ichimoku" in layers:
+        # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
+        _yr = fig.layout.yaxis.range
+        _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
+        _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
+        if _ppu > 0:
+            _cur, _gap = last_c * _ppu, 15.0
+            _pos = []
+            for _v, _bg, _fg in IDU.price_tags(g, len(t), lambda k_: future_date(_last, tf, k_)):
+                if _yr[0] <= _v <= _yr[1]:
+                    _pos.append([_v * _ppu, _v, _bg, _fg])
+            _prev = _cur                                  # nhãn giá hiện tại đứng yên; các nhãn phía trên xếp dần lên, phía dưới xếp dần xuống
+            for _r in sorted((r_ for r_ in _pos if r_[0] >= _cur), key=lambda r_: r_[0]):
+                _r[0] = _prev = max(_r[0], _prev + _gap)
+            _prev = _cur
+            for _r in sorted((r_ for r_ in _pos if r_[0] < _cur), key=lambda r_: -r_[0]):
+                _r[0] = _prev = min(_r[0], _prev - _gap)
+            for _p, _v, _bg, _fg in _pos:
+                fig.add_annotation(xref="paper", yref="y", x=1, y=_v, xanchor="left", yanchor="middle", showarrow=False,
+                                   yshift=_p - _v * _ppu, text=f"{_v:,.2f}", font=dict(size=11, color=_fg), bgcolor=_bg, borderpad=3)
     if mobile:
         fig.update_layout(dragmode=drag)
         if drag is False:                      # chế độ "Cuộn trang": khóa mọi thao tác kéo/zoom để biểu đồ không giữ cử chỉ vuốt

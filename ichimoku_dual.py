@@ -133,3 +133,15 @@ def traces(g: pd.DataFrame, n_show: int, future_fn, cfg: dict | None = None) -> 
     out.append(go.Scatter(x=d["xl"], y=d["kijun2"], name=f"Ichi 2 · Kijun {cfgm['k2']}", line=dict(width=W_LINE, color=COL["kijun2"]),
                           hovertemplate="Kijun: %{y:,.2f}<extra></extra>"))
     return out
+
+
+def price_tags(g: pd.DataFrame, n_show: int, future_fn, cfg: dict | None = None) -> list:
+    """Nhãn giá cuối của từng đường để gắn bên phải biểu đồ (như TradingView): [(giá, màu nền, màu chữ)], sắp từ cao xuống thấp.
+    Tenkan / Kijun lấy ở nến cuối; Lead 1 / Span B lấy ở điểm mây xa nhất về tương lai."""
+    d = compute(g, n_show, future_fn, cfg)
+    out = []
+    for v, bg, fg in ((d["tenkan2"][-1], COL["tenkan2"], "#FFFFFF"), (d["kijun2"][-1], COL["kijun2"], "#131722"),
+                      (d["b"][-1], COL["span_b"], "#131722"), (d["a"][-1], COL["span_a"], "#131722")):
+        if np.isfinite(v):
+            out.append((float(v), bg, fg))
+    return sorted(out, key=lambda t: -t[0])
