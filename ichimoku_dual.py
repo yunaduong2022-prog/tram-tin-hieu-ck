@@ -20,13 +20,15 @@ CFG = {
     "t2": 65, "k2": 129,                         # bộ 2: Tenkan, Kijun
 }
 COL = {
-    "span_a": "#26A69A",      # teal (Lead 1)
-    "span_b": "#800000",      # maroon (Leading Span B)
-    "up": "rgba(76,175,80,0.25)",     # mây tăng: xanh lá, trong suốt 75%
-    "down": "rgba(244,67,54,0.25)",   # mây giảm: đỏ, trong suốt 75%
+    "span_a": "#A5D6A7",      # Lead 1 (Span A): xanh lá nhạt, như TradingView
+    "span_b": "#EF9A9A",      # Leading Span B: hồng nhạt
+    "up": "rgba(76,175,80,0.38)",     # mây tăng: xanh lá
+    "down": "rgba(242,54,69,0.35)",   # mây giảm: đỏ
     "tenkan2": "#2962FF",     # xanh dương
-    "kijun2": "#FF9800",      # cam (Pine dùng color.orange)
+    "kijun2": "#FFEB3B",      # vàng (đúng màu hiển thị trên TradingView)
 }
+W_EDGE = 1       # viền mây (Span A / Span B)
+W_LINE = 2       # Tenkan / Kijun bộ 2
 
 
 def _donchian(h: pd.Series, l: pd.Series, n: int) -> pd.Series:
@@ -80,6 +82,33 @@ def cloud_segments(x, a, b):
     return (X, np.where(up, hi, nan), np.where(up, lo, nan), np.where(dn, hi, nan), np.where(dn, lo, nan))
 
 
+def _polygons(X, hi, lo):
+    """Tách mây thành các đoạn liên tục (không NaN) rồi nối thành đa giác khép kín (biên trên đi, biên dưới về), ngăn cách bằng None.
+    Dùng fill="toself" nên mỗi đoạn được tô riêng; không bị nối qua khoảng trống như fill="tonexty"."""
+    px, py = [], []
+    ok = np.isfinite(hi) & np.isfinite(lo)
+    i, n = 0, len(X)
+    while i < n:
+        if not ok[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and ok[j + 1]:
+            j += 1
+        if j > i:                                   # cần ít nhất 2 điểm mới thành một mảng mây
+            xs, h_, l_ = X[i:j + 1], hi[i:j + 1], lo[i:j + 1]
+            px += list(xs) + list(xs[::-1]) + [None]
+            py += list(h_) + list(l_[::-1]) + [None]
+        i = j + 1
+    return px, py
+
+
+def cloud_end(g: pd.DataFrame, future_fn, cfg: dict | None = None):
+    """Ngày của điểm mây xa nhất về tương lai: biểu đồ cần kéo trục ngày tới đây để không cắt mất phần mây phía phải nến cuối."""
+    off = int({**CFG, **(cfg or {})}["disp1"]) - 1
+    return future_fn(off) if off > 0 else pd.Timestamp(g["Ngày"].iloc[-1])
+
+
 def traces(g: pd.DataFrame, n_show: int, future_fn, cfg: dict | None = None) -> list:
     """Danh sách trace Plotly để add vào hàng giá (row=1). Mỗi trace đã gắn legendgroup nên bật/tắt theo nhóm."""
     import plotly.graph_objects as go
@@ -88,17 +117,19 @@ def traces(g: pd.DataFrame, n_show: int, future_fn, cfg: dict | None = None) -> 
     out = []
     first = True
     for hi, lo, color in ((hi_u, lo_u, COL["up"]), (hi_d, lo_d, COL["down"])):
-        if np.isfinite(hi).any():
+        px, py = _polygons(X, hi, lo)
+        if px:
             show, first = first, False          # chỉ một mục chú thích cho cả mây
-            out.append(go.Scatter(x=X, y=lo, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip", legendgroup="dich1"))
-            out.append(go.Scatter(x=X, y=hi, mode="lines", line=dict(width=0), fill="tonexty", fillcolor=color,
+            out.append(go.Scatter(x=px, y=py, mode="lines", fill="toself", fillcolor=color, line=dict(width=0),
                                   name="Ichimoku 1 · Mây Kumo (9-26-52)", showlegend=show, hoverinfo="skip", legendgroup="dich1"))
     x, a, b = d["x"], d["a"], d["b"]
-    out.append(go.Scatter(x=x, y=a, name="Ichi 1 · Lead 1 (Span A)", line=dict(width=1, color=COL["span_a"]), legendgroup="dich1",
+    out.append(go.Scatter(x=x, y=a, name="Ichi 1 · Lead 1 (Span A)", line=dict(width=W_EDGE, color=COL["span_a"]), legendgroup="dich1",
                           showlegend=False, hovertemplate="Lead 1: %{y:,.2f}<extra></extra>"))
-    out.append(go.Scatter(x=x, y=b, name="Ichi 1 · Leading Span B", line=dict(width=1, color=COL["span_b"]), legendgroup="dich1",
+    out.append(go.Scatter(x=x, y=b, name="Ichi 1 · Leading Span B", line=dict(width=W_EDGE, color=COL["span_b"]), legendgroup="dich1",
                           showlegend=False, hovertemplate="Span B: %{y:,.2f}<extra></extra>"))
     cfgm = {**CFG, **(cfg or {})}
-    out.append(go.Scatter(x=d["xl"], y=d["tenkan2"], name=f"Ichi 2 · Tenkan {cfgm['t2']}", line=dict(width=2, color=COL["tenkan2"])))
-    out.append(go.Scatter(x=d["xl"], y=d["kijun2"], name=f"Ichi 2 · Kijun {cfgm['k2']}", line=dict(width=3, color=COL["kijun2"])))
+    out.append(go.Scatter(x=d["xl"], y=d["tenkan2"], name=f"Ichi 2 · Tenkan {cfgm['t2']}", line=dict(width=W_LINE, color=COL["tenkan2"]),
+                          hovertemplate="Tenkan: %{y:,.2f}<extra></extra>"))
+    out.append(go.Scatter(x=d["xl"], y=d["kijun2"], name=f"Ichi 2 · Kijun {cfgm['k2']}", line=dict(width=W_LINE, color=COL["kijun2"]),
+                          hovertemplate="Kijun: %{y:,.2f}<extra></extra>"))
     return out

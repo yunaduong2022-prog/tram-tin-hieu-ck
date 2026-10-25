@@ -142,7 +142,7 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Dual Ichimoku", "Vùng giá", "Bollinger",
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
 LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
@@ -2106,17 +2106,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     if "EMA 50/200" in layers:
         fig.add_trace(line("EMA50", "EMA50", "#8B5CF6"), row=1, col=1)
         fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
-    if "Ichimoku" in layers:
-        fig.add_trace(line("Tenkan", "Tenkan", "#E4572E", 1), row=1, col=1)
-        fig.add_trace(line("Kijun", "Kijun", "#1D4ED8", 1), row=1, col=1)
-        fig.add_trace(go.Scatter(x=x, y=t["SpanA"], line=dict(width=0.6, color="rgba(43,214,162,.5)"),
-                                 showlegend=False, hoverinfo="skip"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=x, y=t["SpanB"], line=dict(width=0.6, color="rgba(242,80,110,.5)"), fill="tonexty",
-                                 fillcolor="rgba(100,150,200,0.18)", name="Mây Kumo", hoverinfo="skip"), row=1, col=1)
     if "Dual Ichimoku" in layers:      # bộ 1 (9-26-52) chỉ mây, bộ 2 (65-129) chỉ Tenkan và Kijun; chi tiết ở ichimoku_dual.py
         _last = pd.Timestamp(g["Ngày"].iloc[-1])
         for _tr in IDU.traces(g, len(t), lambda k_: future_date(_last, tf, k_)):
             fig.add_trace(_tr, row=1, col=1)
+        _cloud_end = IDU.cloud_end(g, lambda k_: future_date(_last, tf, k_))
     if "Bollinger" in layers:
         fig.add_trace(go.Scatter(x=x, y=t["BB_up"], line=dict(width=0.8, color="rgba(59,130,246,.7)"),
                                  name="Bollinger", legendgroup="bb"), row=1, col=1)
@@ -2271,6 +2265,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         _hdr("RSI", f'RSI(14): <b style="color:#8B5CF6">{rsi_t.iloc[-1]:.2f}</b>')
     if "StochRSI" in subs:
         _hdr("StochRSI", f'StochRSI  %K: <span style="color:#F59E0B">{lr["SRSI_K"]:.1f}</span>  %D: <span style="color:#3B82F6">{lr["SRSI_D"]:.1f}</span>')
+    if "Dual Ichimoku" in layers:                  # kéo trục tới hết phần mây tương lai (25 nến) như TradingView, không cắt cụt ở nến dự báo
+        fx = max(fx, _cloud_end)
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])

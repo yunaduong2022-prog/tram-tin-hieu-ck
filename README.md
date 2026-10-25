@@ -203,4 +203,4 @@ Menu **Bộ lọc & Backtest → Cổ phiếu của tôi** (code ở `my_portfol
 Lớp **Dual Ichimoku** (bật mặc định trong "Lớp hiển thị", code ở `ichimoku_dual.py`, tham số ở `CFG`) vẽ hai bộ Ichimoku cùng lúc, theo bản Pine "Min Invest - Dual Ichimoku Setup":
 - **Bộ 1 (9-26-52, dịch 26):** chỉ vẽ mây Kumo gồm Lead 1 (Senkou Span A), Leading Span B và nền mây (xanh khi Span A trên Span B, đỏ khi ngược lại). Mây vẽ lệch 25 nến về tương lai như Pine (offset = displacement - 1). Không vẽ Tenkan, Kijun, Chikou.
 - **Bộ 2 (65-129):** chỉ vẽ Tenkan-sen 65 (xanh dương) và Kijun-sen 129 (cam), không mây, không Chikou, không dịch.
-- Lớp **Ichimoku** cũ (9-26-52 đầy đủ, dùng chấm điểm) vẫn giữ nguyên và tắt mặc định. Khung Tháng thường chưa đủ 129 nến nên Kijun 129 không hiện.
+- Lớp **Ichimoku** cũ trên biểu đồ đã bị xóa, chỉ còn Dual Ichimoku (phần chấm điểm trong `engine.py` vẫn tính Ichimoku 9-26-52 ở nền, không vẽ). Khung Tháng thường chưa đủ 129 nến nên Kijun 129 không hiện.
