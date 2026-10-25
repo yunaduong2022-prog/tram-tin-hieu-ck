@@ -35,6 +35,7 @@ import vnindex_view as VV
 import cap_groups as CG
 import market_overview as MO
 import my_watchlist as MW
+import my_portfolio as MP
 import sell_card
 import dry_supply as DS
 import stock_map as SM
@@ -1463,6 +1464,19 @@ def page_watchlist():
     _rt_focus_scroll()
 
 
+def page_my_portfolio():
+    st.title("💼 Cổ phiếu của tôi")
+    header()
+
+    def _open_chart(code: str):
+        st.session_state["selected_code"] = code
+        for _k in ("mtf_code", "tab_code"):
+            st.session_state[_k] = code
+        NAV.goto("Cổ phiếu", "Tổng quát")
+
+    MP.render(_wb_table(), res_df, _open_chart, latest_date)
+
+
 def page_realtime_filter():
     """Bộ lọc Realtime: chọn ngành / mã -> sơ đồ tư duy: mã đang nằm ở mục nào, ý chính của mục, và nhánh cơ bản."""
     st.title("🧭 Bộ lọc Realtime")
@@ -2598,6 +2612,7 @@ def _route_inner():
         if sub == "Cạn cung": return page_dry_supply()
         if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
+        if sub == "Cổ phiếu của tôi": return page_my_portfolio()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
         return NAV.placeholder("🧪 Backtest chiến lược",

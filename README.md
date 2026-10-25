@@ -188,3 +188,12 @@ File sau khi nạp được lưu tại `data/foreign_flow.csv`. Để dữ liệ
 ## Chặn số giả và backtest thực tế (mới)
 - `fund_guard.py`: P/B, P/E, ROE chỉ hiển thị khi là số thật. Cột có từ 80% ô cùng một giá trị (ví dụ cả rổ P/B 3.0, ROE 17) bị ẩn kèm cảnh báo ở trang Bộ lọc; giá trị ngoài miền hợp lý bị bỏ. Chạy `python fund_guard.py` để kiểm tra, thêm `--fix` để làm sạch `data/fundamentals.csv`. `update_fundamentals.py` cũng dùng bộ chặn này khi ghi file.
 - `engine.run_backtest` mặc định mô phỏng giao dịch thực: vào ở giá mở cửa phiên kế tiếp, phí môi giới 0,15%/chiều, thuế bán 0,1%, trượt giá 0,1%/chiều, bước giá HOSE, T+2 (khung Ngày), gap qua cắt lỗ, phiên khóa trần (không mua được) và khóa sàn (không bán được). Chỉnh ở `BT_COST` đầu mục BACKTEST trong `engine.py`. `realistic=False` giữ mô hình lý tưởng cũ để so sánh; thẻ Backtest hiển thị cả hai.
+
+
+## Cổ phiếu của tôi (mới)
+Menu **Bộ lọc & Backtest → Cổ phiếu của tôi** (code ở `my_portfolio.py`) theo dõi danh mục đang NẮM GIỮ, khác Watchlist chỉ để theo dõi.
+- Mỗi dòng dữ liệu là một lô mua (Mã, Số lượng, Giá vốn, Ngày mua, Cắt lỗ, Mục tiêu, Ghi chú), một mã có thể có nhiều lô. Lưu ở `data/co_phieu_cua_toi.csv`; tiền mặt và các ngưỡng cảnh báo lưu ở `data/danh_muc_cai_dat.json`.
+- Hiển thị: giá trị cổ phiếu, NAV (cổ phiếu + tiền mặt), lãi/lỗ ròng (đã trừ phí, thuế bán), rủi ro nếu mọi lô chạm cắt lỗ (% NAV), số lượng đã bán được theo T+2, tỷ trọng theo mã và theo ngành, tín hiệu hệ thống cho từng vị thế và gợi ý theo kế hoạch của bạn.
+- Cảnh báo: chạm hoặc gần cắt lỗ, hệ thống báo bán / chốt lời, đạt mục tiêu, mã hoặc ngành vượt ngưỡng tỷ trọng, tổng rủi ro vượt ngưỡng, lô chưa đặt cắt lỗ.
+- Máy tính khối lượng: số cổ phiếu (lô 100) để nếu chạm cắt lỗ chỉ mất đúng % NAV bạn chấp nhận, có tính phí, thuế, tỷ trọng tối đa và tiền mặt.
+- Đây là dữ liệu tài chính cá nhân: để repo private hoặc không đẩy hai file dữ liệu trên lên GitHub. Trên Streamlit Cloud file ghi lúc chạy mất khi app khởi động lại nên hãy bấm Sao lưu thường xuyên. App chưa lưu lịch sử lệnh đã bán.
