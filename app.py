@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import fund_guard as FG
+import ichimoku_dual as IDU
 import supertrend as SPT
 import hull_suite as HUL
 import watchlist as WL
@@ -141,9 +142,9 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Bollinger",
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Dual Ichimoku", "Vùng giá", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -2112,6 +2113,10 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                  showlegend=False, hoverinfo="skip"), row=1, col=1)
         fig.add_trace(go.Scatter(x=x, y=t["SpanB"], line=dict(width=0.6, color="rgba(242,80,110,.5)"), fill="tonexty",
                                  fillcolor="rgba(100,150,200,0.18)", name="Mây Kumo", hoverinfo="skip"), row=1, col=1)
+    if "Dual Ichimoku" in layers:      # bộ 1 (9-26-52) chỉ mây, bộ 2 (65-129) chỉ Tenkan và Kijun; chi tiết ở ichimoku_dual.py
+        _last = pd.Timestamp(g["Ngày"].iloc[-1])
+        for _tr in IDU.traces(g, len(t), lambda k_: future_date(_last, tf, k_)):
+            fig.add_trace(_tr, row=1, col=1)
     if "Bollinger" in layers:
         fig.add_trace(go.Scatter(x=x, y=t["BB_up"], line=dict(width=0.8, color="rgba(59,130,246,.7)"),
                                  name="Bollinger", legendgroup="bb"), row=1, col=1)
