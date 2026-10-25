@@ -68,6 +68,13 @@ jobs:
           if [ -n "${{ inputs.start }}" ]; then ARGS="$ARGS --start ${{ inputs.start }}"; fi
           python eod_fetch.py $ARGS
 
+      - name: Cập nhật chỉ số nhóm vốn hóa (VN30, VNMidcap, VNSmallcap, VN100)
+        if: ${{ always() && inputs.probe == '' }}
+        continue-on-error: true
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+        run: python update_index.py
+
       - name: Cập nhật vốn hóa (Mã, Vốn hóa TT)
         if: ${{ always() && inputs.probe == '' }}
         continue-on-error: true
@@ -95,7 +102,7 @@ jobs:
         run: |
           git config user.name "eod-bot"
           git config user.email "eod-bot@users.noreply.github.com"
-          git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv
+          git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv data/index_prices.csv
           if git diff --cached --quiet; then
             echo "Không có thay đổi dữ liệu."
             exit 0
