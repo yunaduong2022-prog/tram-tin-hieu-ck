@@ -79,6 +79,7 @@ def compute(df: pd.DataFrame, period: int = PERIOD, mult: float = MULTIPLIER, wi
     out["ST_buy"] = valid & (trend == 1) & (prev == -1)
     out["ST_sell"] = valid & (trend == -1) & (prev == 1)
     out["ST_ohlc4"] = (o + h + l + c) / 4
+    out["ST_close"] = c                       # giá đóng cửa của nến báo Buy / Sell (hiện kèm nhãn)
     return out
 
 
@@ -122,7 +123,8 @@ def traces(x, st: pd.DataFrame, price_fmt: str = ",.2f", period: int = PERIOD, m
 
 
 def annotations(x, st: pd.DataFrame, show_signals: bool = SHOW_SIGNALS) -> list[dict]:
-    """Nhãn hộp "Buy" (dưới đường xanh) và "Sell" (trên đường đỏ) như TradingView; dùng với fig.add_annotation(**d, row=1, col=1)."""
+    """Nhãn hộp "Buy 19.5" (dưới đường xanh) và "Sell 23.9" (trên đường đỏ) như TradingView, kèm giá đóng cửa của nến báo tín hiệu (làm tròn 1 số lẻ);
+    dùng với fig.add_annotation(**d, row=1, col=1)."""
     if not show_signals:
         return []
     x = list(x)
@@ -130,7 +132,8 @@ def annotations(x, st: pd.DataFrame, show_signals: bool = SHOW_SIGNALS) -> list[
     for col, line_col, color, text, shift in (("ST_buy", "ST_up", GREEN, "Buy", -16), ("ST_sell", "ST_dn", RED, "Sell", 16)):
         m = st[col].to_numpy(bool)
         y = st[line_col].to_numpy(float)
+        px = st["ST_close"].to_numpy(float)
         for i in np.flatnonzero(m):
-            out.append(dict(x=x[i], y=float(y[i]), text=text, showarrow=False, yshift=shift, bgcolor=color,
+            out.append(dict(x=x[i], y=float(y[i]), text=f"{text} {px[i]:,.1f}", showarrow=False, yshift=shift, bgcolor=color,
                             font=dict(size=10, color="#FFFFFF"), borderpad=2, opacity=0.95))
     return out
