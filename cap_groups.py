@@ -7,6 +7,10 @@ Hai tỷ số chính (tăng = dòng tiền chấp nhận rủi ro, nhóm nhỏ m
   - VNSmallcap / VN30
   - VNSmallcap / VNINDEX
 Giảm = dòng tiền co về cổ phiếu vốn hóa lớn.
+
+Cuối trang có mục "Cổ phiếu dẫn dắt theo nhóm": danh sách thành viên VNMidcap / VNSmallcap đọc từ data/nhom_von_hoa.csv
+(tự lập từ TradingView, cập nhật tay mỗi kỳ cơ cấu), VN30 lấy từ danh sách VN30 của app. Giá lấy từ eod_prices.csv, mã nào
+chưa có ở đó thì lấy từ data/nhom_von_hoa_gia.csv (do update_index.py ghi).
 """
 from __future__ import annotations
 
@@ -21,6 +25,8 @@ import vnindex_view as VV
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 IDX_CSV = os.path.join(_HERE, "data", "index_prices.csv")
+LIST_CSV = os.path.join(_HERE, "data", "nhom_von_hoa.csv")
+MEM_CSV = os.path.join(_HERE, "data", "nhom_von_hoa_gia.csv")
 O, H, L, C, V = VV.O, VV.H, VV.L, VV.C, VV.V
 OHLC = VV.OHLC
 UP, DN = VV.UP, VV.DN
@@ -196,6 +202,150 @@ def ratio_fig(a: pd.DataFrame, b: pd.DataFrame, tf: str, n_show: int, name: str,
     return _style(fig, r, tf, x, height, last, col, lo, hi, ".3f")
 
 
+# ------------------------------------------------------------------ CỔ PHIẾU DẪN DẮT THEO NHÓM
+RANK_COL = {"1 phiên": "chg1", "1 tuần": "chg5", "1 tháng": "chg20"}
+LEAD_GROUPS = [("VN30", "VN30"), ("VNMIDCAP", "VNMidcap"), ("VNSMALLCAP", "VNSmallcap")]
+
+
+@st.cache_data(show_spinner=False)
+def _read_list(path: str, mtime: float) -> dict[str, list[str]]:
+    d = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+    d.columns = [c.strip() for c in d.columns]
+    if "Mã" not in d or "Nhóm" not in d:
+        return {}
+    d["Mã"] = d["Mã"].astype(str).str.upper().str.strip()
+    d["Nhóm"] = d["Nhóm"].astype(str).str.upper().str.strip()
+    return {g: list(dict.fromkeys(x["Mã"])) for g, x in d.groupby("Nhóm")}
+
+
+def group_lists(vn30: list[str] | None) -> dict[str, list[str]]:
+    out = {}
+    if os.path.exists(LIST_CSV):
+        out = dict(_read_list(LIST_CSV, os.path.getmtime(LIST_CSV)))
+    if vn30:
+        out["VN30"] = [str(c).upper() for c in vn30]
+    elif "VN30" not in out:
+        try:
+            import watchlist as WL
+            out["VN30"] = list(WL.VN30_DU_PHONG)
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def stock_frame(raw: pd.DataFrame | None, codes: set[str]) -> pd.DataFrame:
+    """Giá đóng cửa + khối lượng của các mã cần xét: ưu tiên dữ liệu của app, mã thiếu thì lấy từ file thành viên."""
+    cols = ["Mã", "Ngày", C, V]
+    parts = []
+    if raw is not None and not raw.empty:
+        r = raw[raw["Mã"].astype(str).isin(codes)][cols].copy()
+        r["Ngày"] = pd.to_datetime(r["Ngày"], errors="coerce").dt.normalize()
+        parts.append(r)
+    have = set(parts[0]["Mã"].astype(str)) if parts else set()
+    if os.path.exists(MEM_CSV):
+        m = _read_idx(MEM_CSV, os.path.getmtime(MEM_CSV))
+        m = m[m["Mã"].astype(str).isin(codes - have)][cols]
+        if len(m):
+            parts.append(m)
+    if not parts:
+        return pd.DataFrame(columns=cols)
+    out = pd.concat(parts, ignore_index=True)
+    out[C] = pd.to_numeric(out[C], errors="coerce")
+    out[V] = pd.to_numeric(out[V], errors="coerce").fillna(0)
+    return out.dropna(subset=["Ngày", C])
+
+
+def leader_stats(frame: pd.DataFrame) -> pd.DataFrame:
+    """Mỗi mã một dòng: % 1 phiên / 1 tuần / 1 tháng, giá trị giao dịch TB 20 phiên (tỷ đồng), KL so với TB 20 phiên, vị trí so với MA.
+    Mã không có nến ở phiên mới nhất (tạm ngừng / thiếu dữ liệu) hoặc dưới 21 phiên thì bỏ."""
+    if frame.empty:
+        return pd.DataFrame()
+    latest = frame["Ngày"].max()
+    rows = []
+    for code, g in frame.groupby("Mã"):
+        g = g.drop_duplicates("Ngày", keep="last").sort_values("Ngày")
+        if len(g) < 21 or g["Ngày"].iloc[-1] != latest:
+            continue
+        c, v = g[C].to_numpy(float), g[V].to_numpy(float)
+        ma20 = c[-20:].mean()
+        ma50 = c[-50:].mean() if len(c) >= 50 else np.nan
+        v20 = v[-21:-1].mean()
+        a20 = c[-1] >= ma20
+        a50 = (c[-1] >= ma50) if not np.isnan(ma50) else None
+        pos = ("Trên MA20 & 50" if a20 and a50 else "Trên MA20" if a20 else
+               "Dưới MA20, trên MA50" if a50 else "Dưới MA20 & 50" if a50 is not None else
+               "Trên MA20" if a20 else "Dưới MA20")
+        rows.append({"Mã": str(code), "Giá": float(c[-1]),
+                     "chg1": (c[-1] / c[-2] - 1) * 100, "chg5": (c[-1] / c[-6] - 1) * 100, "chg20": (c[-1] / c[-21] - 1) * 100,
+                     "gtgd": float((c[-20:] * v[-20:]).mean() * 1000 / 1e9),
+                     "klr": (v[-1] / v20) if v20 > 0 else np.nan, "pos": pos})
+    return pd.DataFrame(rows)
+
+
+def _lead_table(d: pd.DataFrame, col: str, label: str):
+    show = pd.DataFrame({"Mã": d["Mã"], "Giá (nghìn đ)": d["Giá"], f"% {label}": d[col],
+                         "KL/TB20": d["klr"], "Vị trí MA": d["pos"]})
+    sty = show.style.format({"Giá (nghìn đ)": "{:,.2f}", f"% {label}": "{:+.2f}%", "KL/TB20": "{:.1f}x"}, na_rep="–")
+    mapper = getattr(sty, "map", None) or sty.applymap
+    return mapper(_color_pct, subset=[f"% {label}"])
+
+
+def render_leaders(raw, vn30, on_open, openable):
+    st.subheader("Cổ phiếu dẫn dắt theo nhóm")
+    lists = group_lists(vn30)
+    all_codes = {c for g, _ in LEAD_GROUPS for c in lists.get(g, [])}
+    if not all_codes:
+        st.info("Chưa có danh sách thành viên nhóm (data/nhom_von_hoa.csv).")
+        return
+    frame = stock_frame(raw, all_codes)
+    stats = leader_stats(frame)
+    if stats.empty:
+        st.info("Chưa có đủ dữ liệu giá để xếp hạng cổ phiếu.")
+        return
+
+    c1, c2 = st.columns([1.4, 1.8])
+    period = c1.segmented_control("Xếp hạng theo", list(RANK_COL), default="1 tuần", key="cap_rank") or "1 tuần"
+    min_val = c2.selectbox("Thanh khoản tối thiểu", [0, 1, 3, 5, 10, 20], index=3, key="cap_minval",
+                           format_func=lambda v: "Không lọc thanh khoản" if v == 0 else f"≥ {v} tỷ đồng/phiên (TB 20 phiên)")
+    col = RANK_COL[period]
+    shown_codes: list[str] = []
+    cols = st.columns(len(LEAD_GROUPS), gap="medium")
+    for cc, (g, name) in zip(cols, LEAD_GROUPS):
+        members = lists.get(g, [])
+        with cc:
+            st.markdown(f"**{name}**")
+            if not members:
+                st.caption("Chưa có danh sách thành viên.")
+                continue
+            d = stats[stats["Mã"].isin(members)]
+            ok = d[d["gtgd"] >= min_val].dropna(subset=[col]).sort_values(col, ascending=False)
+            st.caption(f"{len(d)}/{len(members)} mã có dữ liệu · {len(ok)} mã đủ thanh khoản")
+            if ok.empty:
+                st.caption("Không có mã nào đủ điều kiện.")
+                continue
+            top = ok.head(5)
+            bottom = ok.tail(3).sort_values(col)
+            bottom = bottom[~bottom["Mã"].isin(top["Mã"])]
+            st.caption(f"Mạnh nhất {period}")
+            st.dataframe(_lead_table(top, col, period), hide_index=True, use_container_width=True)
+            if not bottom.empty:
+                st.caption(f"Yếu nhất {period}")
+                st.dataframe(_lead_table(bottom, col, period), hide_index=True, use_container_width=True)
+            shown_codes += list(top["Mã"]) + list(bottom["Mã"])
+
+    if on_open is not None:
+        pick = [c for c in dict.fromkeys(shown_codes) if openable is None or c in openable]
+        if pick:
+            o1, o2 = st.columns([2, 1])
+            code = o1.selectbox("Xem biểu đồ chi tiết của mã", pick, key="cap_open_code")
+            if o2.button("📊 Mở biểu đồ", key="cap_open_btn", use_container_width=True):
+                on_open(code)
+    miss = sorted(all_codes - set(frame["Mã"].astype(str)))
+    st.caption("Thống kê giá và thanh khoản, không phải khuyến nghị đầu tư. Danh sách VNMidcap / VNSmallcap do bạn tự lập (nhom_von_hoa.csv), "
+               "VNSmallcap chỉ gồm khoảng 100 mã vốn hóa lớn nhất của chỉ số. Mã bị loại nếu không có nến ở phiên mới nhất hoặc có dưới 21 phiên."
+               + (f" Chưa có giá: {len(miss)} mã (chạy update_index.py)." if miss else ""))
+
+
 # ------------------------------------------------------------------ TRANG
 def _color_pct(v):
     if pd.isna(v):
@@ -209,7 +359,8 @@ def _perf_view(tbl: pd.DataFrame):
     return mapper(_color_pct, subset=list(tbl.columns[2:]))
 
 
-def render(raw: pd.DataFrame | None = None, data_key: str = ""):
+def render(raw: pd.DataFrame | None = None, data_key: str = "", vn30: list[str] | None = None,
+           on_open=None, openable=None):
     st.title("🏷️ Nhóm vốn hóa")
     S = load_series(raw)
     have = [c for c in MAIN_CODES if c in S]
@@ -288,3 +439,4 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     st.caption(f"Dữ liệu cuối phiên đến {last_day:%d/%m/%Y}. Đường MA tính theo khung {TF_NOUN[tf]}: "
                + ", ".join(f"MA{m}" for m in MA_SET[tf][:2]) + "."
                + (f" Chưa có dữ liệu: {', '.join(missing)}." if missing else ""))
+    render_leaders(raw, vn30, on_open, openable)

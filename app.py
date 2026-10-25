@@ -2582,7 +2582,7 @@ def _route_inner():
     if main == "Thị trường" and sub == "Nhận định VNINDEX":
         return VV.render(raw, DATA_KEY)
     if main == "Thị trường" and sub == "Nhóm vốn hóa":
-        return CG.render(raw, DATA_KEY)
+        return CG.render(raw, DATA_KEY, vn30=VN30_LIST, on_open=_cap_open, openable=set(res_df["Mã"]))
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
@@ -2613,6 +2613,14 @@ def _route_inner():
         return page_stock_tab(sub)
     NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""),
                     NAV.MARKET_DESC.get(sub) if main == "Thị trường" else None)
+
+
+def _cap_open(code):
+    """Mở thẻ chi tiết của mã từ tab Nhóm vốn hóa (giống nút \"Xem biểu đồ\" ở các mục khác)."""
+    st.session_state["selected_code"] = code
+    for _k in ("mtf_code", "tab_code"):
+        st.session_state[_k] = code
+    NAV.goto("Cổ phiếu", "Tổng quát")
 
 
 def route():
