@@ -31,6 +31,7 @@ import sector_ranking as SR
 import sector_rotation as SRT
 import market_view as MV
 import vnindex_view as VV
+import cap_groups as CG
 import market_overview as MO
 import my_watchlist as MW
 import sell_card
@@ -2580,6 +2581,8 @@ def _route_inner():
         return MV.render()
     if main == "Thị trường" and sub == "Nhận định VNINDEX":
         return VV.render(raw, DATA_KEY)
+    if main == "Thị trường" and sub == "Nhóm vốn hóa":
+        return CG.render(raw, DATA_KEY)
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":

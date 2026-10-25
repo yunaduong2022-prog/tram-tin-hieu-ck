@@ -4,7 +4,7 @@ import streamlit as st
 # Menu chính -> danh sách tab phụ (rỗng = không có sub-menu)
 MENU = {
     "Vĩ mô": [],
-    "Thị trường": ["Tổng quan", "Góc nhìn thị trường", "Nhận định VNINDEX", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
+    "Thị trường": ["Tổng quan", "Góc nhìn thị trường", "Nhận định VNINDEX", "Nhóm vốn hóa", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
                    "Nhóm ngành", "Kết quả kinh doanh"],
     "Ngành": ["Tổng quan ngành", "Cảnh báo luân chuyển dòng tiền", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
@@ -22,6 +22,7 @@ MARKET_DESC = {
     "Tổng quan": ["Xu hướng, độ rộng, dòng tiền, mức độ rủi ro", "Bản đồ sức mạnh ngành", "Số cổ phiếu phát tín hiệu MUA / CHỜ MUA"],
     "Góc nhìn thị trường": ["Bản tin nhận định thị trường theo ngày"],
     "Nhận định VNINDEX": ["Biểu đồ nến VNINDEX kèm khối lượng, đường MA", "Nhận định tự động: tin tức, dòng tiền, hành động"],
+    "Nhóm vốn hóa": ["Tỷ số VNSmallcap/VN30 và VNSmallcap/VN-Index: dòng tiền chấp nhận rủi ro hay co về cổ phiếu lớn", "Nến VN30, VNMidcap, VNSmallcap", "Hiệu suất so sánh các nhóm"],
     "Dòng tiền khối ngoại": ["Mua/bán ròng", "Top cổ phiếu được mua/bán ròng", "Lũy kế 5–20 phiên"],
     "Dòng tiền tự doanh": ["Theo dõi giao dịch tự doanh (chỉ hiển thị khi có dữ liệu)"],
     "Thanh khoản & độ rộng": ["Giá trị giao dịch", "Số mã tăng / giảm"],
