@@ -13,6 +13,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import fund_guard as FG
 import supertrend as SPT
 import hull_suite as HUL
 import watchlist as WL
@@ -1006,12 +1007,7 @@ def page_filter():
         except Exception: pass
     # Tên công ty, P/B, ROE: data/fundamentals.csv do update_fundamentals.py tự cập nhật; tên sửa tay ở data/ten_cong_ty_tay.csv
     fund_map = {}
-    if os.path.exists("data/fundamentals.csv"):
-        try:
-            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
-            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
-            fund_map = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
-        except Exception: pass
+    fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     if os.path.exists("data/ten_cong_ty_tay.csv"):
         try:
             _nt = pd.read_csv("data/ten_cong_ty_tay.csv", dtype=str)
@@ -1020,6 +1016,8 @@ def page_filter():
                     fund_map.setdefault(_c, {})["Tên công ty"] = _n.strip()
         except Exception: pass
     apply_manual_overrides(fund_map, cap_map)
+    for _w in FG.warnings():
+        st.warning("Dữ liệu cơ bản: " + _w)
     if f.empty:
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
@@ -1121,12 +1119,7 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
             meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
             if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
         except Exception: pass
-    if os.path.exists("data/fundamentals.csv"):
-        try:
-            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
-            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
-            fund_map = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
-        except Exception: pass
+    fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     apply_manual_overrides(fund_map, cap_map)
     return cap_map, fund_map
 
@@ -1966,13 +1959,21 @@ def backtest_card(a, tf, code, include_short):
     pf = "∞" if s["pf"] == float("inf") else f'{s["pf"]:.2f}'
     cnt = f'{s["n"]} (mua {s["buy"]}' + (f', bán {s["sell"]})' if include_short else ")")
     rec = f'{s["rec_n"]} lệnh, {s["rec_exp"]:+.2f}R' if s["rec_n"] else "chưa có lệnh"
+    ideal = E.backtest_stats(a.get("trades_ideal", pd.DataFrame()), a["n"], include_short) if "trades_ideal" in a else None
+    extra = []
+    if ideal is not None:
+        extra.append(row("Kỳ vọng lý tưởng (không phí, không T+2)", f'{ideal["exp"]:+.2f}R'))
+        extra.append(row("Chênh lệch do thực tế giao dịch", f'{s["exp"] - ideal["exp"]:+.2f}R'))
+    if s.get("skipped"):
+        extra.append(row("Tín hiệu không mua được (khóa trần)", f'{s["skipped"]}'))
     html = [badge, '<div style="height:6px"></div>', row("Số lệnh", cnt), row("Tỷ lệ thắng", f'{s["win"]:.0f}%'),
             row("Kỳ vọng mỗi lệnh", f'{s["exp"]:+.2f}R'), row("Profit factor", pf),
-            row("Sụt giảm tối đa", f'{s["mdd"]:.1f}R'), row("30% dữ liệu mới nhất", rec),
+            row("Sụt giảm tối đa", f'{s["mdd"]:.1f}R'), row("30% dữ liệu mới nhất", rec), *extra,
             '<div class="muted" style="margin-top:6px">Kỳ vọng = tỷ lệ thắng × lãi trung bình − tỷ lệ thua × lỗ trung bình, '
             'tính theo R (1R = mức rủi ro mỗi lệnh). Thắng nhiều chưa chắc có lời. Cần từ 20 lệnh trở lên và kỳ vọng '
-            'dương ở cả phần dữ liệu mới nhất mới đáng tin. Tín hiệu Mua theo giá + khối lượng; vào tại giá đóng cửa, cắt lỗ 1,5 ATR, chốt 2R, giữ tối đa '
-            '20 nến.' + ('' if include_short else ' Chỉ tính lệnh Mua (thị trường VN không bán khống).') + '</div>']
+            'dương ở cả phần dữ liệu mới nhất mới đáng tin. Tín hiệu Mua theo giá + khối lượng; vào ở giá mở cửa phiên kế tiếp, cắt lỗ 1,5 ATR, chốt 2R, giữ tối đa '
+            '20 nến. Đã tính phí môi giới 0,15%/chiều, thuế bán 0,1%, trượt giá 0,1%/chiều, bước giá, T+2 (khung Ngày), gap qua cắt lỗ và phiên khóa trần/sàn '
+            '(chỉnh ở BT_COST trong engine.py). Chưa tính thanh khoản thực tế và thiên lệch sống sót của rổ mã.' + ('' if include_short else ' Chỉ tính lệnh Mua (thị trường VN không bán khống).') + '</div>']
     return card(title, "".join(html))
 
 
@@ -2024,7 +2025,7 @@ def signals_card(a, include_short):
     for _, r in t.tail(8).iloc[::-1].iterrows():
         buy = r["dir"] == 1
         ref = "" if (buy or include_short) else ' <span class="muted">(tham khảo)</span>'
-        val = '<span class="muted">đang mở</span>' if r["open"] else (
+        val = '<span class="muted">không mua được (khóa trần)</span>' if bool(r.get("skip", False)) else '<span class="muted">đang mở</span>' if r["open"] else (
             f'<span class="{"c-green" if r["R"] > 0 else "c-red"}">{r["R"]:+.2f}R</span>')
         html.append(f'<div class="row"><span class="{"c-green" if buy else "c-red"}"><b>{"Mua" if buy else "Bán"}</b> '
                     f'{r["Ngày"]:%d/%m/%Y}{ref}<br><span class="muted">{E.PV_LABEL.get(r["code"], "")}</span></span>'
@@ -2425,12 +2426,7 @@ def page_stock_tab(sub):
     st.title(f"📊 Cổ phiếu · {sub}")
     header()
     fm = {}
-    if os.path.exists("data/fundamentals.csv"):
-        try:
-            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
-            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
-            fm = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
-        except Exception: pass
+    fm = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     cap = {}
     if os.path.exists("data/stock_metadata.csv"):
         try:

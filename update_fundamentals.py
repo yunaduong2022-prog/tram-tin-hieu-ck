@@ -23,6 +23,7 @@ import unicodedata
 import pandas as pd
 
 import eod_fetch as EF
+import fund_guard as FG
 
 FUND = "data/fundamentals.csv"
 MANUAL_NAMES = "data/ten_cong_ty_tay.csv"
@@ -302,7 +303,8 @@ def read_cache() -> pd.DataFrame:
     df["Mã"] = df["Mã"].str.upper().str.strip()
     for c in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N"):
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df[COLS].drop_duplicates("Mã", keep="last")
+    df = df[COLS].drop_duplicates("Mã", keep="last")
+    return FG.sanitize(df)[0]   # không giữ lại số mặc định / ngoài miền từ các lần chạy trước
 
 
 def read_manual_names() -> dict[str, str]:
@@ -400,6 +402,9 @@ def main(argv=None) -> int:
         cache.loc[s, "Cập nhật"] = today.strftime(DATE_FMT)
 
     out = cache.reset_index().rename(columns={"index": "Mã"})[COLS]
+    out, _fg_warns = FG.sanitize(out)
+    for _w in _fg_warns:
+        print("CẢNH BÁO dữ liệu:", _w)
     out = out[out["Mã"].isin(symbols) | out["Tên công ty"].notna()].sort_values("Mã")
     os.makedirs("data", exist_ok=True)
     out.round({"P/B": 2, "ROE": 1, "P/E": 1, "P/B TB 3N": 2, "P/E TB 3N": 1}).to_csv(FUND, index=False)

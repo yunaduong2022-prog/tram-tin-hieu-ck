@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v15"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v16"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -645,40 +645,126 @@ def describe_items(g):
 
 
 # ------------------------------------------------------------------ BACKTEST
-def run_backtest(g: pd.DataFrame, max_hold=20, sl_atr=1.5, rr=2.0) -> pd.DataFrame:
-    """Tín hiệu = cảnh báo Mua/Bán theo giá + khối lượng. Vào tại giá đóng cửa, SL = 1.5 ATR, TP = 2R."""
+# Mô hình chi phí và quy tắc giao dịch của thị trường VN (chỉnh tại đây). Giá trong app tính bằng nghìn đồng.
+BT_COST = {
+    "fee": 0.0015,        # phí môi giới mỗi chiều (0,15%); nhiều công ty thu 0,15-0,25%, hãy chỉnh theo tài khoản của bạn
+    "sell_tax": 0.001,    # thuế bán chứng khoán 0,1% trên giá trị bán
+    "slip": 0.001,        # trượt giá mỗi chiều (0,1%): mua cao hơn, bán thấp hơn giá khớp lý tưởng
+    "limit": 0.07,        # biên độ giá ngày: HOSE 7%, HNX 10%, UPCoM 15% (dùng để nhận ra phiên khóa trần/sàn)
+    "lock_bars": 2,       # T+2: mua ở phiên T thì từ phiên T+2 mới bán được (chỉ áp cho khung Ngày)
+}
+
+
+def tick_size(p: float) -> float:
+    """Bước giá HOSE (nghìn đồng): <10 -> 10đ, 10-50 -> 50đ, >=50 -> 100đ."""
+    return 0.01 if p < 10 else 0.05 if p < 50 else 0.1
+
+
+def tick_round(p: float, up: bool) -> float:
+    t = tick_size(p)
+    k = p / t
+    k = np.ceil(k - 1e-9) if up else np.floor(k + 1e-9)
+    return round(float(k * t), 4)
+
+
+def run_backtest(g: pd.DataFrame, max_hold=20, sl_atr=1.5, rr=2.0, realistic=True, tf="D", cost=None) -> pd.DataFrame:
+    """Tín hiệu = cảnh báo Mua/Bán theo giá + khối lượng. Cắt lỗ = 1,5 ATR, chốt = 2R tính từ giá đóng cửa phiên tín hiệu.
+
+    realistic=False: mô hình lý tưởng cũ (vào tại đóng cửa tín hiệu, không phí, không T+2) để so sánh.
+    realistic=True (mặc định):
+      - Vào lệnh ở giá MỞ CỬA phiên kế tiếp (+ trượt giá, làm tròn lên bước giá). Phiên đó khóa trần thì không mua được: ghi `skip`.
+      - Phí môi giới hai chiều + thuế bán + trượt giá khi thoát, tính vào R. 1R vẫn là mức rủi ro dự kiến (sl_atr * ATR).
+      - Khung Ngày: T+2. Chạm cắt lỗ trong phiên T, T+1 thì chỉ bán được ở giá mở cửa T+2; chạm mục tiêu trong 2 phiên đó không tính.
+      - Gap xuống dưới cắt lỗ: khớp ở giá mở cửa chứ không ở đúng giá cắt lỗ. Phiên khóa sàn: không bán được, dời sang phiên sau.
+      - Lệnh Bán (mô phỏng bán khống) chỉ chịu phí và trượt giá, không áp T+2 hay trần/sàn."""
+    cfg = {**BT_COST, **(cost or {})}
+    lock_bars = int(cfg["lock_bars"]) if tf == "D" else 0
     sig, sell = g["PV_signal"] == 1, g["PV_signal"] == -1
-    c, hi, lo, atr = (g["Giá đóng cửa"].values, g["Giá cao nhất"].values,
-                      g["Giá thấp nhất"].values, g["ATR"].values)
+    c, hi, lo, op, atr = (g["Giá đóng cửa"].values, g["Giá cao nhất"].values, g["Giá thấp nhất"].values,
+                          g["Giá mở cửa"].values, g["ATR"].values)
     n, rows = len(g), []
+    cols = ["idx", "Ngày", "dir", "R", "open", "code", "skip"]
+
+    def locked(j, up):
+        """Phiên j khóa trần (up=True) hoặc khóa sàn: nến một giá, đóng cửa lệch >= 90% biên độ so với phiên trước."""
+        if tf != "D" or j < 1 or hi[j] != lo[j]:
+            return False
+        chg = c[j] / c[j - 1] - 1
+        return chg >= 0.9 * cfg["limit"] if up else chg <= -0.9 * cfg["limit"]
+
     for i in np.where(sig | sell)[0]:
         d = 1 if sig.iat[i] else -1
         if not (atr[i] > 0):
             continue
         risk = sl_atr * atr[i]
         sl, tp = c[i] - d * risk, c[i] + d * rr * risk
-        end = min(n, i + 1 + max_hold)
-        r, is_open = None, False
-        if i + 1 >= n:
-            r, is_open = np.nan, True
+        base = {"idx": i, "Ngày": g["Ngày"].iat[i], "dir": d, "code": g["PV_code"].iat[i]}
+
+        if not realistic:   # ---- mô hình lý tưởng cũ
+            end = min(n, i + 1 + max_hold)
+            r, is_open = None, False
+            if i + 1 >= n:
+                r, is_open = np.nan, True
+            else:
+                for j in range(i + 1, end):
+                    if (lo[j] <= sl) if d == 1 else (hi[j] >= sl):
+                        r = -1.0
+                        break
+                    if (hi[j] >= tp) if d == 1 else (lo[j] <= tp):
+                        r = rr
+                        break
+                if r is None:
+                    r = d * (c[end - 1] - c[i]) / risk
+                    is_open = (end == n and end - i - 1 < max_hold)
+            rows.append({**base, "R": r, "open": is_open, "skip": False})
+            continue
+
+        e = i + 1
+        if e >= n:
+            rows.append({**base, "R": np.nan, "open": True, "skip": False})
+            continue
+        if d == 1 and locked(e, up=True):   # mở cửa khóa trần: lệnh mua không khớp được
+            rows.append({**base, "R": np.nan, "open": False, "skip": True})
+            continue
+        entry = tick_round(op[e] * (1 + cfg["slip"]), up=True) if d == 1 else op[e] * (1 - cfg["slip"])
+        end = min(n, e + max_hold)
+        exit_px, pending = None, False
+        for j in range(e, end):
+            k = j - e
+            if d == 1 and (k < lock_bars or locked(j, up=False)):
+                if lo[j] <= sl:
+                    pending = True          # đã chạm cắt lỗ nhưng chưa bán được
+                continue
+            if pending:
+                exit_px = op[j]
+                break
+            if (lo[j] <= sl) if d == 1 else (hi[j] >= sl):
+                exit_px = min(op[j], sl) if d == 1 else max(op[j], sl)   # gap qua cắt lỗ thì khớp ở giá mở cửa
+                break
+            if (hi[j] >= tp) if d == 1 else (lo[j] <= tp):
+                exit_px = max(op[j], tp) if d == 1 else min(op[j], tp)
+                break
+        is_open = False
+        if exit_px is None:
+            exit_px = c[end - 1]
+            is_open = (end == n and end - e < max_hold)
+        if d == 1:
+            exit_net = tick_round(exit_px * (1 - cfg["slip"]), up=False)
+            costs = cfg["fee"] * (entry + exit_net) + cfg["sell_tax"] * exit_net
         else:
-            for j in range(i + 1, end):
-                if (lo[j] <= sl) if d == 1 else (hi[j] >= sl):
-                    r = -1.0
-                    break
-                if (hi[j] >= tp) if d == 1 else (lo[j] <= tp):
-                    r = rr
-                    break
-            if r is None:
-                r = d * (c[end - 1] - c[i]) / risk
-                is_open = (end == n and end - i - 1 < max_hold)
-        rows.append({"idx": i, "Ngày": g["Ngày"].iat[i], "dir": d, "R": r, "open": is_open, "code": g["PV_code"].iat[i]})
-    return pd.DataFrame(rows, columns=["idx", "Ngày", "dir", "R", "open", "code"])
+            exit_net = exit_px * (1 + cfg["slip"])
+            costs = cfg["fee"] * (entry + exit_net) + cfg["sell_tax"] * entry
+        r = (d * (exit_net - entry) - costs) / risk
+        rows.append({**base, "R": r, "open": is_open, "skip": False})
+    return pd.DataFrame(rows, columns=cols)
 
 
 def backtest_stats(t: pd.DataFrame, n_bars: int, include_short: bool):
     if t.empty:
         return None
+    skipped = int(t["skip"].sum()) if "skip" in t else 0
+    if "skip" in t:
+        t = t[~t["skip"].astype(bool)]
     t = t[~t["open"].astype(bool)]
     if not include_short:
         t = t[t["dir"] == 1]
@@ -692,7 +778,7 @@ def backtest_stats(t: pd.DataFrame, n_bars: int, include_short: bool):
     rec = t[t["idx"] >= 0.7 * n_bars]
     return {"n": len(t), "buy": int((t["dir"] == 1).sum()), "sell": int((t["dir"] == -1).sum()),
             "win": len(wins) / len(t) * 100, "exp": r.mean(), "pf": pf,
-            "mdd": float(abs((eq - peak).min())), "rec_n": len(rec),
+            "mdd": float(abs((eq - peak).min())), "rec_n": len(rec), "skipped": skipped,
             "rec_exp": rec["R"].mean() if len(rec) else np.nan}
 
 
@@ -702,10 +788,12 @@ def analyze_frame(g: pd.DataFrame, tf: str) -> dict:
     n = len(g)
     out = {"tf": tf, "g": g, "n": n, "enough": n >= MIN_BARS, "partial": n < FULL_BARS,
            "total": 0.0, "bias": 0.0, "dir": 0, "items": [], "fc": None,
-           "trades": pd.DataFrame(columns=["idx", "Ngày", "dir", "R", "open", "code"]),
+           "trades": pd.DataFrame(columns=["idx", "Ngày", "dir", "R", "open", "code", "skip"]),
+           "trades_ideal": pd.DataFrame(columns=["idx", "Ngày", "dir", "R", "open", "code", "skip"]),
            "zones": [], "wy": None,
            "elliott": {"title": "", "tag": "gray", "points": [], "text": ""}}
-    out["trades"] = run_backtest(g)
+    out["trades"] = run_backtest(g, tf=tf)
+    out["trades_ideal"] = run_backtest(g, realistic=False)
     out["pv_now"], out["pv_prev"] = latest_pv(g)
     if not out["enough"]:
         return out

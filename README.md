@@ -183,3 +183,8 @@ Tab **Thị trường → Dòng tiền khối ngoại** đã có dashboard để
 **Nạp dữ liệu:** mở tab này, tải `foreign_flow_template.csv`, điền dữ liệu từ nguồn dữ liệu chứng khoán phù hợp rồi tải CSV lên. Các cột bắt buộc: `Ngày`, `Mã`, `Giá trị mua`, `Giá trị bán`. Các cột bổ sung được hỗ trợ: `Sàn`, `Khối lượng mua`, `Khối lượng bán`, `Giá đóng cửa`, `Tổng GTGD`, `Nhóm ngành`. Giá trị mua/bán và tổng GTGD phải cùng đơn vị (khuyến nghị tỷ đồng).
 
 File sau khi nạp được lưu tại `data/foreign_flow.csv`. Để dữ liệu tồn tại sau các lần deploy và được chia sẻ với người dùng app, cần commit file này lên repo; không nên dùng upload trong app làm phương thức nhập dữ liệu sản xuất lâu dài. Tự động cập nhật qua API chưa được bật vì cần chọn nhà cung cấp có dữ liệu khối ngoại, xác thực API và điều kiện cấp phép. App không suy ra giao dịch khối ngoại từ dữ liệu OHLCV.
+
+
+## Chặn số giả và backtest thực tế (mới)
+- `fund_guard.py`: P/B, P/E, ROE chỉ hiển thị khi là số thật. Cột có từ 80% ô cùng một giá trị (ví dụ cả rổ P/B 3.0, ROE 17) bị ẩn kèm cảnh báo ở trang Bộ lọc; giá trị ngoài miền hợp lý bị bỏ. Chạy `python fund_guard.py` để kiểm tra, thêm `--fix` để làm sạch `data/fundamentals.csv`. `update_fundamentals.py` cũng dùng bộ chặn này khi ghi file.
+- `engine.run_backtest` mặc định mô phỏng giao dịch thực: vào ở giá mở cửa phiên kế tiếp, phí môi giới 0,15%/chiều, thuế bán 0,1%, trượt giá 0,1%/chiều, bước giá HOSE, T+2 (khung Ngày), gap qua cắt lỗ, phiên khóa trần (không mua được) và khóa sàn (không bán được). Chỉnh ở `BT_COST` đầu mục BACKTEST trong `engine.py`. `realistic=False` giữ mô hình lý tưởng cũ để so sánh; thẻ Backtest hiển thị cả hai.
