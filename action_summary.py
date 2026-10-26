@@ -311,3 +311,16 @@ def text(ctx: dict) -> str:
     for pos, head, why, zone in _rows(ctx, s, lv):
         rows.append(f"• <b>{esc(pos)}:</b> <b>{esc(head)}</b> {esc(why)}" + (f"\n   ↳ {esc(zone)}" if zone else ""))
     return "<b>📝 Tóm tắt nhanh</b>\n" + pic + "\n\n<b>🎯 Kế hoạch hành động</b>\n" + "\n".join(rows)
+
+
+def parts(ctx: dict) -> dict:
+    """Các phần rời để Telegram tự ghép: {"picture": "Ngắn hạn…\\nTrung hạn…", "cash": (kết luận, giải thích, mốc giá) của vị thế Cầm tiền mặt}.
+    Thiếu giá thì trả {}."""
+    if not _ok(ctx.get("close")):
+        return {}
+    s = _signals(ctx)
+    lv = _levels(ctx, s)
+    pic = _picture(s).replace("</div><div>", "\n")
+    pic = re.sub(r"</?div[^>]*>", "", pic)
+    rows = {pos: (head, why, zone) for pos, head, why, zone in _rows(ctx, s, lv)}
+    return {"picture": pic, "cash": rows.get("Cầm tiền mặt")}

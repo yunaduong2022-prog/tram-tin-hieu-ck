@@ -42,6 +42,16 @@ CSV_PATH = "data/eod_prices.csv"
 STATE_PATH = "data/wy_alert_state.json"
 MIN_VALUE_BN = 2.0            # bỏ mã có giá trị khớp trung vị 20 phiên dưới 2 tỷ đồng
 MIN_BARS = WY.MIN_BARS
+# Quy tắc kế hoạch giá (tính từ vùng Wyckoff: Bot = biên dưới, Top = biên trên, H = Top − Bot). Sửa ở đây.
+PLAN = {
+    "zone_low_frac": 0.35,       # pha A/B/C: vùng thăm dò = Bot → Bot + 35% H (không cao hơn giá hiện tại)
+    "retest_frac": 0.25,         # pha D/E: vùng thăm dò = Top − 25% H → Top × 1.01 (nhịp test lại biên trên)
+    "stop_buffer": 0.01,         # cắt lỗ nằm dưới Bot 1% (tránh quét râu)
+    "retest_stop": 0.03,         # pha D/E: cắt lỗ dưới biên dưới vùng thăm dò 3%, nhưng không thấp hơn Bot
+    "targets": (0.0, 0.5, 1.0, 1.5),   # mốc target = Top + k × H; T1 là mốc đầu tiên cao hơn giá ≥ 3%, T2 là mốc kế tiếp
+    "min_gain": 0.03,
+    "fallback": (0.08, 0.15),    # không có mốc nào phù hợp (giá đã chạy xa): +8% / +15%
+}
 BUY_PHASES = ("C", "D")        # "canh mua" = tích lũy đã có Spring (pha C) hoặc SOS (pha D); sửa ở đây nếu muốn đổi
 ORDER = {"acc": ["C", "D", "E", "B", "A"], "dist": ["D", "E", "C", "B", "A"]}
 PHASE_NOTE = {
@@ -136,34 +146,61 @@ def _block(r, held: set[str], watch: set[str]) -> str:
     return html.escape("\n".join(lines))
 
 
+def _plan_levels(r) -> dict:
+    """Vùng mua thăm dò, giá cắt lỗ, Target 1, Target 2 (theo PLAN). Thiếu dữ liệu thì trả {}."""
+    close, top, bot = float(r["Giá"]), float(r["Top"]), float(r["Bot"])
+    if not (close > 0 and top > bot > 0):
+        return {}
+    H = top - bot
+    if r["Pha"] in ("D", "E"):
+        lo, hi = top - PLAN["retest_frac"] * H, top * 1.01
+    else:
+        lo, hi = bot, bot + PLAN["zone_low_frac"] * H
+    hi = min(hi, close)                          # không canh mua cao hơn giá hiện tại
+    lo = min(lo, hi * 0.98)                      # vùng rộng tối thiểu ~2%
+    if r["Pha"] in ("D", "E"):
+        stop = max(bot, lo * (1 - PLAN["retest_stop"]))
+    else:
+        stop = bot * (1 - PLAN["stop_buffer"])
+    levels = [top + k * H for k in PLAN["targets"]]
+    ups = [x for x in levels if x > close * (1 + PLAN["min_gain"])]
+    ups += [close * (1 + g) for g in PLAN["fallback"]]
+    t1, t2 = ups[0], ups[1]
+    return {"lo": lo, "hi": hi, "stop": stop, "t1": t1, "t2": t2,
+            "stop_pct": (stop / close - 1) * 100, "t1_pct": (t1 / close - 1) * 100, "t2_pct": (t2 / close - 1) * 100}
+
+
 def _stock_msg(r, held: set[str], watch: set[str]) -> str:
-    """Một tin nhắn riêng cho 1 mã: cấu trúc Wyckoff + Tóm tắt nhanh + Kế hoạch hành động."""
+    """Một tin riêng cho 1 mã: Wyckoff, Ngắn/Trung hạn, hướng xử lý khi cầm tiền mặt, vùng mua thăm dò, cắt lỗ, Target 1-2."""
     mark = "📌 " if r["Mã"] in held else ("👁 " if r["Mã"] in watch else "")
     chg = "" if pd.isna(r["Chg"]) else f" ({r['Chg']:+.1f}%)"
     esc = html.escape
-    wy_lines = [f"{esc(r['Nhãn'])} · {esc(PHASE_NOTE[r['Loại']][r['Pha']])}",
-                f"Vùng {r['Bot']:,.2f} – {r['Top']:,.2f} · {r['Nến']} nến · khớp mẫu {r['Khớp']}%"]
-    if r["SK"]:
-        wy_lines.append(f"Sự kiện gần nhất: {esc(r['SK'])}")
-    if r["Xác nhận"]:
-        wy_lines.append(f"✅ {esc(r['Xác nhận'][0])}")
-    if r["Vô hiệu"]:
-        wy_lines.append(f"⛔ {esc(r['Vô hiệu'][0])}")
     icon = "🟢" if r["Loại"] == "acc" else "🔴"
     head = f"{icon} {mark}<b>{esc(r['Mã'])}</b> · Giá {r['Giá']:,.2f}{chg} · GTGD {r['GTGD']:,.0f} tỷ"
+    wy_line = f"<b>Wyckoff</b> {esc(r['Nhãn'])} · {esc(PHASE_NOTE[r['Loại']][r['Pha']])}"
     ctx = {"code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"],
            "wy": r["wy"], "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": 0, "div": [], "zone": None}
     try:
-        plan = AS.text(ctx)
+        pt = AS.parts(ctx)
     except Exception as e:  # noqa: BLE001
         print(f"  không dựng được tóm tắt {r['Mã']}: {e}")
-        plan = ""
+        pt = {}
+    block1 = wy_line + ("\n" + pt["picture"] if pt.get("picture") else "")
+    cash = pt.get("cash")
+    action = ""
+    if cash:
+        _, why, zone = cash
+        action = (why[:1].upper() + why[1:]) + (f"\n   ↳ {zone}" if zone else "")
+    lv = _plan_levels(r)
+    plan = ""
+    if lv:
+        plan = (f"Vùng mua thăm dò: {lv['lo']:,.2f} – {lv['hi']:,.2f}\n"
+                f"Cắt lỗ nếu sai: {lv['stop']:,.2f} ({lv['stop_pct']:+.1f}%)\n"
+                f"Target 1: {lv['t1']:,.2f} ({lv['t1_pct']:+.1f}%)\n"
+                f"Target 2: {lv['t2']:,.2f} ({lv['t2_pct']:+.1f}%)")
     foot = "<i>Quy tắc mang tính chủ quan, chỉ để tham khảo, không phải khuyến nghị đầu tư.</i>"
-    parts = [head, "<b>🏗 Wyckoff</b>\n" + "\n".join(wy_lines)] + ([plan] if plan else []) + [foot]
-    msg = "\n\n".join(parts)
-    if len(msg) > TG_LIMIT:                       # an toàn: quá dài thì bỏ phần chân
-        msg = "\n\n".join(parts[:-1])
-    return msg
+    mid = "\n".join(x for x in (action, plan) if x)
+    return "\n\n".join(x for x in (head, block1, mid, foot) if x)
 
 
 def build_acc_messages(show: pd.DataFrame, held: set[str], watch: set[str], cap: int) -> list[str]:
