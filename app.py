@@ -2140,9 +2140,11 @@ def _chart_name(code: str) -> str:
     if str(code).upper() in E.INDEX_CODES:
         return "Chỉ số VN-Index"
     try:
-        return _wb_meta(str(code)).get("Tên", "") or ""
+        name = _wb_meta(str(code)).get("Tên", "") or ""
     except Exception:  # noqa: BLE001
         return ""
+    # "Công ty cổ phần" (không phân biệt hoa/thường) -> "CTCP"
+    return re.sub(r"công\s+ty\s+cổ\s+phần", "CTCP", str(name), flags=re.IGNORECASE)
 
 
 def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
@@ -2427,7 +2429,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         price_m = next((m for m in metrics if m["label"] == "Giá"), None)
         others = [m for m in metrics if m is not price_m]
         NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
-        name_lines = textwrap.wrap(_chart_name(code) or "", 40)
+        NAME_WRAP = 60                                  # số ký tự tối đa mỗi dòng tên (vùng bên phải mã rộng ~80% biểu đồ, đủ chứa ~60-65 ký tự cỡ 26px)
+        name_lines = textwrap.wrap(_chart_name(code) or "", NAME_WRAP)
         top, bot = 150, 10
         code_w = 0.20                                  # phần bên trái dành cho mã + giá
         step = (1 - code_w) / max(1, len(others))
