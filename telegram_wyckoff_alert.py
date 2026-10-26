@@ -70,6 +70,19 @@ def _last(d: pd.DataFrame, col: str) -> float:
     return float(d[col].iat[-1]) if col in d.columns and pd.notna(d[col].iat[-1]) else float("nan")
 
 
+def _recent_low(d: pd.DataFrame, close: float):
+    """Đáy gần nhất (swing low đã xác nhận, k = 3 nến) thấp hơn giá hiện tại: (giá, ngày). Không có thì lấy đáy 20 phiên (Support_20) nếu thấp hơn giá."""
+    try:
+        _, _, stack = E.swing_state(d["Giá cao nhất"].to_numpy(float), d["Giá thấp nhất"].to_numpy(float), 3)
+        for j, t, p in reversed(stack):
+            if t == "L" and p < close:
+                return float(p), pd.Timestamp(d["Ngày"].iat[j])
+    except Exception:  # noqa: BLE001
+        pass
+    sup = _last(d, "Support_20")
+    return (sup, None) if sup == sup and 0 < sup < close else None
+
+
 def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFrame, pd.Timestamp]:
     """Trả (bảng mã có cấu trúc tích lũy / phân phối, ngày dữ liệu mới nhất)."""
     raw = E.clean_raw(pd.read_csv(path, dtype={"Mã": str}))
@@ -101,6 +114,7 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
         liq = float(np.median(c[-20:] * v[-20:]) * 1000 / 1e9)
         if liq < min_value:
             continue
+        low_pv = _recent_low(d, float(c[-1]))
         chg = d["Chg_%"].iat[-1] if "Chg_%" in d.columns else np.nan
         ev = max(w["events"], key=lambda x: x["i"]) if w["events"] else None
         rows.append({
@@ -111,6 +125,8 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
             "Xác nhận": (w["trigger"]["txt"], float(w["trigger"]["p"])) if w.get("trigger") else None,
             "Vô hiệu": (w["inval"]["txt"], float(w["inval"]["p"])) if w.get("inval") else None,
             "GTGD": liq, "Lean": lean, "FC": fc,
+            "tenkan": _last(d, "Tenkan"), "kijun": _last(d, "Kijun"), "spanA": _last(d, "SpanA"), "spanB": _last(d, "SpanB"),
+            "atr": _last(d, "ATR"), "low_pv": low_pv,
             "wy": WY.compact(w),
             "ma20": _last(d, "MA20"), "ma50": _last(d, "MA50"), "ma200": _last(d, "MA200"),
             "sup": _last(d, "Support_20"), "res": _last(d, "Resistance_20"),
@@ -144,16 +160,53 @@ def _lean_line(r) -> str:
     return "Dự báo nghiêng Tăng" if lean > 0 else "Dự báo nghiêng Giảm" if lean < 0 else "Dự báo chưa nghiêng rõ"
 
 
-def _lean_plan(r) -> list[str]:
-    """Nghiêng Tăng thì thêm vùng chờ mua, cắt lỗ, target (lấy từ dự báo của biểu đồ: vùng vào = giá ± 0,25 ATR, cắt lỗ 1,5 ATR, T1 = 2R, T2 = 3R)."""
-    fc = r["FC"]
-    if int(r["Lean"] or 0) <= 0 or not isinstance(fc, dict):
-        return []
+SUP_STOP_ATR = 0.5            # dự báo chưa rõ: cắt lỗ nằm dưới hỗ trợ này 0,5 ATR
+
+
+def _support_zone(r):
+    """Dự báo chưa nghiêng rõ: (thấp, cao, nguồn) của vùng hỗ trợ để đặt mốc tham gia.
+    - Giá nằm trên cả Tenkan và Kijun: hai đường này là hỗ trợ.
+    - Giá dưới mây Ichimoku: đáy gần nhất là hỗ trợ.
+    Không thuộc hai trường hợp thì trả None."""
     c = float(r["Giá"])
-    pct = lambda x: (float(x) / c - 1) * 100  # noqa: E731
-    return [f"  🎯 VÙNG CHỜ MUA {fc['lo']:,.2f} – {fc['hi']:,.2f}",     # khối <pre> không in đậm được nên nhấn bằng icon + chữ hoa
-            f"  Cắt lỗ {fc['sl']:,.2f} ({pct(fc['sl']):+.1f}%)",
-            f"  Target 1 {fc['t1']:,.2f} ({pct(fc['t1']):+.1f}%) · Target 2 {fc['t2']:,.2f} ({pct(fc['t2']):+.1f}%)"]
+    tk, kj, a, b = r["tenkan"], r["kijun"], r["spanA"], r["spanB"]
+    ok = lambda x: x == x and x > 0  # noqa: E731
+    if ok(tk) and ok(kj) and c > max(tk, kj):
+        return min(tk, kj), max(tk, kj), "Tenkan–Kijun"
+    if ok(a) and ok(b) and c < min(a, b) and r["low_pv"]:
+        p, dt = r["low_pv"]
+        atr = r["atr"] if r["atr"] == r["atr"] and r["atr"] > 0 else c * 0.02
+        return p, p + 0.25 * atr, f"đáy {dt:%d/%m}" if dt is not None else "đáy 20 phiên"
+    return None
+
+
+def _lean_plan(r) -> list[str]:
+    """Vùng chờ mua / cắt lỗ / target.
+    - Nghiêng Tăng: lấy từ dự báo của biểu đồ (vùng vào = giá ± 0,25 ATR, cắt lỗ 1,5 ATR, T1 = 2R, T2 = 3R).
+    - Chưa nghiêng rõ: vùng chờ mua = hỗ trợ (Tenkan–Kijun hoặc đáy gần nhất), cắt lỗ dưới hỗ trợ 0,5 ATR, T1 / T2 = 2R / 3R tính từ giữa vùng (% cắt lỗ / target cũng tính từ giữa vùng).
+    - Nghiêng Giảm: không đưa kế hoạch mua."""
+    lean, c = int(r["Lean"] or 0), float(r["Giá"])
+    ref = c                                   # mốc tính % của cắt lỗ / target: giá hiện tại, hoặc giữa vùng chờ mua nếu vùng nằm thấp hơn giá
+    src = ""
+    if lean > 0 and isinstance(r["FC"], dict):
+        fc = r["FC"]
+        lo, hi, sl, t1, t2 = fc["lo"], fc["hi"], fc["sl"], fc["t1"], fc["t2"]
+    elif lean == 0 and (z := _support_zone(r)):
+        lo, hi, src = z
+        hi = min(max(hi, lo * 1.005), c)
+        atr = r["atr"] if r["atr"] == r["atr"] and r["atr"] > 0 else c * 0.02
+        sl = lo - SUP_STOP_ATR * atr
+        mid = (lo + hi) / 2
+        risk = mid - sl
+        t1, t2 = mid + 2 * risk, mid + 3 * risk
+        ref = mid
+        src = f" ({src}" + (f" · cách giá {(mid / c - 1) * 100:+.1f}%" if mid < c * 0.995 else "") + ")"
+    else:
+        return []
+    pct = lambda x: (float(x) / ref - 1) * 100  # noqa: E731
+    return [f"  🎯 VÙNG CHỜ MUA {lo:,.2f} – {hi:,.2f}{src}",     # khối <pre> không in đậm được nên nhấn bằng icon + chữ hoa
+            f"  Cắt lỗ {sl:,.2f} ({pct(sl):+.1f}%)",
+            f"  Target 1 {t1:,.2f} ({pct(t1):+.1f}%) · Target 2 {t2:,.2f} ({pct(t2):+.1f}%)"]
 
 
 def _picture_plain(r) -> list[str]:
@@ -227,8 +280,13 @@ def _stock_msg(r, held: set[str], watch: set[str]) -> str:
         action = (why[:1].upper() + why[1:]) + (f"\n   ↳ {zone}" if zone else "")
     lv = _plan_levels(r)
     plan = ""
+    try:
+        mid_pos = AS._signals(ctx)["mid"] == "+"
+    except Exception:  # noqa: BLE001
+        mid_pos = False
+    zone_name = "Vùng chờ mua" if mid_pos else "Vùng mua thăm dò"      # trung hạn tích cực thì gọi là vùng chờ mua
     if lv:
-        plan = (f"Vùng mua thăm dò: {lv['lo']:,.2f} – {lv['hi']:,.2f}\n"
+        plan = (f"{zone_name}: {lv['lo']:,.2f} – {lv['hi']:,.2f}\n"
                 f"Cắt lỗ nếu sai: {lv['stop']:,.2f} ({lv['stop_pct']:+.1f}%)\n"
                 f"Target 1: {lv['t1']:,.2f} ({lv['t1_pct']:+.1f}%)\n"
                 f"Target 2: {lv['t2']:,.2f} ({lv['t2_pct']:+.1f}%)")
@@ -262,12 +320,15 @@ def _sorted(d: pd.DataFrame, kind: str, held: set[str], watch: set[str]) -> pd.D
     return d.sort_values(["_p", "_o", "Khớp"], ascending=[True, True, False])
 
 
+SEP = "─" * 26                  # đường kẻ ngăn cách các mã trong mục cảnh báo phân phối
+
+
 def _section_chunks(title: str, total: int, items: list[str], more: str, limit: int = TG_LIMIT) -> list[str]:
     """Chia 1 mục (tích lũy / phân phối) thành nhiều khối <pre>, mỗi khối không vượt quá giới hạn Telegram.
     Mỗi khối tự đóng/mở thẻ <pre> riêng nên tin nhắn nào cũng hợp lệ."""
     def render(body: list[str], first: bool) -> str:
         t = f"{title} ({total} mã)" if first else f"{title} (tiếp)"
-        return f"<b>{t}</b>\n<pre>{chr(10).join(body)}</pre>"
+        return f"<b>{t}</b>\n<pre>{(chr(10) + SEP + chr(10)).join(body)}</pre>"
 
     budget = limit - len(more) - 40            # chừa chỗ cho dòng "… và N mã khác" và khoảng trắng nối tin
     chunks: list[str] = []
