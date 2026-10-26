@@ -4,6 +4,8 @@
 Dùng đúng wyckoff.analyze() như thẻ Wyckoff / biểu đồ trong app (khung Ngày, dữ liệu qua engine.add_indicators).
   🟢 TÍCH LŨY (gồm tái tích lũy): sắp theo pha C, D, E, B, A (C/D = đã có Spring / SOS; A/B chỉ để quan sát)
   🔴 CẢNH BÁO PHÂN PHỐI (gồm tái phân phối): sắp theo pha D, E, C, B, A (D/E = đã thủng biên dưới / đang markdown)
+Mỗi mã có thêm dòng "Dự báo nghiêng Tăng / Giảm" (cùng phép tính với biểu đồ khung Ngày). Mục phân phối ghi gọn 3 dòng;
+nếu nghiêng Tăng thì thêm Vùng chờ mua, Cắt lỗ, Target.
 Mã trong data/co_phieu_cua_toi.csv được đánh dấu 📌 và xếp lên đầu; watchlist 👁.
 
 Mặc định chỉ gửi mã MỚI xuất hiện hoặc ĐỔI loại / ĐỔI pha so với lần gửi trước (nhớ trong data/wy_alert_state.json),
@@ -87,6 +89,12 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
             continue
         if not w or w["kind"] not in ("acc", "dist") or not w["phase"]:
             continue
+        try:                                          # dự báo nghiêng tăng / giảm: cùng phép tính với biểu đồ khung Ngày trong app
+            fa = E.analyze_frame(d, "D")
+            lean, fc = (int(fa["dir"]), fa["fc"]) if fa["enough"] else (0, None)
+        except Exception as e:  # noqa: BLE001
+            print(f"  không tính được dự báo {code}: {e}")
+            lean, fc = 0, None
         c = g["Giá đóng cửa"].astype(float).to_numpy()
         v = g["Khối lượng khớp lệnh"].astype(float).to_numpy()
         liq = float(np.median(c[-20:] * v[-20:]) * 1000 / 1e9)
@@ -101,7 +109,7 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
             "SK": f"{ev['label']} {pd.Timestamp(ev['date']):%d/%m}" if ev else "",
             "Xác nhận": (w["trigger"]["txt"], float(w["trigger"]["p"])) if w.get("trigger") else None,
             "Vô hiệu": (w["inval"]["txt"], float(w["inval"]["p"])) if w.get("inval") else None,
-            "GTGD": liq,
+            "GTGD": liq, "Lean": lean, "FC": fc,
             "wy": WY.compact(w),
             "ma20": _last(d, "MA20"), "ma50": _last(d, "MA50"), "ma200": _last(d, "MA200"),
             "sup": _last(d, "Support_20"), "res": _last(d, "Resistance_20"),
@@ -129,20 +137,32 @@ def sig_of(r) -> str:
 
 
 # ------------------------------------------------------------------ định dạng
+def _lean_line(r) -> str:
+    """Dòng dự báo của biểu đồ khung Ngày: nghiêng Tăng / Giảm (|độ nghiêng| >= 1.0); chưa nghiêng rõ thì ghi trung tính."""
+    lean = int(r["Lean"]) if pd.notna(r["Lean"]) else 0
+    return "Dự báo nghiêng Tăng" if lean > 0 else "Dự báo nghiêng Giảm" if lean < 0 else "Dự báo chưa nghiêng rõ"
+
+
+def _lean_plan(r) -> list[str]:
+    """Nghiêng Tăng thì thêm vùng chờ mua, cắt lỗ, target (lấy từ dự báo của biểu đồ: vùng vào = giá ± 0,25 ATR, cắt lỗ 1,5 ATR, T1 = 2R, T2 = 3R)."""
+    fc = r["FC"]
+    if int(r["Lean"] or 0) <= 0 or not isinstance(fc, dict):
+        return []
+    c = float(r["Giá"])
+    pct = lambda x: (float(x) / c - 1) * 100  # noqa: E731
+    return [f"  Vùng chờ mua {fc['lo']:,.2f} – {fc['hi']:,.2f}",
+            f"  Cắt lỗ {fc['sl']:,.2f} ({pct(fc['sl']):+.1f}%)",
+            f"  Target 1 {fc['t1']:,.2f} ({pct(fc['t1']):+.1f}%) · Target 2 {fc['t2']:,.2f} ({pct(fc['t2']):+.1f}%)"]
+
+
 def _block(r, held: set[str], watch: set[str]) -> str:
+    """Mục cảnh báo phân phối, mỗi mã 3 dòng (nghiêng Tăng thì thêm vùng chờ mua / cắt lỗ / target)."""
     mark = "📌 " if r["Mã"] in held else ("👁 " if r["Mã"] in watch else "")
     chg = "" if pd.isna(r["Chg"]) else f" ({r['Chg']:+.1f}%)"
     note = PHASE_NOTE[r["Loại"]][r["Pha"]]
     lines = [f"{mark}{r['Mã']}  Giá {r['Giá']:,.2f}{chg}",
              f"  {r['Nhãn']} · {note}",
-             f"  Vùng {r['Bot']:,.2f} – {r['Top']:,.2f} · {r['Nến']} nến · khớp mẫu {r['Khớp']}%"]
-    if r["SK"]:
-        lines.append(f"  Sự kiện gần nhất: {r['SK']}")
-    if r["Xác nhận"]:
-        lines.append(f"  {r['Xác nhận'][0]}")
-    if r["Vô hiệu"]:
-        lines.append(f"  {r['Vô hiệu'][0]}")
-    lines.append(f"  GTGD {r['GTGD']:,.0f} tỷ")
+             _lean_line(r)] + _lean_plan(r)
     return html.escape("\n".join(lines))
 
 
@@ -179,13 +199,13 @@ def _stock_msg(r, held: set[str], watch: set[str]) -> str:
     head = f"{icon} {mark}<b>{esc(r['Mã'])}</b> · Giá {r['Giá']:,.2f}{chg} · GTGD {r['GTGD']:,.0f} tỷ"
     wy_line = f"<b>Wyckoff</b> {esc(r['Nhãn'])} · {esc(PHASE_NOTE[r['Loại']][r['Pha']])}"
     ctx = {"code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"],
-           "wy": r["wy"], "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": 0, "div": [], "zone": None}
+           "wy": r["wy"], "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": int(r["Lean"] or 0), "div": [], "zone": None}
     try:
         pt = AS.parts(ctx)
     except Exception as e:  # noqa: BLE001
         print(f"  không dựng được tóm tắt {r['Mã']}: {e}")
         pt = {}
-    block1 = wy_line + ("\n" + pt["picture"] if pt.get("picture") else "")
+    block1 = wy_line + ("\n" + pt["picture"] if pt.get("picture") else "") + "\n" + f"<b>{esc(_lean_line(r))}</b>"
     cash = pt.get("cash")
     action = ""
     if cash:
