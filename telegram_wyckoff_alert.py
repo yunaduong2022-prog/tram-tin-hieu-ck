@@ -4,7 +4,7 @@
 Dùng đúng wyckoff.analyze() như thẻ Wyckoff / biểu đồ trong app (khung Ngày, dữ liệu qua engine.add_indicators).
   🟢 TÍCH LŨY (gồm tái tích lũy): sắp theo pha C, D, E, B, A (C/D = đã có Spring / SOS; A/B chỉ để quan sát)
   🔴 CẢNH BÁO PHÂN PHỐI (gồm tái phân phối): sắp theo pha D, E, C, B, A (D/E = đã thủng biên dưới / đang markdown)
-Mỗi mã có thêm dòng "Dự báo nghiêng Tăng / Giảm" (cùng phép tính với biểu đồ khung Ngày). Mục phân phối ghi gọn 3 dòng;
+Mỗi mã có thêm dòng "Dự báo nghiêng Tăng / Giảm" (cùng phép tính với biểu đồ khung Ngày). Mục phân phối ghi gọn (kèm Ngắn hạn / Trung hạn);
 nếu nghiêng Tăng thì thêm Vùng chờ mua, Cắt lỗ, Target.
 Mã trong data/co_phieu_cua_toi.csv được đánh dấu 📌 và xếp lên đầu; watchlist 👁.
 
@@ -28,6 +28,7 @@ import argparse
 import html
 import json
 import os
+import re
 import time
 from datetime import datetime
 
@@ -150,9 +151,21 @@ def _lean_plan(r) -> list[str]:
         return []
     c = float(r["Giá"])
     pct = lambda x: (float(x) / c - 1) * 100  # noqa: E731
-    return [f"  Vùng chờ mua {fc['lo']:,.2f} – {fc['hi']:,.2f}",
+    return [f"  🎯 VÙNG CHỜ MUA {fc['lo']:,.2f} – {fc['hi']:,.2f}",     # khối <pre> không in đậm được nên nhấn bằng icon + chữ hoa
             f"  Cắt lỗ {fc['sl']:,.2f} ({pct(fc['sl']):+.1f}%)",
             f"  Target 1 {fc['t1']:,.2f} ({pct(fc['t1']):+.1f}%) · Target 2 {fc['t2']:,.2f} ({pct(fc['t2']):+.1f}%)"]
+
+
+def _picture_plain(r) -> list[str]:
+    """Hai dòng Ngắn hạn / Trung hạn (cùng quy tắc với tin riêng từng mã), bỏ thẻ HTML để đưa vào khối <pre>."""
+    ctx = {"code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"], "wy": r["wy"],
+           "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": int(r["Lean"] or 0), "div": [], "zone": None}
+    try:
+        pic = AS.parts(ctx).get("picture", "")
+    except Exception as e:  # noqa: BLE001
+        print(f"  không dựng được ngắn/trung hạn {r['Mã']}: {e}")
+        return []
+    return ["  " + re.sub(r"</?b>", "", ln).strip() for ln in pic.split("\n") if ln.strip()]
 
 
 def _block(r, held: set[str], watch: set[str]) -> str:
@@ -162,6 +175,7 @@ def _block(r, held: set[str], watch: set[str]) -> str:
     note = PHASE_NOTE[r["Loại"]][r["Pha"]]
     lines = [f"{mark}{r['Mã']}  Giá {r['Giá']:,.2f}{chg}",
              f"  {r['Nhãn']} · {note}",
+             *_picture_plain(r),
              _lean_line(r)] + _lean_plan(r)
     return html.escape("\n".join(lines))
 
