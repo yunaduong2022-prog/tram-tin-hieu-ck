@@ -2253,10 +2253,11 @@ def _brand_tag() -> str:
 
 
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix="",
-               height_px=None, hide_legend=False, title_text=None, code_w=0.20):
+               height_px=None, hide_legend=False, title_text=None, code_w=0.20, hdr_right=False):
     """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D").
     height_px: chiều cao nền (px) thay cho mặc định, mỗi khung chỉ báo phụ thứ 2 trở đi cộng thêm 100px (Livestream dùng để hai biểu đồ vừa một màn hình).
     hide_legend: ẩn dòng chú giải các đường (và thu gọn khoảng trống phía trên).
+    hdr_right: dòng giá trị của các khung chỉ báo phụ (VOL / MA20, MACD, RSI...) đặt ở góc dưới bên phải khung thay vì góc trên trái (Livestream).
     code_w: phần bề ngang (0-1) dành cho mã + giá ở đầu biểu đồ; tên công ty, O/H/L/C và các chỉ số bắt đầu từ mốc này (cột hẹp như Livestream cần số lớn hơn).
     title_text: không có metrics thì thay dòng thương hiệu TRẠM TÍN HIỆU | MIN TRADING bằng chữ này (Livestream ghi KHUNG TUẦN)."""
     g = a["g"]
@@ -2470,11 +2471,15 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     def _fv(v):                                   # 8.97M / 125K / 950
         return "-" if pd.isna(v) else (f"{v / 1e6:,.2f}M" if abs(v) >= 1e6 else f"{v / 1e3:,.1f}K" if abs(v) >= 1e4 else f"{v:,.0f}")
 
-    def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo
+    def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo (hdr_right: góc dưới bên phải)
         if sub in subs:
             dom = fig.get_subplot(2 + subs.index(sub), 1).yaxis.domain
-            fig.add_annotation(xref="paper", yref="paper", x=0.004, y=dom[1], xanchor="left", yanchor="top", showarrow=False,
-                               align="left", text=html_, font=dict(size=11, color="#8B95A5"))
+            if hdr_right:
+                fig.add_annotation(xref="paper", yref="paper", x=0.996, y=dom[0], xanchor="right", yanchor="bottom", yshift=4, showarrow=False,
+                                   align="right", text=html_, font=dict(size=11, color="#8B95A5"))
+            else:
+                fig.add_annotation(xref="paper", yref="paper", x=0.004, y=dom[1], xanchor="left", yanchor="top", showarrow=False,
+                                   align="left", text=html_, font=dict(size=11, color="#8B95A5"))
     lr = t.iloc[-1]
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
@@ -3095,13 +3100,13 @@ def page_livestream():
         )
         try:
             st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, min(150, len(A["D"]["g"])), "pan", name_suffix=" - D",
-                                      height_px=LIVE_DAILY_H, hide_legend=True, code_w=LIVE_CODE_W),
+                                      height_px=LIVE_DAILY_H, hide_legend=True, code_w=LIVE_CODE_W, hdr_right=True),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ ngày: {exc}")
         try:
             st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, min(90, len(A["W"]["g"])), "pan",
-                                      height_px=LIVE_WEEKLY_H, hide_legend=True, title_text="KHUNG TUẦN"),
+                                      height_px=LIVE_WEEKLY_H, hide_legend=True, title_text="KHUNG TUẦN", hdr_right=True),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ tuần: {exc}")
