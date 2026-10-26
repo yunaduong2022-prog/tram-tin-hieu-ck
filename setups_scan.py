@@ -49,11 +49,14 @@ def scan(path: str = CSV_PATH) -> tuple[pd.DataFrame, pd.Timestamp]:
         if not p:
             continue
         rb, mc = p.get("rebound"), p.get("macd") or {}
+        _tgs = p.get("targets")
+        _tg = _tgs["levels"][0][1] if _tgs and _tgs["levels"] else None            # mục tiêu gần nhất theo trường hợp giá / Tenkan / Kijun
+        _rr = (_tg - p["entry"]) / (p["entry"] - p["stop"]) if _tg and p["entry"] and p["stop"] and p["entry"] > p["stop"] else None
         rows.append({"Mã": code, "Trạng thái": p["state"], "Nhãn": p["label"], "Giá": p["close"], "Báo cách (phiên)": p["bars_ago"],
-                     "Điểm vào": p["entry"], "Cắt lỗ": p["stop"], "Mục tiêu 1": p["t1"], "Mục tiêu 2": p["t2"],
+                     "Điểm vào": p["entry"], "Cắt lỗ": p["stop"], "Target": _tg, "R:R": _rr,
                      "Đã chạy xa (%)": None if p["ext"] is None else round(p["ext"] * 100, 1),
                      "Sóng": None if not rb else rb["kind"], "MACD": mc.get("kind"), "RSI": round(p["rsi"]),
-                     "R:R": p.get("rr"), "KL/TB": p.get("vr"), "Dưới điểm vào": bool(p.get("below_entry"))})
+                     "KL/TB": p.get("vr"), "Dưới điểm vào": bool(p.get("below_entry"))})
     return pd.DataFrame(rows), latest
 
 
@@ -66,8 +69,10 @@ def _line(r) -> str:
     s = f"<b>{html.escape(r['Mã'])}</b> giá {_f(r['Giá'])}"
     if pd.notna(r["Điểm vào"]):
         s += f" · vào {_f(r['Điểm vào'])} · cắt lỗ {_f(r['Cắt lỗ'])}" + (f" (−{risk:.1f}%)" if risk else "")
-    if pd.notna(r["Mục tiêu 1"]):
-        s += f" · MT {_f(r['Mục tiêu 1'])}"
+    if pd.notna(r["Target"]):
+        s += f" · Target: {_f(r['Target'])} ({(r['Target'] / r['Giá'] - 1) * 100:+.1f}%)"
+        if pd.notna(r["R:R"]):
+            s += f" · R:R 1:{r['R:R']:.1f}"
     tag = {"hoi": " [khả năng sóng hồi]", "tang": " [sóng tăng]", "cho": " [chờ xác nhận sóng tăng]"}.get(r["Sóng"], "")
     return s + tag
 
