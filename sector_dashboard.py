@@ -190,6 +190,26 @@ def valuation_frame(sector: str, symbols: list[str], clean: pd.DataFrame, cap_ma
             liq = float(g["Khối lượng khớp lệnh"].tail(20).mean())
         pe, pe3 = _num(fd.get("P/E")), _num(fd.get("P/E TB 3N"))
         pb, pb3 = _num(fd.get("P/B")), _num(fd.get("P/B TB 3N"))
+
+        # Fallback dữ liệu P/E, P/B cho ngành cao su từ bảng xếp hạng Q3/26
+        # khi fundamentals.csv chưa có số liệu. Không suy diễn trung bình 3 năm.
+        if str(sector).strip().casefold() == "cao su" and (pd.isna(pe) or pd.isna(pb)):
+            try:
+                rubber = pd.read_csv("data/cao_su_q3_2026.csv", encoding="utf-8-sig", dtype={"Mã CP": str})
+                if {"Mã CP", "P/E", "P/B", "Vốn hóa (tỷ đồng)"} <= set(rubber.columns):
+                    rubber["Mã CP"] = rubber["Mã CP"].astype(str).str.strip().str.upper()
+                    rubber["Vốn hóa (tỷ đồng)"] = pd.to_numeric(rubber["Vốn hóa (tỷ đồng)"], errors="coerce")
+                    rubber = rubber[rubber["Vốn hóa (tỷ đồng)"] >= 1000]
+                    match = rubber[rubber["Mã CP"] == str(sym).strip().upper()]
+                    if not match.empty:
+                        snapshot = match.iloc[0]
+                        if pd.isna(pe):
+                            pe = _num(snapshot.get("P/E"))
+                        if pd.isna(pb):
+                            pb = _num(snapshot.get("P/B"))
+            except (OSError, ValueError, pd.errors.ParserError):
+                pass
+
         rows.append({"Mã CP": sym, "Vốn hóa (tỷ)": _num(cap_map.get(sym)), "Thanh khoản (CP)": liq,
                      "P/E hiện tại": pe, "P/E TB 3 năm": pe3, "P/E chênh lệch": _diff(pe, pe3),
                      "P/B hiện tại": pb, "P/B TB 3 năm": pb3, "P/B chênh lệch": _diff(pb, pb3)})
