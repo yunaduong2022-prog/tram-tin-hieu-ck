@@ -3209,6 +3209,36 @@ def page_livestream():
         st.markdown("</div>", unsafe_allow_html=True)
         st.caption("RS trong bảng là chỉ số tương đối theo dữ liệu ứng dụng; trạng thái được suy ra từ dữ liệu hiện có, không phải dữ liệu khuyến nghị.")
 
+        # Kịch bản livestream gắn với mã đang phát; nội dung được lưu riêng trong data/kich_ban_livestream.
+        with st.expander(f"🎤 KỊCH BẢN LIVESTREAM · {code}", expanded=False):
+            script_dir = os.path.join(os.path.dirname(__file__), "data", "kich_ban_livestream")
+            short_path = os.path.join(script_dir, f"{code}_ngan.md")
+            long_path = os.path.join(script_dir, f"{code}_dai.md")
+            short_script = ""
+            long_script = ""
+            try:
+                if os.path.isfile(short_path):
+                    with open(short_path, "r", encoding="utf-8") as f:
+                        short_script = f.read()
+                if os.path.isfile(long_path):
+                    with open(long_path, "r", encoding="utf-8") as f:
+                        long_script = f.read()
+            except OSError as exc:
+                st.warning(f"Không đọc được tệp kịch bản: {exc}")
+
+            tab_short, tab_long = st.tabs(["✂️ Bản ngắn", "🎙️ Bản dài"])
+            with tab_short:
+                if short_script:
+                    st.code(short_script, language=None)
+                else:
+                    st.info(f"Chưa có bản ngắn cho {code}. Thêm tệp data/kich_ban_livestream/{code}_ngan.md để hiển thị tại đây.")
+            with tab_long:
+                if long_script:
+                    st.code(long_script, language=None)
+                else:
+                    st.info(f"Chưa có bản dài cho {code}. Thêm tệp data/kich_ban_livestream/{code}_dai.md để hiển thị tại đây.")
+            st.caption("Các số liệu và vùng giá trong kịch bản cần được kiểm tra, cập nhật trước khi phát sóng; nội dung không phải khuyến nghị đầu tư.")
+
     # --- Tăng trưởng LNST công ty mẹ (YoY) theo quý của ngành đang xem: ngành chọn ở ô lọc, nếu chưa chọn thì ngành của mã đang phát
     #     (dữ liệu data/lnst_quy.csv, cùng bảng với Ngành > Xếp hạng cổ phiếu)
     try:
