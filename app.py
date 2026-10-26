@@ -1141,7 +1141,7 @@ def page_filter():
                         # các selectbox có key riêng giữ giá trị cũ -> đồng bộ luôn để mở đúng mã vừa bấm
                         for _k in ("mtf_code", "tab_code"):
                             st.session_state[_k] = code
-                        NAV.goto("Cổ phiếu", "Tổng quát")
+                        NAV.goto("Cổ phiếu", "Biểu đồ")
 
 # ------------------------------------------------------------------ TRANG: CỔ PHIẾU CHỜ MUA TRONG TUẦN
 @st.cache_data(show_spinner="Đang nhận diện trạng thái chờ mua cho cả rổ...")
@@ -1239,7 +1239,7 @@ def _wb_card(r, group):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = r["Mã"]
-            NAV.goto("Cổ phiếu", "Tổng quát")
+            NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
 # ------------------------------------------------------------------ THẺ DÙNG CHUNG CHO CÁC TRANG DANH SÁCH
@@ -1261,7 +1261,7 @@ def _open_chart_of(code: str):
     st.session_state["selected_code"] = code
     for _k in ("mtf_code", "tab_code"):
         st.session_state[_k] = code
-    NAV.goto("Cổ phiếu", "Tổng quát")
+    NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
 def _tone_card(r, tone: str, key: str):
@@ -1483,7 +1483,7 @@ def page_sector_ranking():
                 st.session_state["selected_code"] = code
                 for _k in ("mtf_code", "tab_code"):
                     st.session_state[_k] = code
-                NAV.goto("Cổ phiếu", "Tổng quát")
+                NAV.goto("Cổ phiếu", "Biểu đồ")
 
     SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt)
 
@@ -1502,7 +1502,7 @@ def _wl_card(r, u, ver):
             st.session_state["selected_code"] = code
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = code
-            NAV.goto("Cổ phiếu", "Tổng quát")
+            NAV.goto("Cổ phiếu", "Biểu đồ")
         if b2.button("🗑 Bỏ theo dõi", key=f"wl_rm_{code}", use_container_width=True):
             MW.remove_code(code)
             st.session_state["wl_ver"] = ver + 1
@@ -1518,7 +1518,7 @@ def page_watchlist():
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
+        NAV.goto("Cổ phiếu", "Biểu đồ")
 
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
     _rt_focus_scroll()
@@ -1532,7 +1532,7 @@ def page_my_portfolio():
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
+        NAV.goto("Cổ phiếu", "Biểu đồ")
 
     MP.render(_wb_table(), res_df, _open_chart, latest_date)
 
@@ -1556,7 +1556,7 @@ def page_realtime_filter():
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
+        NAV.goto("Cổ phiếu", "Biểu đồ")
 
     def _mtf(code: str):
         try:
@@ -2958,7 +2958,7 @@ def _rt_go(target: str, code: str):
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        st.session_state["_nav_pending"] = ("Biểu đồ", None)
+        st.session_state["_nav_pending"] = ("Cổ phiếu", "Biểu đồ")
         st.session_state["rt_focus"] = {"kind": "id", "id": "mtf-conclusion" if target == "chart" else "wyckoff-detail", "tab": ""}
 
 
@@ -3020,11 +3020,11 @@ def _route_inner():
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
         return NAV.placeholder("🧪 Backtest chiến lược",
-                               ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",
+                               ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Biểu đồ.",
                                 "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])
     if main == "Livestream":
         return page_livestream()
-    if main in ("Biểu đồ", "Cổ phiếu") and (main == "Biểu đồ" or sub in ("Tổng quát", "Chỉ báo kỹ thuật")):
+    if main == "Cổ phiếu" and sub == "Biểu đồ":
         return page_stock()
     if main == "Cổ phiếu" and sub in ST.TABS:
         return page_stock_tab(sub)
@@ -3230,7 +3230,7 @@ def _cap_open(code):
     st.session_state["selected_code"] = code
     for _k in ("mtf_code", "tab_code"):
         st.session_state[_k] = code
-    NAV.goto("Cổ phiếu", "Tổng quát")
+    NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
 def route():
