@@ -2253,10 +2253,11 @@ def _brand_tag() -> str:
 
 
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix="",
-               height_px=None, hide_legend=False, title_text=None):
+               height_px=None, hide_legend=False, title_text=None, code_w=0.20):
     """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D").
     height_px: chiều cao nền (px) thay cho mặc định, mỗi khung chỉ báo phụ thứ 2 trở đi cộng thêm 100px (Livestream dùng để hai biểu đồ vừa một màn hình).
     hide_legend: ẩn dòng chú giải các đường (và thu gọn khoảng trống phía trên).
+    code_w: phần bề ngang (0-1) dành cho mã + giá ở đầu biểu đồ; tên công ty, O/H/L/C và các chỉ số bắt đầu từ mốc này (cột hẹp như Livestream cần số lớn hơn).
     title_text: không có metrics thì thay dòng thương hiệu TRẠM TÍN HIỆU | MIN TRADING bằng chữ này (Livestream ghi KHUNG TUẦN)."""
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
@@ -2512,7 +2513,6 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         _nm = _chart_name(code) or ""
         name_lines = textwrap.wrap(_nm + name_suffix if _nm else "", NAME_WRAP)
         top, bot = 150, 10
-        code_w = 0.20                                  # phần bên trái dành cho mã + giá
         # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
         # nằm ngang hàng đáy chỉ số); tên nhiều dòng thì mã nâng thêm theo để vẫn thẳng hàng với dòng tên đầu tiên.
         _dy = 33 + NAME_LH * (max(1, len(name_lines)) - 1)
@@ -3001,6 +3001,7 @@ def _route_inner():
 
 # ------------------------------------------------------------------ DASHBOARD LIVESTREAM
 LIVE_DAILY_H = 540        # chiều cao nền (px) biểu đồ Ngày ở Livestream (chưa tính phần đầu); chỉnh nhỏ lại nếu muốn hai biểu đồ gọn hơn nữa
+LIVE_CODE_W = 0.27        # đầu biểu đồ Ngày ở Livestream: phần bề ngang dành cho mã + giá (tăng để tên công ty nhích sang phải)
 LIVE_WEEKLY_H = 300       # chiều cao (px) biểu đồ Tuần ở Livestream (đã gồm dòng chữ KHUNG TUẦN)
 def page_livestream():
     """Bố cục phát sóng: chart ngày/tuần bên trái, kết luận và dữ liệu bên phải."""
@@ -3094,7 +3095,7 @@ def page_livestream():
         )
         try:
             st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, min(150, len(A["D"]["g"])), "pan", name_suffix=" - D",
-                                      height_px=LIVE_DAILY_H, hide_legend=True),
+                                      height_px=LIVE_DAILY_H, hide_legend=True, code_w=LIVE_CODE_W),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ ngày: {exc}")
