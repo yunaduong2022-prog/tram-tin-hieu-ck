@@ -2648,15 +2648,50 @@ def pick_layers():
 
 
 # ------------------------------------------------------------------ TRANG 2: CỔ PHIẾU
+def _toggle_watch(code: str):
+    """Bấm ngôi sao: thêm / bỏ mã khỏi Watchlist (data/watchlist_cua_toi.csv, cùng nguồn với mục ⭐ Watchlist)."""
+    try:
+        w = MW.load()
+        if code in set(w["Mã"]):
+            err, msg = MW.save(w[w["Mã"] != code]), f"Đã bỏ {code} khỏi Watchlist"
+        else:
+            err, msg = MW.save(MW.add_codes(w, [code])), f"Đã thêm {code} vào Watchlist ⭐"
+    except Exception as e:  # noqa: BLE001
+        err, msg = str(e), ""
+    st.session_state["wl_ver"] = st.session_state.get("wl_ver", 0) + 1          # để trang Watchlist nạp lại danh sách
+    st.session_state["_star_msg"] = ("error", f"Không lưu được Watchlist: {err}") if err else ("ok", msg)
+
+
+_STAR_CSS = """<style>
+.st-key-wl_star button{border-color:rgba(245,197,66,.5);padding:.1rem .8rem}
+.st-key-wl_star button p{font-size:28px;line-height:1.1;color:#F5C542}
+.st-key-wl_star button:hover{border-color:#F5C542;background:rgba(245,197,66,.12)}
+</style>"""
+
+
 def page_stock():
     st.title("📊 Cổ phiếu")
     header()
 
     codes = sorted(list(res_df["Mã"].unique()) + INDEX_LIST)      # gồm cả VNINDEX
     saved = st.session_state.get("selected_code")
-    c1, c2, c3 = st.columns([1.2, 2, 1.8])
+    c1, c_star, c2, c3 = st.columns([1.2, 0.42, 1.9, 1.8])
     code = c1.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0)
     st.session_state["selected_code"] = code
+    with c_star:                                    # ngôi sao: bấm để thêm / bỏ mã khỏi Watchlist
+        st.markdown(_STAR_CSS + '<div style="height:1.7rem"></div>', unsafe_allow_html=True)
+        if code in INDEX_LIST:
+            st.caption("")
+        else:
+            try:
+                _watched = code in set(MW.load()["Mã"])
+            except Exception:  # noqa: BLE001
+                _watched = False
+            st.button("★" if _watched else "☆", key="wl_star", on_click=_toggle_watch, args=(code,),
+                      help=("Đang trong Watchlist. Bấm để bỏ theo dõi." if _watched else "Bấm để thêm mã này vào Watchlist."))
+    _sm = st.session_state.pop("_star_msg", None)
+    if _sm:
+        (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
     tf = c2.radio("Khung thời gian", ["D", "W", "M"], format_func=TF_LABEL.get, horizontal=True)
     include_short = c3.toggle("Mô phỏng cả lệnh Bán (short)", value=False,
                               help="Thị trường VN không bán khống được, mặc định chỉ tính lệnh Mua.")
