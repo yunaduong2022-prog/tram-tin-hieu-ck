@@ -1,5 +1,6 @@
 """Mega Navigation Bar (Top-Down) + Dark Theme cho Trạm Tín Hiệu Chứng Khoán VN."""
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Menu chính -> danh sách tab phụ (rỗng = không có sub-menu)
 MENU = {
@@ -52,6 +53,21 @@ DARK_CSS = """
 """
 
 
+# Cuộn lên đầu trang sau khi chuyển trang bằng code; thử lại vài lần vì nội dung trang mới hiện ra sau
+_SCROLL_TOP_JS = """<script>
+(function(){
+  var d = window.parent.document;
+  function go(){
+    [d.querySelector('section[data-testid="stMain"]'), d.querySelector('section.main'),
+     d.querySelector('[data-testid="stAppViewContainer"]'), d.documentElement, d.body].forEach(function(e){
+      if (e && e.scrollTo) e.scrollTo(0, 0);
+    });
+  }
+  go(); setTimeout(go, 150); setTimeout(go, 500);
+})();
+</script>"""
+
+
 def _reset_sub():
     st.session_state["nav_sub"] = (MENU[st.session_state["nav_main"]] or [None])[0]
 
@@ -73,6 +89,8 @@ def render_nav():
     pending = st.session_state.pop("_nav_pending", None)  # áp dụng yêu cầu goto() trước khi tạo widget
     if pending:
         st.session_state["nav_main"], st.session_state["nav_sub"] = pending
+        if "rt_focus" not in st.session_state:       # chuyển trang bằng nút (vd. "Xem biểu đồ"): trang mới mở ở đầu trang, không giữ vị trí cuộn cũ
+            st.session_state["_scroll_top"] = True   # (có rt_focus thì trang đích tự cuộn tới đúng thẻ)
     st.session_state.setdefault("nav_main", DEFAULT_MAIN)
     if st.session_state.get("nav_main") not in MENU:
         st.session_state["nav_main"] = DEFAULT_MAIN
@@ -93,6 +111,8 @@ def render_nav():
                     st.session_state["nav_sub"] = subs[0]
                 sub = st.segmented_control("Tab phụ", subs, key="nav_sub", label_visibility="collapsed")
                 sub = sub or subs[0]
+    if st.session_state.pop("_scroll_top", False):
+        components.html(_SCROLL_TOP_JS, height=0)
     return main, sub
 
 
