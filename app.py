@@ -146,7 +146,7 @@ TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Wyckoff", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
