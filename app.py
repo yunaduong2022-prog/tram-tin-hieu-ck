@@ -3209,6 +3209,26 @@ def page_livestream():
         st.markdown("</div>", unsafe_allow_html=True)
         st.caption("RS trong bảng là chỉ số tương đối theo dữ liệu ứng dụng; trạng thái được suy ra từ dữ liệu hiện có, không phải dữ liệu khuyến nghị.")
 
+    # --- Tăng trưởng LNST công ty mẹ (YoY) theo quý của ngành đang xem: ngành chọn ở ô lọc, nếu chưa chọn thì ngành của mã đang phát
+    #     (dữ liệu data/lnst_quy.csv, cùng bảng với Ngành > Xếp hạng cổ phiếu)
+    try:
+        _lnst = SR._lnst_cached(os.path.getmtime(SR.LNST_PATH) if os.path.exists(SR.LNST_PATH) else 0.0)
+        _cands = [sector] if sector != ALL_SECTORS else [g_ for g_ in MEMBER.get(code, []) if g_ in WL.GROUPS]
+        _have = [g_ for g_ in _cands if not _lnst.empty and (_lnst["Ngành"].str.casefold() == g_.casefold()).any()]
+        _sec = (_have or _cands or [None])[0]
+        if _sec:
+            st.markdown(SR.CSS, unsafe_allow_html=True)
+            st.markdown(f"<div class='live-card-title' style='margin-top:14px'>📊 TĂNG TRƯỞNG LNST CÔNG TY MẸ (YoY) - NGÀNH {htmllib.escape(_sec.upper())}</div>",
+                        unsafe_allow_html=True)
+            _lh = SR.lnst_sector_html(_lnst, _sec) if _have else ""
+            if _lh:
+                st.markdown(_lh, unsafe_allow_html=True)
+                st.caption("So với cùng quý năm trước. Xanh = lãi tăng, đỏ = lãi giảm hoặc lỗ; càng đậm càng lệch xa 0. Ô \"-\" là chưa có số liệu.")
+            else:
+                st.caption(f"Chưa có dữ liệu LNST theo quý cho ngành {_sec}. Thêm các dòng có cột Ngành = \"{_sec}\" vào {SR.LNST_PATH}.")
+    except Exception as exc:  # noqa: BLE001
+        st.caption(f"Không dựng được bảng LNST: {exc}")
+
     st.divider()
     st.markdown("### Các thẻ phân tích hiện có")
     st.caption("Khu vực này giữ lại các thẻ tín hiệu chi tiết bên dưới dashboard để không làm chật khung livestream.")
