@@ -184,7 +184,54 @@ def select(t: pd.DataFrame, include_watch: bool) -> dict[str, pd.DataFrame]:
     wait = buy[(buy["Hành động"] != "Vào ngay") & buy["Danh sách"].isin(groups)]
     wait = pd.concat([WB.sort_group(wait[wait["Danh sách"] == g], g) for g in groups]) if len(wait) else wait
     rec = t[ok & (t["Danh sách"] == WB.L_RECOVER)].sort_values("Score", ascending=False)
+    if "_liq" in t.columns:                  # bỏ mã thanh khoản thấp (nếu đã có số liệu)
+        keep = lambda d: d[~(d["_liq"] < MIN_VALUE_BN)]
+        now, wait, rec = keep(now), keep(wait), keep(rec)
     return {"now": now, "wait": wait, "recover": rec}
+
+
+MIN_VALUE_BN = 2.0       # thanh khoản tối thiểu: giá trị khớp trung vị 20 phiên ≥ 2 tỷ đồng/phiên (loại mã khó mua bán)
+
+
+def enrich(t: pd.DataFrame, path: str) -> pd.DataFrame:
+    """Thêm cột phụ để chọn mã nổi bật: thanh khoản (tỷ đồng/phiên) và xác nhận từ bộ Phân loại trạng thái (setups.py)."""
+    import setups as SU
+    raw = E.clean_raw(pd.read_csv(path, dtype={"Mã": str}))
+    codes = set(t["Mã"])
+    liq, ext = {}, {}
+    for code, g in raw[raw["Mã"].isin(codes)].groupby("Mã"):
+        g = g.sort_values("Ngày")
+        tail = g.tail(20)
+        liq[code] = float((pd.to_numeric(tail[SU.C], errors="coerce") * pd.to_numeric(tail[SU.V], errors="coerce")).median() * 1000 / 1e9)
+        try:
+            p = SU.plan(g.reset_index(drop=True))
+        except Exception:
+            p = None
+        if p:
+            ext[code] = (p["state"], (p.get("macd") or {}).get("kind"), p["ext"])
+    t = t.copy()
+    t["_liq"] = t["Mã"].map(liq)
+    t["_state"] = t["Mã"].map(lambda c: ext.get(c, (None,) * 3)[0])
+    t["_macd"] = t["Mã"].map(lambda c: ext.get(c, (None,) * 3)[1])
+    return t
+
+
+def pick_top(d: pd.DataFrame, n: int) -> pd.DataFrame:
+    """Chọn n mã tiêu biểu thay vì n mã đầu bảng: ưu tiên điểm tổng hợp cao, sức mạnh tương đối, R:R tốt, cắt lỗ không quá xa,
+    được bộ Phân loại trạng thái xác nhận (bùng nổ / xu hướng tăng / MACD xác nhận), thanh khoản đủ và chưa chạy xa khỏi vùng mua."""
+    if not n or len(d) <= n:
+        return d
+    x = d.copy()
+    pr = lambda col: x[col].rank(pct=True) if col in x and x[col].notna().any() else pd.Series(0.5, index=x.index)
+    rr = (pd.to_numeric(x["Lời 1 %"], errors="coerce") / pd.to_numeric(x["Cắt lỗ %"], errors="coerce").abs()).fillna(0)
+    sc = 2.0 * pr("Score") + 1.0 * pr("RS20") + 1.0 * rr.rank(pct=True)
+    sc += (pd.to_numeric(x["Cắt lỗ %"], errors="coerce").abs() > 9.5).map({True: -0.5, False: 0.0})
+    sc += x.get("_state", pd.Series(index=x.index, dtype=object)).isin(["BOTTOM", "BASE_HL", "BREAKOUT", "TREND"]).map({True: 0.7, False: 0.0})
+    sc += (x.get("_macd", pd.Series(index=x.index, dtype=object)) == "confirmed").map({True: 0.5, False: 0.0})
+    sc += (x["Danh sách"] == WB.L_CONFIRMED if hasattr(WB, "L_CONFIRMED") else x["Danh sách"] == "Điểm mua đã xác nhận").map({True: 0.7, False: 0.0})
+    if "Cách vùng mua %" in x:
+        sc -= (pd.to_numeric(x["Cách vùng mua %"], errors="coerce").abs() > 5).map({True: 0.5, False: 0.0})
+    return x.assign(_pick=sc).sort_values("_pick", ascending=False).head(n)
 
 
 TITLES = {"now": "⚡ VÀO ĐƯỢC NGAY", "wait": "⏳ CHỜ MUA", "recover": "🌱 PHỤC HỒI · ĐANG CHỜ MUA"}
@@ -203,7 +250,7 @@ def build_messages(sel: dict[str, pd.DataFrame], limits: dict[str, int], meta, l
         if d.empty:
             continue
         cap = limits.get(key)
-        shown = d if not cap else d.head(cap)
+        shown = pick_top(d, cap)
         started = False
         for _, r in shown.iterrows():
             block = "<pre>" + html.escape(card_text(r, meta, foot)) + "</pre>"
@@ -233,6 +280,7 @@ def main() -> None:
     args = ap.parse_args()
 
     t, latest = waiting_table(args.csv)
+    t = enrich(t, args.csv)
     sel = select(t, args.include_watch)
     msgs = build_messages(sel, {"now": args.max_now, "wait": args.max_wait, "recover": args.max_recover},
                           load_meta(), latest)

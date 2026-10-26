@@ -52,7 +52,8 @@ def scan(path: str = CSV_PATH) -> tuple[pd.DataFrame, pd.Timestamp]:
         rows.append({"Mã": code, "Trạng thái": p["state"], "Nhãn": p["label"], "Giá": p["close"], "Báo cách (phiên)": p["bars_ago"],
                      "Điểm vào": p["entry"], "Cắt lỗ": p["stop"], "Mục tiêu 1": p["t1"], "Mục tiêu 2": p["t2"],
                      "Đã chạy xa (%)": None if p["ext"] is None else round(p["ext"] * 100, 1),
-                     "Sóng": None if not rb else rb["kind"], "MACD": mc.get("kind"), "RSI": round(p["rsi"])})
+                     "Sóng": None if not rb else rb["kind"], "MACD": mc.get("kind"), "RSI": round(p["rsi"]),
+                     "R:R": p.get("rr"), "KL/TB": p.get("vr")})
     return pd.DataFrame(rows), latest
 
 
@@ -71,6 +72,16 @@ def _line(r) -> str:
     return s + tag
 
 
+def _rank_fresh(d: pd.DataFrame) -> pd.DataFrame:
+    """Mã tiêu biểu lên đầu: chưa chạy xa, MACD xác nhận, khối lượng bùng nổ mạnh, R:R tốt, báo càng mới càng tốt."""
+    x = d.copy()
+    x["_s"] = ((~x["chay"]).astype(float) * 2 + (x["MACD"] == "confirmed").astype(float)
+               + pd.to_numeric(x["KL/TB"], errors="coerce").rank(pct=True).fillna(0.5)
+               + pd.to_numeric(x["R:R"], errors="coerce").rank(pct=True).fillna(0.5)
+               - 0.2 * x["Báo cách (phiên)"].fillna(0))
+    return x.sort_values("_s", ascending=False)
+
+
 def build_messages(t: pd.DataFrame, latest: pd.Timestamp, max_each: int = 15) -> list[str]:
     head = f"<b>Phân loại trạng thái · {latest:%d/%m/%Y}</b>"
     sec = []
@@ -78,9 +89,10 @@ def build_messages(t: pd.DataFrame, latest: pd.Timestamp, max_each: int = 15) ->
     if len(fresh):
         fresh["chay"] = fresh["Đã chạy xa (%)"].fillna(0) > 5
         sec.append(("Bùng nổ mới (báo trong 3 phiên)", [_line(r) + (" ⚠ đã chạy xa >5%, tránh đuổi" if r["chay"] else "")
-                                                       for _, r in fresh.sort_values(["chay", "Báo cách (phiên)"]).head(max_each).iterrows()], len(fresh)))
+                                                       for _, r in _rank_fresh(fresh).head(max_each).iterrows()], len(fresh)))
     w = t[t["Trạng thái"] == "WATCH"]
     if len(w):
+        w = w.assign(_rr=pd.to_numeric(w["R:R"], errors="coerce")).sort_values("_rr", ascending=False)
         sec.append(("Theo dõi sớm (chờ vượt đỉnh vùng)", [_line(r) for _, r in w.head(max_each).iterrows()], len(w)))
     m = t[t["MACD"] == "confirmed"]
     if len(m):
