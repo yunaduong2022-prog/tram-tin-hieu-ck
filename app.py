@@ -2140,9 +2140,11 @@ def _chart_name(code: str) -> str:
     if str(code).upper() in E.INDEX_CODES:
         return "Chỉ số VN-Index"
     try:
-        return _wb_meta(str(code)).get("Tên", "") or ""
+        name = _wb_meta(str(code)).get("Tên", "") or ""
     except Exception:  # noqa: BLE001
         return ""
+    # "Công ty cổ phần" (không phân biệt hoa/thường) -> "CTCP"
+    return re.sub(r"công\s+ty\s+cổ\s+phần", "CTCP", str(name), flags=re.IGNORECASE)
 
 
 def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
@@ -2427,7 +2429,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         price_m = next((m for m in metrics if m["label"] == "Giá"), None)
         others = [m for m in metrics if m is not price_m]
         NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
-        name_lines = textwrap.wrap(_chart_name(code) or "", 40)
+        NAME_WRAP = 90                                  # tên công ty hiện trên 1 hàng ngang (tên dài nhất ~63 ký tự); chỉ xuống dòng khi dài bất thường
+        name_lines = textwrap.wrap(_chart_name(code) or "", NAME_WRAP)
         top, bot = 150, 10
         code_w = 0.20                                  # phần bên trái dành cho mã + giá
         step = (1 - code_w) / max(1, len(others))
@@ -2590,9 +2593,6 @@ def page_stock():
     chart_metrics = [
         {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip},
         {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
-        {"label": "Position %", "value": f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-"},
-        {"label": "Cảnh báo (phiên mới nhất)", "value": info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có"},
-        {"label": f"Độ nghiêng {E.TF_NAME[tf]}", "value": f"{a['bias']:+.0f}/100" if a["enough"] else "-"},
     ]
 
     alert_banner(a, tf)
