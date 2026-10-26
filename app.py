@@ -144,8 +144,8 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+              "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -2138,7 +2138,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
-    subs = [s for s in ("Khối lượng", "MACD", "RSI", "StochRSI") if s in layers]
+    subs = [s for s in ("Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI") if s in layers]
+    if str(code).upper() in E.INDEX_CODES or len(mkt) == 0:
+        subs = [s for s in subs if s != "RS vs VNINDEX"]            # chính VNINDEX thì không có RS so với VNINDEX
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
@@ -2254,6 +2256,25 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
         fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
         r += 1
+    if "RS vs VNINDEX" in subs:
+        # RS = giá mã / VNINDEX, tính trên toàn lịch sử rồi chuẩn hoá về 100 tại nến đầu vùng hiển thị; MA20 để lọc nhiễu
+        _dates = pd.DatetimeIndex(g["Ngày"])
+        _m = mkt.copy(); _m.index = pd.DatetimeIndex(_m.index)
+        _m = _m[~_m.index.duplicated(keep="last")].sort_index()
+        _mk = _m.reindex(_m.index.union(_dates)).ffill().reindex(_dates).to_numpy()      # tuần/tháng: lấy VNINDEX tại ngày của nến
+        rs_all = pd.Series(g["Giá đóng cửa"].to_numpy() / _mk, index=g.index)
+        rs_ma = rs_all.rolling(20, min_periods=5).mean().loc[t.index]
+        rs_t = rs_all.loc[t.index]
+        _base = rs_t.dropna().iloc[0] if rs_t.notna().any() else 1.0
+        rs_t, rs_ma = rs_t / _base * 100, rs_ma / _base * 100
+        _above = (rs_t >= rs_ma).to_numpy()
+        fig.add_hline(y=100, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
+        fig.add_trace(go.Scatter(x=x, y=rs_t, name="RS vs VNINDEX", line=dict(width=1.6, color="#2BD6A2" if _above[-1] else "#F2506E"),
+                                 hovertemplate="RS %{y:.1f}<extra></extra>"), row=r, col=1)
+        fig.add_trace(go.Scatter(x=x, y=rs_ma, name="MA20 RS", line=dict(width=1.2, color="#F59E0B"),
+                                 hovertemplate="MA20 RS %{y:.1f}<extra></extra>"), row=r, col=1)
+        fig.update_yaxes(title_text="RS vs VNINDEX", title_font_size=10, row=r, col=1)
+        r += 1
     if "MACD" in subs:
         fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
                              marker_color=np.where(t["MACD_hist"] >= 0, "#2BD6A2", "#F2506E")), row=r, col=1)
@@ -2311,6 +2332,10 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     lr = t.iloc[-1]
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
+    if "RS vs VNINDEX" in subs:
+        _st = "mạnh hơn thị trường" if _above[-1] else "yếu hơn thị trường"
+        _hdr("RS vs VNINDEX", f'RS = {code}/VNINDEX (=100 đầu vùng)  <b style="color:#CBD2DC">{rs_t.iloc[-1]:.1f}</b>  '
+                              f'MA20: <span style="color:#F59E0B">{rs_ma.iloc[-1]:.1f}</span>  · {_st}')
     if "MACD" in subs:
         _hdr("MACD", f'MACD(12,26,9)  DIF: <span style="color:#3B82F6">{lr["MACD"]:.2f}</span>  '
                      f'DEA: <span style="color:#F59E0B">{lr["MACD_sig"]:.2f}</span>  MACD: <b style="color:#CBD2DC">{lr["MACD_hist"]:.2f}</b>')
