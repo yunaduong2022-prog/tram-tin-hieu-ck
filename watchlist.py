@@ -39,7 +39,7 @@ GROUPS: dict[str, list[str]] = {
     "Xây dựng": ["CDC", "VCG", "CTD"],
     "Họ Vingroup": ["VIC", "VHM", "VRE", "VPL", "VEF", "VNB"],
     "Vật liệu xây dựng": ["HT1", "VGC", "NTP", "DHA", "VLB"],
-    "Hàng công nghiệp": ["DHC", "HHP", "VEA"],
+    "Hàng công nghiệp": ["DHC", "HHP", "VEA", "MZG"],
     "Hàng tiêu dùng": ["TLG"],
     "Điện": ["NT2", "GEE", "POW"],
     "Nhựa": ["NTP"],
