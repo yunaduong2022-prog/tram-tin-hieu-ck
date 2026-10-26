@@ -204,3 +204,13 @@ Lớp **Dual Ichimoku** (bật mặc định trong "Lớp hiển thị", code �
 - **Bộ 1 (9-17-26, dịch 26):** chỉ vẽ mây Kumo gồm Lead 1 (Senkou Span A), Leading Span B và nền mây (xanh khi Span A trên Span B, đỏ khi ngược lại). Mây vẽ lệch 25 nến về tương lai như Pine (offset = displacement - 1). Không vẽ Tenkan, Kijun, Chikou.
 - **Bộ 2 (65-129, Span B 52):** chỉ vẽ Tenkan-sen 65 (xanh dương) và Kijun-sen 129 (cam), không mây, không Chikou, không dịch.
 - Lớp **Ichimoku** cũ trên biểu đồ đã bị xóa, chỉ còn Dual Ichimoku (phần chấm điểm trong `engine.py` vẫn tính Ichimoku 9-26-52 ở nền, không vẽ). Khung Tháng thường chưa đủ 129 nến nên Kijun 129 không hiện.
+
+
+## Cảnh báo Supertrend lên Telegram (mới)
+`telegram_supertrend_alert.py` gửi **điểm mua / điểm bán theo Supertrend (ATR 10, hệ số 3)** sau mỗi phiên, dùng đúng `supertrend.compute()` như nhãn Buy / Sell trên biểu đồ.
+- Tín hiệu chỉ phát ở nến Supertrend **đảo chiều** (đóng cửa vượt đường dn = Buy, thủng đường up = Sell). Mỗi mã hiện giá đóng cửa nến báo, % thay đổi, đường Supertrend (mức cắt lỗ tham khảo với điểm mua), khối lượng so với TB20, giá trị giao dịch và vị trí so với MA50. Cắt lỗ cách giá hơn 10% có nhãn ⚠ để giảm khối lượng.
+- Mã trong `data/co_phieu_cua_toi.csv` được đánh dấu 📌, mã trong `data/watchlist_cua_toi.csv` đánh dấu 👁, và xếp lên đầu.
+- Bỏ mã giá trị khớp trung vị 20 phiên dưới 2 tỷ đồng (`--min-value`) và mã dữ liệu không mới nhất.
+- Không gửi trùng: tín hiệu đã gửi được nhớ trong `data/st_alert_state.json` (20 ngày gần nhất); `--force` để gửi lại, `--days 2` để gồm cả phiên trước.
+- Chạy thử: `python telegram_supertrend_alert.py --dry-run`. Gửi thật cần `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- Tự động: workflow `.github/workflows/supertrend_alert.yml` chạy khi bạn đẩy `data/eod_prices.csv` mới lên `main`, hoặc khi workflow dữ liệu cuối phiên chạy xong, hoặc bấm tay ở tab Actions (có tùy chọn chạy thử).
