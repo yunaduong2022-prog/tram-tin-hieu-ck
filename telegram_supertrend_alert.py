@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Gửi Telegram ĐIỂM MUA / ĐIỂM BÁN theo Supertrend (ATR 10, hệ số 3.0) sau mỗi phiên.
+"""Gửi Telegram ĐIỂM BÁN theo Supertrend (ATR 10, hệ số 3.0) sau mỗi phiên. (Mặc định chỉ báo BÁN; thêm --include-buy để báo cả điểm mua.)
 
 Dùng đúng supertrend.compute() như biểu đồ trong app (tính trên toàn bộ lịch sử rồi mới lấy nến cuối), nên nhãn
 "Buy / Sell" trên biểu đồ và tin nhắn luôn trùng nhau. Tín hiệu chỉ phát ở nến Supertrend ĐẢO CHIỀU:
-    Buy  = xu hướng đảo sang tăng (đóng cửa vượt đường dn phía trên)  -> điểm mua, đường Supertrend là mức cắt lỗ tham khảo
+    Buy  = xu hướng đảo sang tăng (đóng cửa vượt đường dn phía trên)  -> điểm mua, đường Supertrend là mức cắt lỗ tham khảo (chỉ gửi khi bật --include-buy)
     Sell = xu hướng đảo sang giảm (đóng cửa thủng đường up phía dưới) -> điểm bán / thoát
 
 Tín hiệu xác nhận khi đóng cửa nên chỉ vào lệnh được từ phiên kế tiếp. Giá trong tin nhắn là giá đóng cửa nến báo (tham chiếu).
@@ -17,6 +17,7 @@ Cách chạy:
     python telegram_supertrend_alert.py --days 2          # gồm cả tín hiệu của 2 phiên gần nhất
     python telegram_supertrend_alert.py --only HPG,FPT    # chỉ xét các mã này
     python telegram_supertrend_alert.py --force           # gửi lại dù đã gửi rồi
+    python telegram_supertrend_alert.py --include-buy     # báo cả điểm mua (mặc định chỉ báo điểm bán)
 """
 from __future__ import annotations
 
@@ -52,8 +53,9 @@ def _codes(path: str) -> set[str]:
         return set()
 
 
-def scan(path: str, only: set[str] | None, days: int, min_value: float) -> tuple[pd.DataFrame, pd.Timestamp]:
-    """Trả (bảng tín hiệu, ngày dữ liệu mới nhất). Mỗi dòng là một tín hiệu Buy hoặc Sell trong `days` phiên gần nhất."""
+def scan(path: str, only: set[str] | None, days: int, min_value: float,
+         include_buy: bool = False) -> tuple[pd.DataFrame, pd.Timestamp]:
+    """Trả (bảng tín hiệu, ngày dữ liệu mới nhất). Mỗi dòng là một tín hiệu Sell (và Buy nếu include_buy) trong `days` phiên gần nhất."""
     raw = E.clean_raw(pd.read_csv(path, dtype={"Mã": str}))
     raw = raw[~raw["Mã"].isin(SKIP)]
     latest = pd.Timestamp(raw["Ngày"].max())
@@ -75,6 +77,8 @@ def scan(path: str, only: set[str] | None, days: int, min_value: float) -> tuple
         for k in range(1, days + 1):
             i = n - k
             for side, flag, line_col in (("buy", "ST_buy", "ST_up"), ("sell", "ST_sell", "ST_dn")):
+                if side == "buy" and not include_buy:
+                    continue
                 if not bool(st[flag].iat[i]):
                     continue
                 line = float(st[line_col].iat[i])
@@ -144,15 +148,19 @@ def _block(r, held: set[str], watch: set[str]) -> str:
 
 
 def build_messages(sig: pd.DataFrame, latest: pd.Timestamp, held: set[str], watch: set[str], cap: int,
-                   total: tuple[int, int] | None = None, sent_at: datetime | None = None) -> list[str]:
+                   total: tuple[int, int] | None = None, sent_at: datetime | None = None,
+                   include_buy: bool = False) -> list[str]:
     nb, ns = (int((sig["Hướng"] == "buy").sum()), int((sig["Hướng"] == "sell").sum())) if total is None else total
+    counts = f"Điểm bán: {ns}" + (f" · Điểm mua: {nb}" if include_buy else "")
     head = (f"📈 <b>Supertrend (10, 3) · theo nến cuối phiên {latest:%d/%m/%Y}</b>\n"
-            f"Điểm mua: {nb} · Điểm bán: {ns}\n"
+            f"{counts}\n"
             f"🕖 Gửi lúc {stamp(sent_at)}")
-    foot = (f"Vào lệnh được từ phiên {(latest + pd.Timedelta(days=1)):%d/%m/%Y} (tín hiệu xác nhận khi đóng cửa).\n"
-            "<i>Supertrend hay nhiễu khi giá đi ngang; chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.</i>")
+    foot = ((f"Vào lệnh được từ phiên {(latest + pd.Timedelta(days=1)):%d/%m/%Y} (tín hiệu xác nhận khi đóng cửa).\n" if include_buy
+             else "Tín hiệu xác nhận khi đóng cửa; giá trong tin là giá đóng cửa nến báo (tham chiếu).\n")
+            + "<i>Supertrend hay nhiễu khi giá đi ngang; chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.</i>")
     blocks = [head]
-    for side, title in (("sell", "🔴 ĐIỂM BÁN · xu hướng đảo sang giảm"), ("buy", "🟢 ĐIỂM MUA · xu hướng đảo sang tăng")):
+    sections = [("sell", "🔴 ĐIỂM BÁN · xu hướng đảo sang giảm")] + ([("buy", "🟢 ĐIỂM MUA · xu hướng đảo sang tăng")] if include_buy else [])
+    for side, title in sections:
         d = sig[sig["Hướng"] == side].copy()
         if d.empty:
             continue
@@ -182,20 +190,21 @@ def main() -> None:
     ap.add_argument("--max", type=int, default=25, help="số mã tối đa mỗi mục (mặc định 25, 0 = tất cả)")
     ap.add_argument("--min-value", type=float, default=MIN_VALUE_BN, help="giá trị khớp trung vị 20 phiên tối thiểu, tỷ đồng (mặc định 2)")
     ap.add_argument("--force", action="store_true", help="gửi lại cả tín hiệu đã gửi")
+    ap.add_argument("--include-buy", action="store_true", help="báo cả điểm mua (mặc định chỉ báo điểm bán)")
     ap.add_argument("--csv", default=CSV_PATH)
     args = ap.parse_args()
 
     only = {c.strip().upper() for c in args.only.split(",") if c.strip()} or None
-    sig, latest = scan(args.csv, only, max(1, args.days), args.min_value)
+    sig, latest = scan(args.csv, only, max(1, args.days), args.min_value, args.include_buy)
     held, watch = _codes(HOLD_PATH), _codes(WATCH_PATH)
     state = load_state()
     done = set(state.get("sent", [])) if not args.force else set()
     if len(sig):
         sig = sig[~sig.apply(key, axis=1).isin(done)]
     if sig.empty:
-        print(f"Phiên {latest:%d/%m/%Y}: không có tín hiệu Supertrend mới để gửi.")
+        print(f"Phiên {latest:%d/%m/%Y}: không có tín hiệu Supertrend {'mới ' if args.include_buy else 'bán mới '}để gửi.")
         return
-    msgs = build_messages(sig, latest, held, watch, args.max)
+    msgs = build_messages(sig, latest, held, watch, args.max, include_buy=args.include_buy)
     if args.dry_run:
         for m in msgs:
             print(m, "\n" + "=" * 40)
