@@ -19,12 +19,15 @@ import pandas as pd
 
 OPEN, HIGH, LOW, CLOSE, VOL = "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh"
 MIN_BARS = 120
-# Vùng đi ngang chỉ tính khi (đỉnh - đáy) / đáy <= MAX_AMP. Phiên làm giá vượt khỏi khung này nhưng các phiên sau quay lại
+# Vùng đi ngang chỉ tính khi (đỉnh - đáy) / đáy <= MAX_AMP (13%: cổ phiếu vốn hóa lớn thường đi ngang 12-13%). Phiên làm giá vượt khỏi khung này nhưng các phiên sau quay lại
 # trong khung cũ (cụm tối đa MAX_FB_RUN phiên liên tiếp) là BREAKOUT GIẢ: vẫn tính vào số nến đi ngang, loại khỏi biên trên/dưới.
-MAX_AMP = 0.10
+MAX_AMP = 0.13
 MAX_FB_RUN = 3
 MAX_FB_SHARE = 0.10      # tổng phiên breakout giả tối đa 10% độ dài vùng (tối thiểu cho phép 3 phiên): vùng phải phần lớn nằm trong khung
 OFFSETS = (0, 3, 6, 10, 15, 20, 30, 45)
+MIN_W_ATR = 2.0          # độ rộng vùng tối thiểu = MIN_W_ATR x ATR (ATR bị bóng nến Spring/Upthrust đẩy lên nên không đặt quá cao)
+PRIOR_BARS = 80          # số phiên nhìn lại để xác định xu hướng trước vùng
+PRIOR_K = 1.5            # xu hướng trước vùng theo đường đi: mức giảm/tăng lớn nhất phải >= PRIOR_K x độ rộng vùng
 
 
 PHASE_TEXT = {
@@ -47,7 +50,7 @@ def _fmt(x: float) -> str:
 
 def _edges(h, l, s, e, fb=(), frame=None):
     """Biên trên / dưới của vùng [s, e]: bỏ các phiên breakout giả (đóng cửa vượt khung rồi quay lại) và các phiên có bóng nến
-    chọc ra ngoài khung 10% (đó là Spring / Upthrust, không phải biên của vùng)."""
+    chọc ra ngoài khung biên độ (đó là Spring / Upthrust, không phải biên của vùng)."""
     skip = set(fb)
     keep = [i for i in range(s, e + 1) if i not in skip and (frame is None or (l[i] >= frame[0] and h[i] <= frame[1]))]
     if not keep:
@@ -60,7 +63,7 @@ def _find_range(h, l, c, atr, end):
 
     Với mỗi khung ứng viên [x, x*(1+MAX_AMP)] (bước 0,5%), quét ngược từ nến cuối: phiên nằm trong khung là phiên đi ngang;
     cụm <= MAX_FB_RUN phiên liên tiếp ĐÓNG CỬA ngoài khung rồi giá lại quay vào khung cũ là breakout giả (vẫn tính vào độ dài vùng);
-    cụm dài hơn thì vùng dừng lại ở đó. Sau đó kiểm tra như cũ: biên đủ rộng (>= 2,5 ATR), chạm mỗi biên >= 2 lần, giá cắt đường giữa >= 4 lần.
+    cụm dài hơn thì vùng dừng lại ở đó. Sau đó kiểm tra như cũ: biên đủ rộng (>= MIN_W_ATR lần ATR), chạm mỗi biên >= 2 lần, giá cắt đường giữa >= 4 lần.
     """
     a = atr[end]
     if not np.isfinite(a) or a <= 0 or end < 40:
@@ -115,7 +118,7 @@ def _find_range(h, l, c, atr, end):
             sh, sl2 = H[sl_:][mf], Lw[sl_:][mf]
             hi, lo = float(np.max(sh)), float(np.min(sl2))
             W = hi - lo
-            if W < 2.5 * a:
+            if W < MIN_W_ATR * a:
                 continue
             mid = (hi + lo) / 2
             idx = np.flatnonzero(mf)
@@ -248,8 +251,20 @@ def analyze(g: pd.DataFrame):
     s, e, top, bot, mid, W = tr["s"], tr["e"], tr["top"], tr["bot"], tr["mid"], tr["W"]
     lc = c[last]
     post = "up" if lc > top else "down" if lc < bot else "in"
-    pre = c[s] - c[max(0, s - 80)]
+    pre = c[s] - c[max(0, s - PRIOR_BARS)]
     prior = "down" if pre < -W else "up" if pre > W else "flat"
+    if prior == "flat":
+        # so hai mốc giá bỏ sót trường hợp giá rơi/tăng mạnh rồi hồi/lùi về gần chỗ cũ (vd. đỉnh -> đáy -> hồi phục đi ngang).
+        # Dùng đường đi của giá: mức giảm lớn nhất (đỉnh -> đáy sau đó) và mức tăng lớn nhất (đáy -> đỉnh sau đó) trước vùng.
+        win = c[max(0, s - PRIOR_BARS):s + 1]
+        win = win[np.isfinite(win)]
+        if len(win) > 1:
+            dd = float(np.max(np.maximum.accumulate(win) - win))
+            ru = float(np.max(win - np.minimum.accumulate(win)))
+            if dd >= PRIOR_K * W and dd > ru:
+                prior = "down"
+            elif ru >= PRIOR_K * W and ru > dd:
+                prior = "up"
     kind = ("acc" if post == "up" else "dist" if post == "down" else
             "acc" if prior == "down" else "dist" if prior == "up" else "unk")
     re_ = (post == "up" and prior == "up") or (post == "down" and prior == "down")
@@ -528,7 +543,7 @@ def note_html(c, compact_view: bool = False) -> str:
     foot = '<div class="wy-ft">Quy tắc mang tính chủ quan; chỉ để quan sát, không phải khuyến nghị.</div>'
     if not c:
         return (f'<div class="wy none">{head}<span class="wy-tag">Chưa có cấu trúc</span></div>'
-                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 10%, chạm cả hai biên từ 2 lần): '
+                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 13%, chạm cả hai biên từ 2 lần): '
                 'giá đang trong xu hướng hoặc biên quá rộng, nên chưa xác định được pha Wyckoff.</div>' + foot + '</div>')
     kind = c["kind"]
     cls = kind if kind in ("acc", "dist") else "unk"
