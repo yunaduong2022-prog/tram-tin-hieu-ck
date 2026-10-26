@@ -42,6 +42,7 @@ CSV_PATH = "data/eod_prices.csv"
 STATE_PATH = "data/wy_alert_state.json"
 MIN_VALUE_BN = 2.0            # bỏ mã có giá trị khớp trung vị 20 phiên dưới 2 tỷ đồng
 MIN_BARS = WY.MIN_BARS
+BUY_PHASES = ("C", "D")        # "canh mua" = tích lũy đã có Spring (pha C) hoặc SOS (pha D); sửa ở đây nếu muốn đổi
 ORDER = {"acc": ["C", "D", "E", "B", "A"], "dist": ["D", "E", "C", "B", "A"]}
 PHASE_NOTE = {
     "acc": {"A": "dừng đà giảm", "B": "xây nền, chỉ quan sát", "C": "Spring, thử cung cuối",
@@ -214,6 +215,47 @@ def _section_chunks(title: str, total: int, items: list[str], more: str, limit: 
     return chunks
 
 
+def _sector_map() -> dict[str, str]:
+    """Mã -> ngành theo watchlist.GROUPS (mã thuộc nhiều nhóm thì lấy nhóm đứng trước); mã chưa có nhóm sẽ vào "Khác"."""
+    try:
+        import watchlist as WL
+        out: dict[str, str] = {}
+        for sec, codes in WL.GROUPS.items():
+            for c in codes:
+                out.setdefault(str(c).strip().upper(), sec)
+        return out
+    except Exception as e:  # noqa: BLE001
+        print(f"  không đọc được nhóm ngành: {e}")
+        return {}
+
+
+def _by_sector(codes: list[str], smap: dict[str, str]) -> str:
+    """"Ngân hàng: HDB, VPB\nChứng khoán: HCM, TCX" (ngành nhiều mã đứng trước, "Khác" đứng cuối)."""
+    groups: dict[str, list[str]] = {}
+    for c in codes:
+        groups.setdefault(smap.get(c.upper(), "Khác"), []).append(c)
+    order = sorted(groups, key=lambda k: (k == "Khác", -len(groups[k]), k))
+    return "\n".join(f"{html.escape(k)}: {html.escape(', '.join(groups[k]))}" for k in order)
+
+
+def build_summary(show: pd.DataFrame, held: set[str], watch: set[str]) -> list[str]:
+    """Tin tổng hợp gửi trước các tin riêng lẻ: canh mua, từng pha tích lũy, cảnh báo phân phối; mỗi mục gom theo ngành."""
+    smap = _sector_map()
+    acc = _sorted(show, "acc", held, watch)
+    blocks: list[str] = []
+    buy = acc[acc["Pha"].isin(BUY_PHASES)]
+    if not buy.empty:
+        blocks.append(f"<b>🎯 Cổ phiếu canh mua</b> (tích lũy pha {', '.join(BUY_PHASES)}) · {len(buy)} mã\n" + _by_sector(list(buy["Mã"]), smap))
+    for ph in ORDER["acc"]:
+        g = acc[acc["Pha"] == ph]
+        if not g.empty:
+            blocks.append(f"<b>🟢 Cổ phiếu tích lũy pha {ph}, {html.escape(PHASE_NOTE['acc'][ph])}</b> · {len(g)} mã\n" + _by_sector(list(g["Mã"]), smap))
+    dist = _sorted(show, "dist", held, watch)
+    if not dist.empty:
+        blocks.append(f"<b>🔴 Cảnh báo phân phối</b> · {len(dist)} mã\n" + _by_sector(list(dist["Mã"]), smap))
+    return blocks
+
+
 def _pack(blocks: list[str]) -> list[str]:
     msgs, cur = [], ""
     for b in blocks:
@@ -241,7 +283,7 @@ def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held:
         items = [_block(r, held, watch) for _, r in shown.iterrows()]
         more = f"\n… và {len(d) - len(shown)} mã khác" if len(d) > len(shown) else ""
         dist_blocks = _section_chunks("🔴 CẢNH BÁO PHÂN PHỐI", len(d), items, more)
-    return [head] + build_acc_messages(show, held, watch, cap_acc) + _pack(dist_blocks + [foot])
+    return _pack([head] + build_summary(show, held, watch)) + build_acc_messages(show, held, watch, cap_acc) + _pack(dist_blocks + [foot])
 
 
 def main() -> None:
