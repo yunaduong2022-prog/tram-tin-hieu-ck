@@ -2434,14 +2434,13 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34, showarrow=False,
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
         if price_m:
-            fig.add_annotation(xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="bottom",
-                               yshift=40, showarrow=False, text=f'<b>{price_m["value"]}</b>',
-                               font=dict(size=NAME_PX, color=price_m.get("color", "#F5C542")),
+            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 18,
+                               yshift=40, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=NAME_PX),
                                hovertext=price_m.get("tip"))
             if price_m.get("sub"):
-                fig.add_annotation(xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="top", yshift=32, showarrow=False,
-                                   align="right", text=htmllib.escape(str(price_m["sub"])),
-                                   font=dict(size=11, color=price_m.get("color", "#F5C542")), hovertext=price_m.get("tip"))
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32, showarrow=False,
+                                   align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 34)),
+                                   font=dict(size=11, color=price_m.get("color", "#8B95A5")), hovertext=price_m.get("tip"))
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(others):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
@@ -2540,21 +2539,17 @@ def metrics_html(metrics, code="", name="") -> str:
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
     head = ""
     if code:
-        price_color = price_m.get("color", "#F5C542") if price_m else "#F5C542"
-        price = f'<span class="cm-price" style="color:{price_color}">{htmllib.escape(str(price_m["value"]))}</span>' if price_m else ""
-        head = f'<div class="cm-head"><span class="cm-code">{htmllib.escape(str(code))}</span><span class="cm-price-wrap">{price}'
-        if price_m and price_m.get("sub"):
-            head += f'<span class="cm-price-sub" style="color:{price_color}">{htmllib.escape(str(price_m["sub"]))}</span>'
-        head += '</span></div>'
+        price = f'<span class="cm-price">{htmllib.escape(str(price_m["value"]))}</span>' if price_m else ""
+        head = f'<div class="cm-head"><span class="cm-code">{htmllib.escape(str(code))}</span>{price}</div>'
         if name:
             head += f'<div class="cm-name">{htmllib.escape(str(name))}</div>'
+        if price_m and price_m.get("sub"):
+            head += f'<div class="cm-sub" style="color:{price_m.get("color", "#8B95A5")};margin-bottom:6px">{htmllib.escape(str(price_m["sub"]))}</div>'
     return ('<style>.cm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:4px 0 6px}'
             '.cm-lab{font-size:12px;color:var(--muted)}.cm-val{font-size:24px;font-weight:800;line-height:1.25;color:var(--txt2)}'
             '.cm-sub{font-size:11.5px;line-height:1.35}.cm-code{font-size:56px;font-weight:800;line-height:1.1;color:var(--txt2)}'
-            '.cm-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:nowrap;margin:2px 0 2px}'
-            '.cm-price-wrap{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2}'
-            '.cm-price{font-size:24px;font-weight:800}'
-            '.cm-price-sub{font-size:11.5px;white-space:nowrap}'
+            '.cm-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:2px 0 2px}'
+            '.cm-price{font-size:24px;font-weight:800;color:var(--txt2)}'
             '.cm-name{font-size:24px;line-height:1.3;color:var(--txt);margin:0 0 4px}</style>'
             + head + '<div class="cm-grid">' + "".join(cells) + '</div>')
 
@@ -2590,22 +2585,10 @@ def page_stock():
     a = A[tf]
 
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
-    # Dòng giá trên biểu đồ theo mẫu: giá bên phải, mức thay đổi ngay bên dưới.
-    # Tăng = xanh, giảm = đỏ, đi ngang = vàng.
-    try:
-        _d_chg = float(d_chg)
-    except (TypeError, ValueError):
-        _d_chg = float("nan")
-    if pd.notna(_d_chg):
-        _price_col = "#25A879" if _d_chg > 0 else ("#E5586A" if _d_chg < 0 else "#F5C542")
-        _delta = float(info["Giá"]) * _d_chg / (100 + _d_chg) if _d_chg != -100 else 0.0
-        _price_sub = f"{_delta:+.2f} ({_d_chg:+.2f}%)"
-    else:
-        _price_col, _price_sub = "#F5C542", "Chưa có biến động"
     _sw_text, _, _sw_tip, _ = swing_view(info)
     _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
     chart_metrics = [
-        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": _price_sub, "color": _price_col, "tip": _sw_tip},
+        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip},
         {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
         {"label": "Position %", "value": f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-"},
         {"label": "Cảnh báo (phiên mới nhất)", "value": info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có"},
