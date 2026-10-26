@@ -264,6 +264,58 @@ def context_html(r: pd.Series, view: str, n: int, period: str = DEFAULT_PERIOD) 
 
 
 # ------------------------------------------------------------------ TĂNG TRƯỞNG LNST CÔNG TY MẸ THEO QUÝ (YoY)
+RUBBER_RANK_PATH = "data/cao_su_q3_2026.csv"
+
+
+def rubber_rank_html(path: str = RUBBER_RANK_PATH) -> tuple[str, int]:
+    """Bảng xếp hạng tài chính/kinh doanh ngành cao su Q3/26 từ snapshot người dùng cung cấp."""
+    if not os.path.exists(path):
+        return "", 0
+    try:
+        d = pd.read_csv(path, encoding="utf-8-sig")
+    except (OSError, pd.errors.ParserError, UnicodeDecodeError):
+        return "", 0
+    if d.empty or "Vốn hóa (tỷ đồng)" not in d.columns:
+        return "", 0
+    d["Vốn hóa (tỷ đồng)"] = pd.to_numeric(d["Vốn hóa (tỷ đồng)"], errors="coerce")
+    # Luôn áp dụng ngưỡng tại lúc hiển thị, không chỉ dựa vào dữ liệu đã lọc sẵn.
+    d = d[d["Vốn hóa (tỷ đồng)"] >= 1000].copy()
+    if d.empty:
+        return "", 0
+
+    esc = _html.escape
+    cols = ["STT", "Mã CP", "Xếp hạng", "Xếp hạng tài chính", "Xếp hạng kinh doanh",
+            "Vốn hóa (tỷ đồng)", "KLGD MA20 (CP)", "EPS (đồng/CP)", "P/E", "P/B",
+            "Giá trị sổ sách (đồng/CP)", "ROE (%)", "ROA (%)", "DTT", "LNST công ty mẹ"]
+    head = "".join(f"<th>{esc(c).replace(' (', '<br>(')}</th>" for c in cols)
+    formats = {
+        "Vốn hóa (tỷ đồng)": "{:,.0f}", "KLGD MA20 (CP)": "{:,.0f}",
+        "EPS (đồng/CP)": "{:,.0f}", "P/E": "{:.2f}", "P/B": "{:.2f}",
+        "Giá trị sổ sách (đồng/CP)": "{:,.0f}", "ROE (%)": "{:.2f}%",
+        "ROA (%)": "{:.2f}%", "DTT": "{:,.1f}", "LNST công ty mẹ": "{:,.1f}",
+    }
+    rows = []
+    for _, r in d.iterrows():
+        cells = []
+        for c in cols:
+            v = r.get(c)
+            if pd.isna(v):
+                rendered = "-"
+            elif c == "Mã CP":
+                rendered = esc(str(v))
+            elif c in ("DTT", "LNST công ty mẹ"):
+                number = float(v)
+                rendered = f"{number:,.0f}" if number.is_integer() else f"{number:,.1f}"
+            elif c in formats:
+                rendered = formats[c].format(float(v))
+            else:
+                rendered = str(int(float(v))) if c in ("STT", "Xếp hạng", "Xếp hạng tài chính", "Xếp hạng kinh doanh") else esc(str(v))
+            cls = "code" if c == "Mã CP" else "num"
+            cells.append(f'<td class="{cls}">{rendered}</td>')
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>', len(d)
+
+
 LNST_PATH = "data/lnst_quy.csv"     # cột: Ngành, Mã, Vốn hóa, Thanh khoản (CP), Q3/24, ..., Tổng hợp (1 = dòng tổng cả ngành); số %, để trống nếu chưa có
 _LNST_Q = re.compile(r"^Q[1-4]/\d{2}$")
 _LNST_SCALE = 100.0                  # |tăng trưởng| từ mức này trở lên tô đậm nhất
@@ -422,6 +474,17 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
         c[4].metric("Số mã có dữ liệu", f"{n}")
     if n < CFG["min_stocks"]:
         st.warning(f"Ngành này chỉ có {n} mã có dữ liệu, thứ hạng chỉ mang tính tham khảo.")
+
+    # --- Snapshot xếp hạng cơ bản ngành cao su từ bảng Q3/26 người dùng cung cấp
+    if str(sector).strip().casefold() == "cao su":
+        st.subheader("Bảng xếp hạng ngành cao su · Q3/26")
+        st.caption("Dữ liệu snapshot cập nhật 06/06/2026. Đã loại các mã có vốn hóa dưới 1.000 tỷ đồng; thứ hạng giữ theo bảng nguồn.")
+        rubber_html, rubber_n = rubber_rank_html()
+        if rubber_html:
+            st.markdown(rubber_html, unsafe_allow_html=True)
+            st.caption(f"Còn {rubber_n} mã sau khi lọc vốn hóa ≥ 1.000 tỷ đồng. Số liệu được giữ theo bảng nguồn.")
+        else:
+            st.info("Chưa có dữ liệu xếp hạng cơ bản ngành cao su trong data/cao_su_q3_2026.csv.")
 
     # --- Bảng xếp hạng
     st.subheader(f"Bảng xếp hạng theo RS · {period}")
