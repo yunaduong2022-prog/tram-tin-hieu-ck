@@ -2401,10 +2401,10 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
-        BRAND_H = 24                                   # chừa thêm chỗ cho dòng thương hiệu dưới hàng chú thích
+        BRAND_H = 46                                   # chừa thêm chỗ cho dòng thương hiệu: cách chữ mã bên dưới và hàng chú thích bên trên cho thoáng
         top += BRAND_H
         ph = height - top - bot
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=102, showarrow=False,
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=122, showarrow=False,
                            text=_brand_tag(), font=dict(size=13))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
                           legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
@@ -2413,9 +2413,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=40, showarrow=False,
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=50, showarrow=False,
                            text=_brand_tag(), font=dict(size=13))
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=64, b=10),
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=76, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
     if "Dual Ichimoku" in layers:
