@@ -19,9 +19,9 @@ import pandas as pd
 
 OPEN, HIGH, LOW, CLOSE, VOL = "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh"
 MIN_BARS = 120
-# Vùng đi ngang chỉ tính khi (đỉnh - đáy) / đáy <= MAX_AMP (13%: cổ phiếu vốn hóa lớn thường đi ngang 12-13%). Phiên làm giá vượt khỏi khung này nhưng các phiên sau quay lại
+# Vùng đi ngang chỉ tính khi (đỉnh - đáy) / đáy <= MAX_AMP. Phiên làm giá vượt khỏi khung này nhưng các phiên sau quay lại
 # trong khung cũ (cụm tối đa MAX_FB_RUN phiên liên tiếp) là BREAKOUT GIẢ: vẫn tính vào số nến đi ngang, loại khỏi biên trên/dưới.
-MAX_AMP = 0.13
+MAX_AMP = 0.10
 MAX_FB_RUN = 3
 MAX_FB_SHARE = 0.10      # tổng phiên breakout giả tối đa 10% độ dài vùng (tối thiểu cho phép 3 phiên): vùng phải phần lớn nằm trong khung
 OFFSETS = (0, 3, 6, 10, 15, 20, 30, 45)
@@ -543,7 +543,7 @@ def note_html(c, compact_view: bool = False) -> str:
     foot = '<div class="wy-ft">Quy tắc mang tính chủ quan; chỉ để quan sát, không phải khuyến nghị.</div>'
     if not c:
         return (f'<div class="wy none">{head}<span class="wy-tag">Chưa có cấu trúc</span></div>'
-                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 13%, chạm cả hai biên từ 2 lần): '
+                '<div class="wy-tx" style="margin-top:6px">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 10%, chạm cả hai biên từ 2 lần): '
                 'giá đang trong xu hướng hoặc biên quá rộng, nên chưa xác định được pha Wyckoff.</div>' + foot + '</div>')
     kind = c["kind"]
     cls = kind if kind in ("acc", "dist") else "unk"
