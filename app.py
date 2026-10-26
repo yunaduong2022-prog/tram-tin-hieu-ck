@@ -2134,6 +2134,12 @@ DATE_TICK_STOPS = [
     dict(dtickrange=[31000000000, None], value="%Y"),
 ]
 
+def _brand_tag() -> str:
+    """Dòng thương hiệu trên biểu đồ: TRẠM TÍN HIỆU | MIN TRADING (tên lấy từ brand.py)."""
+    return (f'<b style="color:#E6EDF3">{BR.TITLE.upper()}</b> <span style="color:#6B7686">|</span> '
+            f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
+
+
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan"):
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
@@ -2395,14 +2401,21 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
+        BRAND_H = 24                                   # chừa thêm chỗ cho dòng thương hiệu dưới hàng chú thích
+        top += BRAND_H
+        ph = height - top - bot
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=102, showarrow=False,
+                           text=_brand_tag(), font=dict(size=13))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
-                          legend=dict(orientation="h", yanchor="bottom", y=1 + 104 / ph, font=dict(size=10)))
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
     elif mobile:
         # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=30, b=10),
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=40, showarrow=False,
+                           text=_brand_tag(), font=dict(size=13))
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=64, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
     if "Dual Ichimoku" in layers:
