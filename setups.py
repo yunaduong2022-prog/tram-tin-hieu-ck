@@ -117,6 +117,46 @@ def classify(f: pd.DataFrame) -> pd.Series:
     return pd.Series(np.select(cond, name, default="NEUTRAL"), index=f.index)
 
 
+def _swing_high_above(h: np.ndarray, i: int, level: float, look: int = 120, k: int = 4) -> float | None:
+    """Đỉnh pivot (cao nhất trong k nến mỗi bên) gần nhất NẰM TRÊN `level` (+1%) mà từ đó tới nến i giá chưa vượt qua. None nếu không còn đỉnh nào."""
+    best = None
+    for p in range(max(k, i - look + k), i - k + 1):
+        if h[p] == h[p - k:p + k + 1].max() and h[p] > level * 1.01 and (p >= i or h[p + 1:i + 1].max() <= h[p]):
+            best = h[p] if best is None else min(best, h[p])
+    return None if best is None else float(best)
+
+
+# Xác suất giá chạm mục tiêu trong 40 phiên (backtest 147 mã 2019-2026) và kỳ vọng nếu chốt hết ở đó
+TARGET_STATS = {"A": 56, "B": 51, "C1": 56, "C2": 38}
+
+
+def targets(g: pd.DataFrame, f: pd.DataFrame, entry: float, risk: float) -> dict:
+    """Mục tiêu theo vị trí giá so với Tenkan 65 / Kijun 129:
+      A  dưới cả hai đường      -> đường gần nhất phía trên giá (rồi tới đường còn lại)
+      B  giữa hai đường         -> đường nằm trên (kháng cự)
+      C1 trên cả hai, còn đỉnh cũ chưa vượt -> đỉnh pivot gần nhất phía trên
+      C2 trên cả hai, đã tạo đỉnh mới       -> 2R và 3R tính từ giá vào"""
+    r = f.iloc[-1]
+    c = float(r["c"])
+    lo, hi = float(r["tk_lo"]), float(r["tk_hi"])
+    if c < lo:
+        case = "A"
+        lv = [("Đường gần nhất phía trên", lo), ("Đường còn lại", hi)] if lo > c * 1.005 else [("Đường trên (Tenkan/Kijun)", hi)]
+    elif c < hi:
+        case, lv = "B", [("Đường trên (kháng cự Tenkan/Kijun)", hi)]
+    else:
+        sw = _swing_high_above(pd.to_numeric(g[H], errors="coerce").to_numpy(float), len(g) - 1, c)
+        if sw is None:
+            case, lv = "C2", [("Mục tiêu 1 (2R)", entry + 2 * risk), ("Mục tiêu 2 (3R)", entry + 3 * risk)]
+        else:
+            case, lv = "C1", [("Đỉnh gần nhất chưa vượt", sw)]
+    lv = [(n, float(v)) for n, v in lv if v > max(c, entry)]          # chỉ giữ mốc nằm trên cả giá hiện tại lẫn giá vào (lệnh chờ WATCH có giá vào cao hơn giá hiện tại)
+    if not lv:                                                         # không còn mốc cản nào phía trên -> mục tiêu theo rủi ro
+        case, lv = "C2", [("Mục tiêu 1 (2R)", float(entry + 2 * risk)), ("Mục tiêu 2 (3R)", float(entry + 3 * risk))]
+    names = {"A": "Dưới cả hai đường", "B": "Giữa hai đường", "C1": "Trên hai đường, còn đỉnh chưa vượt", "C2": "Trên hai đường, đã tạo đỉnh mới"}
+    return {"case": case, "case_name": names[case], "levels": lv, "prob": TARGET_STATS[case]}
+
+
 def bull_divergence(g: pd.DataFrame, f: pd.DataFrame) -> dict | None:
     """Phân kỳ tăng (thường hoặc 2 đáy bằng nhau) gần nhất còn hiệu lực ở khung Ngày, kèm trạng thái xác nhận bằng giá.
     Xác nhận = trong 10 phiên sau khi báo, có phiên đóng cửa vượt đỉnh 10 phiên trước VÀ (Supertrend tăng hoặc giá trên Kijun).
@@ -190,7 +230,7 @@ def plan(g: pd.DataFrame) -> dict | None:
            "tenkan": float(r["tenkan"]), "kijun": float(r["kijun"]), "res": float(r["tk_hi"]), "sup": float(r["tk_lo"]),
            "cloud_top": float(r["cloud_top"]), "cloud_bot": float(r["cloud_bot"]), "st_line": float(r["st_line"]) if pd.notna(r["st_line"]) else None,
            "st_up": bool(r["st_up"]), "vr": float(r["vr"]) if pd.notna(r["vr"]) else None,
-           "deep": bool(r["deep"]), "entry": None, "stop": None, "t1": None, "t2": None, "rr": None, "text": "", "bars_ago": None, "ext": None}
+           "deep": bool(r["deep"]), "entry": None, "stop": None, "t1": None, "t2": None, "rr": None, "text": "", "bars_ago": None, "ext": None, "targets": None}
     # ngày của tín hiệu bùng nổ gần nhất còn hiệu lực
     if state in ("BOTTOM", "BASE_HL", "BREAKOUT"):
         col = {"BOTTOM": "bottom", "BASE_HL": "base_hl", "BREAKOUT": "breakout"}[state]
@@ -209,7 +249,8 @@ def plan(g: pd.DataFrame) -> dict | None:
             entry = float(rs["res25"]) if pd.notna(rs["res25"]) else c
         stop = choose_stop(entry, rs, state)
         risk = entry - stop
-        out.update(entry=entry, stop=stop, t1=entry + 2 * risk, t2=entry + 3 * risk, rr=2.0, ext=c / entry - 1)
+        out.update(entry=entry, stop=stop, t1=entry + 2 * risk, t2=entry + 3 * risk, rr=2.0, ext=c / entry - 1,
+                   targets=targets(g, f, entry, risk))
     out["text"] = _text(out)
     out.update(rsi_view(g, f, state))
     return out

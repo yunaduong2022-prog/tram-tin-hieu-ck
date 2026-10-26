@@ -1975,10 +1975,22 @@ def setup_card(g_day):
         risk = (p["entry"] - p["stop"]) / p["entry"] * 100
         box += [row(lab, f'<b>{fp(p["entry"])}</b>'),
                 row("Cắt lỗ", f'<span class="c-red">{fp(p["stop"])}</span> <span class="muted">−{risk:.1f}%</span>'),
-                row("Mục tiêu 1 (2R)", f'<span class="c-green">{fp(p["t1"])}</span>'),
-                row("Mục tiêu 2 (3R)", f'<span class="c-green">{fp(p["t2"])}</span>')]
+]
+        _tg = p.get("targets")
+        if _tg:
+            for _n, _v in _tg["levels"]:
+                box.append(row(_n, f'<span class="c-green">{fp(_v)}</span> <span class="muted">+{(_v / p["close"] - 1) * 100:.1f}%</span>'))
         if p["st_line"] and p["st_up"]:
             box.append(row("Thoát khi đóng cửa dưới Supertrend", fp(p["st_line"])))
+        if _tg:
+            _msg = {"A": "Giá còn dưới cả Tenkan và Kijun: mốc này là cản gần nhất; vào lệnh ở vùng này chưa có lợi thế trong backtest.",
+                    "B": "Giá đang giữa Tenkan và Kijun: đường trên là kháng cự; vào lệnh ở vùng này chưa có lợi thế trong backtest.",
+                    "C1": "Giá trên cả hai đường nhưng còn đỉnh cũ chưa vượt: đỉnh đó là cản gần nhất.",
+                    "C2": "Giá đã tạo đỉnh mới nên không còn đỉnh cũ làm mốc: dùng mục tiêu theo rủi ro (2R, 3R)."}[_tg["case"]]
+            html.append(f'<div class="muted" style="margin-top:6px"><b>Mục tiêu · {_tg["case_name"]}.</b> {_msg} '
+                        f'Trong backtest giá chạm mốc này trong 40 phiên khoảng {_tg["prob"]}% số lần, nhưng mốc chỉ cách giá vài % trong khi cắt lỗ xa hơn, '
+                        'nên chốt hết ở đó không có lãi; chốt một nửa còn làm giảm lãi trung bình (+1,4% so với +2,6% khi kéo theo Supertrend). '
+                        'Coi đây là mốc cản để tự quyết chốt bớt; cách thoát chính vẫn là đóng cửa dưới Supertrend.</div>')
         if s_ in ("BOTTOM", "BASE_HL", "BREAKOUT") and p["ext"] is not None and p["ext"] > 0.05:
             html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đã cao hơn điểm vào {p["ext"] * 100:.1f}%: đã chạy xa, tránh đuổi; chờ nhịp lùi về gần đỉnh nền.</div>')
     elif s_ == "RANGE":
