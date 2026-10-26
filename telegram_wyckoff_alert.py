@@ -133,6 +133,30 @@ def _sorted(d: pd.DataFrame, kind: str, held: set[str], watch: set[str]) -> pd.D
     return d.sort_values(["_p", "_o", "Khớp"], ascending=[True, True, False])
 
 
+def _section_chunks(title: str, total: int, items: list[str], more: str, limit: int = TG_LIMIT) -> list[str]:
+    """Chia 1 mục (tích lũy / phân phối) thành nhiều khối <pre>, mỗi khối không vượt quá giới hạn Telegram.
+    Mỗi khối tự đóng/mở thẻ <pre> riêng nên tin nhắn nào cũng hợp lệ."""
+    def render(body: list[str], first: bool) -> str:
+        t = f"{title} ({total} mã)" if first else f"{title} (tiếp)"
+        return f"<b>{t}</b>\n<pre>{chr(10).join(body)}</pre>"
+
+    budget = limit - len(more) - 40            # chừa chỗ cho dòng "… và N mã khác" và khoảng trắng nối tin
+    chunks: list[str] = []
+    cur: list[str] = []
+    for it in items:
+        # đo bằng bản đã escape HTML (dài hơn thực tế) nên luôn an toàn
+        if cur and len(render(cur + [it], not chunks)) > budget:
+            chunks.append(render(cur, not chunks))
+            cur = [it]
+        else:
+            cur.append(it)
+    if cur:
+        chunks.append(render(cur, not chunks))
+    if chunks and more:
+        chunks[-1] += more
+    return chunks
+
+
 def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held: set[str], watch: set[str], cap: int,
                    mode_txt: str, sent_at: datetime | None = None) -> list[str]:
     head = (f"🏗 <b>Wyckoff · cấu trúc khung Ngày cuối phiên {latest:%d/%m/%Y}</b>\n"
@@ -147,9 +171,9 @@ def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held:
         if d.empty:
             continue
         shown = d.head(cap) if cap else d
-        body = "\n\n".join(_block(r, held, watch) for _, r in shown.iterrows())
+        items = [_block(r, held, watch) for _, r in shown.iterrows()]
         more = f"\n… và {len(d) - len(shown)} mã khác" if len(d) > len(shown) else ""
-        blocks.append(f"<b>{title} ({len(d)} mã)</b>\n<pre>{body}</pre>{more}")
+        blocks.extend(_section_chunks(title, len(d), items, more))
     blocks.append(foot)
     msgs, cur = [], ""
     for b in blocks:
