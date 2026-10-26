@@ -17,7 +17,8 @@ Cách chạy:
     python telegram_wyckoff_alert.py                   # gửi thật (chỉ mã mới / đổi pha)
     python telegram_wyckoff_alert.py --all             # gửi toàn bộ danh sách tích lũy + phân phối hiện tại
     python telegram_wyckoff_alert.py --only HPG,FPT    # chỉ xét các mã này
-    python telegram_wyckoff_alert.py --max 30          # số mã tối đa mỗi mục (mặc định 20, 0 = tất cả)
+    python telegram_wyckoff_alert.py --max 30          # số mã tối đa của mục phân phối (mặc định 20, 0 = tất cả)
+    python telegram_wyckoff_alert.py --max-acc 5       # số mã tối đa mỗi pha tích lũy (mặc định 10)
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+import action_summary as AS
 import engine as E
 import wyckoff as WY
 from telegram_alert import SKIP, TG_LIMIT, send
@@ -50,6 +52,10 @@ PHASE_NOTE = {
 
 
 # ------------------------------------------------------------------ dữ liệu
+def _last(d: pd.DataFrame, col: str) -> float:
+    return float(d[col].iat[-1]) if col in d.columns and pd.notna(d[col].iat[-1]) else float("nan")
+
+
 def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFrame, pd.Timestamp]:
     """Trả (bảng mã có cấu trúc tích lũy / phân phối, ngày dữ liệu mới nhất)."""
     raw = E.clean_raw(pd.read_csv(path, dtype={"Mã": str}))
@@ -85,6 +91,9 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
             "Xác nhận": (w["trigger"]["txt"], float(w["trigger"]["p"])) if w.get("trigger") else None,
             "Vô hiệu": (w["inval"]["txt"], float(w["inval"]["p"])) if w.get("inval") else None,
             "GTGD": liq,
+            "wy": WY.compact(w),
+            "ma20": _last(d, "MA20"), "ma50": _last(d, "MA50"), "ma200": _last(d, "MA200"),
+            "sup": _last(d, "Support_20"), "res": _last(d, "Resistance_20"),
         })
     return pd.DataFrame(rows), latest
 
@@ -126,6 +135,54 @@ def _block(r, held: set[str], watch: set[str]) -> str:
     return html.escape("\n".join(lines))
 
 
+def _stock_msg(r, held: set[str], watch: set[str]) -> str:
+    """Một tin nhắn riêng cho 1 mã: cấu trúc Wyckoff + Tóm tắt nhanh + Kế hoạch hành động."""
+    mark = "📌 " if r["Mã"] in held else ("👁 " if r["Mã"] in watch else "")
+    chg = "" if pd.isna(r["Chg"]) else f" ({r['Chg']:+.1f}%)"
+    esc = html.escape
+    wy_lines = [f"{esc(r['Nhãn'])} · {esc(PHASE_NOTE[r['Loại']][r['Pha']])}",
+                f"Vùng {r['Bot']:,.2f} – {r['Top']:,.2f} · {r['Nến']} nến · khớp mẫu {r['Khớp']}%"]
+    if r["SK"]:
+        wy_lines.append(f"Sự kiện gần nhất: {esc(r['SK'])}")
+    if r["Xác nhận"]:
+        wy_lines.append(f"✅ {esc(r['Xác nhận'][0])}")
+    if r["Vô hiệu"]:
+        wy_lines.append(f"⛔ {esc(r['Vô hiệu'][0])}")
+    icon = "🟢" if r["Loại"] == "acc" else "🔴"
+    head = f"{icon} {mark}<b>{esc(r['Mã'])}</b> · Giá {r['Giá']:,.2f}{chg} · GTGD {r['GTGD']:,.0f} tỷ"
+    ctx = {"code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"],
+           "wy": r["wy"], "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": 0, "div": [], "zone": None}
+    try:
+        plan = AS.text(ctx)
+    except Exception as e:  # noqa: BLE001
+        print(f"  không dựng được tóm tắt {r['Mã']}: {e}")
+        plan = ""
+    foot = "<i>Quy tắc mang tính chủ quan, chỉ để tham khảo, không phải khuyến nghị đầu tư.</i>"
+    parts = [head, "<b>🏗 Wyckoff</b>\n" + "\n".join(wy_lines)] + ([plan] if plan else []) + [foot]
+    msg = "\n\n".join(parts)
+    if len(msg) > TG_LIMIT:                       # an toàn: quá dài thì bỏ phần chân
+        msg = "\n\n".join(parts[:-1])
+    return msg
+
+
+def build_acc_messages(show: pd.DataFrame, held: set[str], watch: set[str], cap: int) -> list[str]:
+    """Tích lũy: tách theo từng pha (C, D, E, B, A); mỗi pha có 1 tin mở đầu rồi mỗi mã 1 tin riêng."""
+    acc = _sorted(show, "acc", held, watch)
+    msgs: list[str] = []
+    for ph in ORDER["acc"]:
+        g = acc[acc["Pha"] == ph]
+        if g.empty:
+            continue
+        shown = g.head(cap) if cap else g
+        title = WY.PHASE_NAME["acc"][ph] if hasattr(WY, "PHASE_NAME") else PHASE_NOTE["acc"][ph]
+        hint = WY.PHASE_HINT["acc"][ph] if hasattr(WY, "PHASE_HINT") else ""
+        more = f" · hiển thị {len(shown)}/{len(g)} mã" if len(g) > len(shown) else ""
+        msgs.append(f"🟢 <b>TÍCH LŨY · PHA {ph} — {html.escape(title)}</b> ({len(g)} mã{more})"
+                    + (f"\n<i>{html.escape(hint)}</i>" if hint else ""))
+        msgs.extend(_stock_msg(r, held, watch) for _, r in shown.iterrows())
+    return msgs
+
+
 def _sorted(d: pd.DataFrame, kind: str, held: set[str], watch: set[str]) -> pd.DataFrame:
     d = d[d["Loại"] == kind].copy()
     d["_p"] = d["Mã"].map(lambda c: 0 if c in held else 1 if c in watch else 2)
@@ -157,24 +214,7 @@ def _section_chunks(title: str, total: int, items: list[str], more: str, limit: 
     return chunks
 
 
-def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held: set[str], watch: set[str], cap: int,
-                   mode_txt: str, sent_at: datetime | None = None) -> list[str]:
-    head = (f"🏗 <b>Wyckoff · cấu trúc khung Ngày cuối phiên {latest:%d/%m/%Y}</b>\n"
-            f"Đang tích lũy: {totals['acc']} mã · Đang phân phối: {totals['dist']} mã\n"
-            f"{mode_txt}\n"
-            f"🕖 Gửi lúc {stamp(sent_at)}")
-    foot = ("<i>Wyckoff do máy dò theo giá và volume nên mang tính chủ quan. Pha A/B chỉ để quan sát; "
-            "chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.</i>")
-    blocks = [head]
-    for kind, title in (("acc", "🟢 TÍCH LŨY"), ("dist", "🔴 CẢNH BÁO PHÂN PHỐI")):
-        d = _sorted(show, kind, held, watch)
-        if d.empty:
-            continue
-        shown = d.head(cap) if cap else d
-        items = [_block(r, held, watch) for _, r in shown.iterrows()]
-        more = f"\n… và {len(d) - len(shown)} mã khác" if len(d) > len(shown) else ""
-        blocks.extend(_section_chunks(title, len(d), items, more))
-    blocks.append(foot)
+def _pack(blocks: list[str]) -> list[str]:
     msgs, cur = [], ""
     for b in blocks:
         if cur and len(cur) + len(b) + 2 > TG_LIMIT:
@@ -186,12 +226,31 @@ def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held:
     return msgs
 
 
+def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held: set[str], watch: set[str], cap: int,
+                   mode_txt: str, sent_at: datetime | None = None, cap_acc: int = 10) -> list[str]:
+    head = (f"🏗 <b>Wyckoff · cấu trúc khung Ngày cuối phiên {latest:%d/%m/%Y}</b>\n"
+            f"Đang tích lũy: {totals['acc']} mã · Đang phân phối: {totals['dist']} mã\n"
+            f"{mode_txt}\n"
+            f"🕖 Gửi lúc {stamp(sent_at)}")
+    foot = ("<i>Wyckoff do máy dò theo giá và volume nên mang tính chủ quan. Pha A/B chỉ để quan sát; "
+            "chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.</i>")
+    dist_blocks: list[str] = []
+    d = _sorted(show, "dist", held, watch)
+    if not d.empty:
+        shown = d.head(cap) if cap else d
+        items = [_block(r, held, watch) for _, r in shown.iterrows()]
+        more = f"\n… và {len(d) - len(shown)} mã khác" if len(d) > len(shown) else ""
+        dist_blocks = _section_chunks("🔴 CẢNH BÁO PHÂN PHỐI", len(d), items, more)
+    return [head] + build_acc_messages(show, held, watch, cap_acc) + _pack(dist_blocks + [foot])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true", help="chỉ in ra, không gửi và không ghi trạng thái")
     ap.add_argument("--all", action="store_true", help="gửi toàn bộ danh sách hiện tại, không chỉ mã mới / đổi pha")
     ap.add_argument("--only", default="", help="chỉ xét các mã này, ngăn cách bằng dấu phẩy")
-    ap.add_argument("--max", type=int, default=20, help="số mã tối đa mỗi mục (mặc định 20, 0 = tất cả)")
+    ap.add_argument("--max", type=int, default=20, help="số mã tối đa của mục phân phối (mặc định 20, 0 = tất cả)")
+    ap.add_argument("--max-acc", type=int, default=10, help="số mã tối đa MỖI PHA của mục tích lũy, mỗi mã 1 tin (mặc định 10, 0 = tất cả)")
     ap.add_argument("--min-value", type=float, default=MIN_VALUE_BN, help="giá trị khớp trung vị 20 phiên tối thiểu, tỷ đồng (mặc định 2)")
     ap.add_argument("--csv", default=CSV_PATH)
     args = ap.parse_args()
@@ -218,7 +277,7 @@ def main() -> None:
             if not args.dry_run:
                 save_state({r["Mã"]: sig_of(r) for _, r in res.iterrows()}, latest)
             return
-    msgs = build_messages(show, totals, latest, held, watch, args.max, mode_txt)
+    msgs = build_messages(show, totals, latest, held, watch, args.max, mode_txt, cap_acc=args.max_acc)
     if args.dry_run:
         for m in msgs:
             print(m, "\n" + "=" * 40)
@@ -226,10 +285,11 @@ def main() -> None:
     token, chat = os.environ.get("TELEGRAM_BOT_TOKEN", ""), os.environ.get("TELEGRAM_CHAT_ID", "")
     if not token or not chat:
         raise SystemExit("Thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID (đặt trong GitHub Secrets).")
+    pause = 3.2 if str(chat).startswith("-") else 1.1      # nhóm / kênh: tối đa ~20 tin mỗi phút
     for i, m in enumerate(msgs):
         send(token, chat, m)
         if i < len(msgs) - 1:
-            time.sleep(1.2)
+            time.sleep(pause)
     save_state({r["Mã"]: sig_of(r) for _, r in res.iterrows()}, latest)
     print(f"Đã gửi {len(msgs)} tin nhắn ({int((show['Loại'] == 'acc').sum())} tích lũy, {int((show['Loại'] == 'dist').sum())} phân phối).")
 

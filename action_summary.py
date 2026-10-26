@@ -295,3 +295,19 @@ def html(ctx: dict) -> str:
             f'<tbody>{body}</tbody></table>'
             '<div class="ac-ft"><span>Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.</span>'
             + (f'<span class="ac-dt">{esc(_date_label(ctx["date"]))}</span>' if ctx.get("date") is not None else "") + '</div></div>')
+
+
+def text(ctx: dict) -> str:
+    """Bản chữ của "Tóm tắt nhanh · Kế hoạch hành động" để gửi Telegram (parse_mode=HTML, đã escape). Thiếu giá thì trả chuỗi rỗng.
+    Dùng chung quy tắc với html(): cùng _signals / _levels / _rows nên nội dung khớp thẻ trong app."""
+    if not _ok(ctx.get("close")):
+        return ""
+    s = _signals(ctx)
+    lv = _levels(ctx, s)
+    esc = _html.escape
+    pic = _picture(s).replace("</div><div>", "\n")
+    pic = re.sub(r"</?div[^>]*>", "", pic)
+    rows = []
+    for pos, head, why, zone in _rows(ctx, s, lv):
+        rows.append(f"• <b>{esc(pos)}:</b> <b>{esc(head)}</b> {esc(why)}" + (f"\n   ↳ {esc(zone)}" if zone else ""))
+    return "<b>📝 Tóm tắt nhanh</b>\n" + pic + "\n\n<b>🎯 Kế hoạch hành động</b>\n" + "\n".join(rows)
