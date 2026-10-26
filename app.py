@@ -1114,8 +1114,23 @@ def _wb_table() -> pd.DataFrame:
     return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb12")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
-@st.cache_data(show_spinner=False)
+def _meta_files_sig() -> str:
+    """Dấu thời gian sửa file các nguồn P/B, ROE, Vốn hóa: đổi file nhập tay là cache tự làm mới (trước đây cache chỉ đổi khi có giá mới)."""
+    sig = []
+    for f in ("data/nhap_tay.csv", "data/fundamentals.csv", "data/stock_metadata.csv", "data/thong_tin_chung.csv", "data/shares_outstanding.csv"):
+        try:
+            sig.append(str(int(os.path.getmtime(f))))
+        except OSError:
+            sig.append("0")
+    return "-".join(sig)
+
+
 def _wb_meta_maps(key: str) -> tuple[dict, dict]:
+    return _wb_meta_maps_cached(f"{key}|{_meta_files_sig()}")
+
+
+@st.cache_data(show_spinner=False)
+def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     """Vốn hóa (data/stock_metadata.csv), tên/P/B/ROE (data/fundamentals.csv) và số nhập tay - cùng nguồn với thẻ ở Bộ lọc."""
     cap_map, fund_map = {}, {}
     if os.path.exists("data/stock_metadata.csv"):
@@ -1123,8 +1138,21 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
             meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
             if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
         except Exception: pass
+    # Vốn hóa = giá đóng cửa mới nhất x số CP lưu hành (giá nghìn đồng x số CP / 1e6 = tỷ đồng); số CP lấy ở thong_tin_chung.csv, thiếu thì shares_outstanding.csv
+    try:
+        _info = ST._read_csv_by_code(ST.INFO_PATH)
+        _sh = ST._read_csv_by_code(ST.SHARES_PATH)
+        _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
+        for _c, _p in _px.items():
+            _n = pd.to_numeric(_info.at[_c, "SLCP lưu hành (cp)"], errors="coerce") if (_c in _info.index and "SLCP lưu hành (cp)" in _info.columns) else float("nan")
+            if pd.isna(_n) and _c in _sh.index and "Số CP lưu hành" in _sh.columns:
+                _n = pd.to_numeric(_sh.at[_c, "Số CP lưu hành"], errors="coerce")
+            if pd.notna(_n) and pd.notna(_p) and _n > 0:
+                cap_map[_c] = round(float(_p) * float(_n) / 1e6)
+    except Exception:  # noqa: BLE001
+        pass
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
-    apply_manual_overrides(fund_map, cap_map)
+    apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
     return cap_map, fund_map
 
 
