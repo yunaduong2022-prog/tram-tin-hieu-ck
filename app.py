@@ -15,6 +15,7 @@ from plotly.subplots import make_subplots
 import engine as E
 import fund_guard as FG
 import ichimoku_dual as IDU
+import setups as SU
 import supertrend as SPT
 import hull_suite as HUL
 import watchlist as WL
@@ -1925,6 +1926,58 @@ def rsi_card(a, tf, code):
     return card("Phân tích RSI", head + body + note)
 
 
+SETUP_BT = {        # backtest 147 mã 2019-2026, vào mở cửa phiên sau, đã trừ phí 0,15%/chiều + thuế 0,1% + trượt giá 0,1%/chiều, T+2,
+                    # thoát khi chạm cắt lỗ hoặc đóng cửa dưới Supertrend, tối đa 60 phiên: (số lệnh, lãi TB %, thắng %, R/lệnh)
+    "BOTTOM": (603, 4.1, 37, 0.53), "BASE_HL": (1309, 2.8, 34, 0.36), "BREAKOUT": (3074, 1.5, 30, 0.25), "TREND": (3629, 3.0, 34, 0.50)}
+SETUP_BASE = (5880, 2.1, 34, 0.31)      # vào ngẫu nhiên, cùng cách cắt lỗ và thoát
+
+
+def setup_card(g_day):
+    """Thẻ Phân loại trạng thái (khung Ngày): trạng thái giá, điểm vào, cắt lỗ, mục tiêu. Logic ở setups.py."""
+    p = SU.plan(g_day)
+    if p is None:
+        return card("Phân loại trạng thái · khung Ngày", '<div class="muted">Chưa đủ dữ liệu (cần từ 130 phiên để tính Kijun 129).</div>')
+    s_ = p["state"]
+    head = tag(p["label"], p["tag"]) + (f' <span class="muted">báo cách đây {p["bars_ago"]} phiên</span>' if p["bars_ago"] else "")
+    html = [head, f'<div class="muted" style="margin-top:8px">{p["text"]}</div>']
+    box = []
+    if p["entry"] is not None:
+        lab = {"WATCH": "Giá kích hoạt (chờ vượt)", "TREND": "Giá hiện tại"}.get(s_, "Đỉnh nền vừa vượt")
+        risk = (p["entry"] - p["stop"]) / p["entry"] * 100
+        box += [row(lab, f'<b>{fp(p["entry"])}</b>'),
+                row("Cắt lỗ", f'<span class="c-red">{fp(p["stop"])}</span> <span class="muted">−{risk:.1f}%</span>'),
+                row("Mục tiêu 1 (2R)", f'<span class="c-green">{fp(p["t1"])}</span>'),
+                row("Mục tiêu 2 (3R)", f'<span class="c-green">{fp(p["t2"])}</span>')]
+        if p["st_line"] and p["st_up"]:
+            box.append(row("Thoát khi đóng cửa dưới Supertrend", fp(p["st_line"])))
+        if s_ in ("BOTTOM", "BASE_HL", "BREAKOUT") and p["ext"] is not None and p["ext"] > 0.05:
+            html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đã cao hơn điểm vào {p["ext"] * 100:.1f}%: đã chạy xa, tránh đuổi; chờ nhịp lùi về gần đỉnh nền.</div>')
+    elif s_ == "RANGE":
+        box += [row("Kháng cự (đường trên)", f'<span class="c-red">{fp(p["res"])}</span>'),
+                row("Hỗ trợ (đường dưới)", f'<span class="c-green">{fp(p["sup"])}</span>')]
+    box += [row("Tenkan 65 / Kijun 129", f'{fp(p["tenkan"])} / {fp(p["kijun"])}'),
+            row("Mây Kumo (9-17-26)", f'{fp(p["cloud_bot"])} – {fp(p["cloud_top"])}'),
+            row("RSI(14)", f'{p["rsi"]:.0f}')]
+    html.append('<div class="box">' + "".join(box) + "</div>")
+    html.append(f'<div class="muted" style="margin-top:6px">{tag("Động lượng RSI", p["rsi_kind"])} {p["rsi_note"]}</div>')
+    if p["div_note"]:
+        html.append(f'<div class="muted" style="margin-top:6px">{tag("Phân kỳ tăng", "green" if p["div"]["state"] == "confirmed" else "amber")} {p["div_note"]}</div>')
+    if s_ in SETUP_BT:
+        n, rt, w, rr = SETUP_BT[s_]
+        bn, brt, bw, brr = SETUP_BASE
+        html.append(f'<div class="muted" style="margin-top:8px">Backtest kiểu này ({n:,} lệnh, 147 mã, 2019-2026, đã trừ phí, thuế, trượt giá, T+2): '
+                    f'lãi trung bình {rt:+.1f}%/lệnh, thắng {w}%, {rr:+.2f}R/lệnh. Vào ngẫu nhiên với cùng cách thoát: {brt:+.1f}%, thắng {bw}%, {brr:+.2f}R. '
+                    'Tức là tỷ lệ thắng chỉ khoảng một phần ba; lợi nhuận đến từ vài lệnh lớn, và kết quả âm ở các năm 2019, 2022, 2024, 2026. '
+                    'Chia nhỏ vốn, luôn đặt cắt lỗ; đây là công cụ lọc, không phải lệnh chắc thắng.</div>')
+    elif s_ == "WEAK":
+        html.append('<div class="muted" style="margin-top:6px">Trạng thái yếu nhất trong backtest: +0,8%/lệnh, 0,06R, thấp hơn nhiều so với vào ngẫu nhiên.</div>')
+    elif s_ == "RANGE":
+        html.append('<div class="muted" style="margin-top:6px">Mua sát hỗ trợ giữa Tenkan và Kijun cho kỳ vọng gần 0 và 50% lần bị quét cắt lỗ trong 10 phiên; '
+                    'vượt đường trên kèm khối lượng mới có lợi thế (+2,3% sau 20 phiên so với mức nền +1,7%).</div>')
+    html.append('<div class="muted" style="margin-top:6px">Cắt lỗ = mức thấp hơn giữa giá vào − 2 ATR và đáy nền − 1% (kẹp trong 3–12% rủi ro); với Xu hướng tăng lấy thêm đường Supertrend nếu chặt hơn.</div>')
+    return card("Phân loại trạng thái · khung Ngày", "".join(html))
+
+
 def forecast_card(a, tf):
     d, bias, total, fc = a["dir"], a["bias"], a["total"], a["fc"]
     last_ts = a["g"]["Ngày"].iat[-1]
@@ -2432,6 +2485,10 @@ def page_stock():
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
+        try:
+            st.markdown(setup_card(A["D"]["g"]), unsafe_allow_html=True)
+        except Exception as _e:        # thẻ phụ không được làm hỏng cả trang
+            st.caption(f"Không tính được phân loại trạng thái: {_e}")
         if a["enough"]:
             st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
