@@ -1,0 +1,74 @@
+name: Cảnh báo Wyckoff lên Telegram (tích lũy / phân phối)
+
+on:
+  # Chạy ngay khi bạn đẩy dữ liệu cuối phiên mới lên GitHub (ví dụ từ update_eod.bat)
+  push:
+    branches: [main]
+    paths: ["data/eod_prices.csv"]
+  # Hoặc khi workflow cập nhật dữ liệu cuối phiên chạy xong (bot đẩy bằng GITHUB_TOKEN không kích hoạt được trigger push)
+  workflow_run:
+    workflows: ["Cập nhật dữ liệu cuối phiên"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Chỉ in ra log, không gửi Telegram"
+        type: boolean
+        default: false
+      all:
+        description: "Gửi toàn bộ danh sách tích lũy / phân phối hiện tại (không chỉ mã mới / đổi pha)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wyckoff-alert
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cài thư viện
+        run: pip install pandas numpy
+
+      - name: Gửi cấu trúc Wyckoff (tích lũy / cảnh báo phân phối)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.all }}" = "true" ]; then ARGS="$ARGS --all"; fi
+          python telegram_wyckoff_alert.py $ARGS
+
+      - name: Lưu trạng thái đã gửi (tránh báo lặp)
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          git config user.name "alert-bot"
+          git config user.email "alert-bot@users.noreply.github.com"
+          [ -f data/wy_alert_state.json ] && git add data/wy_alert_state.json
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi."
+            exit 0
+          fi
+          git commit -m "Trạng thái cảnh báo Wyckoff $(TZ=Asia/Ho_Chi_Minh date +%d/%m/%Y)"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase --autostash && git push; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 10))
+          done
+          exit 1

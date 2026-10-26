@@ -1,4 +1,4 @@
-name: Cảnh báo Supertrend lên Telegram
+name: Cảnh báo Supertrend lên Telegram (điểm bán)
 
 on:
   # Chạy ngay khi bạn đẩy dữ liệu cuối phiên mới lên GitHub (ví dụ từ update_eod.bat)
@@ -47,7 +47,7 @@ jobs:
       - name: Cài thư viện
         run: pip install pandas numpy
 
-      - name: Gửi điểm mua / bán Supertrend
+      - name: Gửi điểm bán Supertrend
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
