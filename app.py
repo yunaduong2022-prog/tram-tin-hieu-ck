@@ -2448,7 +2448,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
     if "VNINDEX" in subs:
         _vcol = "#2BD6A2" if _vchg >= 0 else "#F2506E"
-        _hdr("VNINDEX", f'VNINDEX  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
+        _hdr("VNINDEX", f'<span style="font-size:22px"><b style="color:#CBD2DC">VNINDEX</b></span>  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
              else "VNINDEX: chưa có dữ liệu trong vùng đang xem")
     if "RS vs VNINDEX" in subs:
         _st = "mạnh hơn thị trường" if _above[-1] else "yếu hơn thị trường"
