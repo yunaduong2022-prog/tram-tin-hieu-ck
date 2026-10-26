@@ -1,0 +1,78 @@
+name: Cảnh báo Supertrend lên Telegram
+
+on:
+  # Chạy ngay khi bạn đẩy dữ liệu cuối phiên mới lên GitHub (ví dụ từ update_eod.bat)
+  push:
+    branches: [main]
+    paths: ["data/eod_prices.csv"]
+  # Hoặc khi workflow cập nhật dữ liệu cuối phiên chạy xong (bot đẩy bằng GITHUB_TOKEN không kích hoạt được trigger push)
+  workflow_run:
+    workflows: ["Cập nhật dữ liệu cuối phiên"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Chỉ in ra log, không gửi Telegram"
+        type: boolean
+        default: false
+      days:
+        description: "Lấy tín hiệu của N phiên gần nhất"
+        type: string
+        default: "1"
+      force:
+        description: "Gửi lại cả tín hiệu đã gửi"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: supertrend-alert
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cài thư viện
+        run: pip install pandas numpy
+
+      - name: Gửi điểm mua / bán Supertrend
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ARGS="--days ${{ inputs.days || '1' }}"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          python telegram_supertrend_alert.py $ARGS
+
+      - name: Lưu danh sách tín hiệu đã gửi (tránh gửi trùng)
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          git config user.name "alert-bot"
+          git config user.email "alert-bot@users.noreply.github.com"
+          [ -f data/st_alert_state.json ] && git add data/st_alert_state.json
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi."
+            exit 0
+          fi
+          git commit -m "Trạng thái cảnh báo Supertrend $(TZ=Asia/Ho_Chi_Minh date +%d/%m/%Y)"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase --autostash && git push; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 10))
+          done
+          exit 1
