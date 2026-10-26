@@ -7,6 +7,7 @@ Mục tiêu: tìm MÃ DẪN ĐẦU, không chỉ tìm ngành mạnh. Với ngàn
        - Xu hướng tăng và thanh khoản cải thiện
        - Đang tích lũy, gần điểm mua hoặc đã vượt nền
        - Yếu hơn ngành hoặc có tín hiệu suy yếu
+    3) Dưới bảng xếp hạng: bảng nhiệt tăng trưởng LNST công ty mẹ (YoY) theo quý của ngành (data/lnst_quy.csv).
     Thẻ chỉ bổ sung một khối "Vị thế trong ngành" (hạng RS, RS so với ngành, thanh khoản), không thêm chỉ báo mới.
 
 Mọi nhãn theo quy tắc ở CFG bên dưới. Phần tính (build_sector_frame) không phụ thuộc Streamlit.
@@ -16,6 +17,8 @@ from __future__ import annotations
 
 import html as _html
 import inspect
+import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -75,6 +78,9 @@ CSS = """
 .sr-chip.a{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}
 .sr-chip.r{background:var(--tag-red-bg);color:var(--red)}
 .sr-why{font-size:13px;line-height:1.5;color:var(--txt);margin-top:8px}
+.srt td.heat{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--txt2);font-weight:600}
+.srt td.agg,.srt tr.agg td{border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-weight:800}
+.srt td.na{color:var(--muted)}
 .sr-sec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:6px 0 16px}
 .sr-sec b{color:var(--txt2)}
 .sr-sec span{display:inline-block;margin-right:18px;font-size:13.5px;color:var(--muted)}
@@ -257,10 +263,75 @@ def context_html(r: pd.Series, view: str, n: int, period: str = DEFAULT_PERIOD) 
             + "</div>" + (f'<div class="sr-why">{esc(why)}</div>' if why else "") + "</div>")
 
 
+# ------------------------------------------------------------------ TĂNG TRƯỞNG LNST CÔNG TY MẸ THEO QUÝ (YoY)
+LNST_PATH = "data/lnst_quy.csv"     # cột: Ngành, Mã, Vốn hóa, Thanh khoản (CP), Q3/24, Q4/24, ... (số %, để trống nếu chưa có)
+_LNST_Q = re.compile(r"^Q[1-4]/\d{2}$")
+_LNST_SCALE = 100.0                  # |tăng trưởng| từ mức này trở lên tô đậm nhất
+
+
+def load_lnst(path: str = LNST_PATH) -> pd.DataFrame:
+    """Đọc data/lnst_quy.csv. Không có file hoặc lỗi đọc thì trả bảng rỗng (trang vẫn chạy bình thường)."""
+    try:
+        df = pd.read_csv(path, encoding="utf-8-sig")
+    except (OSError, ValueError, pd.errors.ParserError):
+        return pd.DataFrame()
+    df.columns = [str(c).strip() for c in df.columns]
+    if not {"Ngành", "Mã"} <= set(df.columns):
+        return pd.DataFrame()
+    df["Ngành"], df["Mã"] = df["Ngành"].astype(str).str.strip(), df["Mã"].astype(str).str.strip()
+    return df
+
+
+def _pct_text(v: float) -> str:
+    """Cùng kiểu hiển thị với bảng nguồn: >=100 không lẻ (có dấu phẩy nghìn), 10-100 một số lẻ, dưới 10 hai số lẻ."""
+    a = abs(v)
+    return f"{v:,.0f}%" if a >= 100 else f"{v:.1f}%" if a >= 10 else f"{v:.2f}%"
+
+
+def _heat_bg(v: float) -> str:
+    """Nền ô: xanh khi lãi tăng, đỏ khi giảm / lỗ; càng lệch xa 0 càng đậm (bão hòa ở ±_LNST_SCALE%)."""
+    if pd.isna(v) or abs(v) < 1:
+        return ""
+    a = 0.12 + 0.50 * min(abs(v) / _LNST_SCALE, 1.0)
+    return f"background:rgba({'45,212,167' if v > 0 else '255,107,129'},{a:.2f})"
+
+
+def lnst_sector_html(df: pd.DataFrame, sector: str) -> str:
+    """Bảng nhiệt LNST công ty mẹ YoY của một ngành. Rỗng nếu chưa có dữ liệu cho ngành đó."""
+    if df is None or df.empty:
+        return ""
+    d = df[df["Ngành"].str.casefold() == str(sector).strip().casefold()]
+    if d.empty:
+        return ""
+    qcols = [c for c in d.columns if _LNST_Q.match(c)]
+    if not qcols:
+        return ""
+    esc = _html.escape
+    head = "<th>Mã CP</th><th>Vốn hóa</th><th>Thanh khoản<br>(CP)</th>" + "".join(f"<th>{esc(q)}</th>" for q in qcols)
+    rows = []
+    for _, r in d.iterrows():
+        agg = r["Mã"].casefold() == str(sector).strip().casefold()      # dòng tổng hợp của cả ngành
+        tds = [f'<td class="code">{esc(r["Mã"])}</td>']
+        for c in ("Vốn hóa", "Thanh khoản (CP)"):
+            v = pd.to_numeric(r.get(c), errors="coerce")
+            tds.append(f'<td class="num">{"-" if pd.isna(v) else f"{v:,.0f}"}</td>')
+        for q in qcols:
+            v = pd.to_numeric(r[q], errors="coerce")
+            tds.append('<td class="num na">-</td>' if pd.isna(v)
+                       else f'<td class="num heat" style="{_heat_bg(v)}">{_pct_text(float(v))}</td>')
+        rows.append(("<tr class='agg'>" if agg else "<tr>") + "".join(tds) + "</tr>")
+    return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+
+
 # ------------------------------------------------------------------ GIAO DIỆN
 @st.cache_data(show_spinner=False)
 def _sector_metrics(_raw: pd.DataFrame, key: str):
     return SD.calculate_sector_metrics(_raw)
+
+
+@st.cache_data(show_spinner=False)
+def _lnst_cached(mtime: float) -> pd.DataFrame:
+    return load_lnst()
 
 
 _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe).parameters
@@ -365,6 +436,16 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     st.markdown(_rank_table_html(show, period), unsafe_allow_html=True)
     if d["ROE (%)"].isna().all():
         st.caption("Chưa có dữ liệu ROE cho ngành này (data/fundamentals.csv hoặc data/nhap_tay.csv).")
+
+    # --- Tăng trưởng LNST công ty mẹ theo quý (YoY)
+    st.subheader("Tăng trưởng LNST công ty mẹ (YoY)")
+    lnst_html = lnst_sector_html(_lnst_cached(os.path.getmtime(LNST_PATH) if os.path.exists(LNST_PATH) else 0.0), sector)
+    if lnst_html:
+        st.caption("So với cùng quý năm trước. Xanh = lãi tăng, đỏ = lãi giảm hoặc lỗ; càng đậm càng lệch xa 0. "
+                   "Ô \"-\" là chưa có số liệu. Khi lãi cùng kỳ rất nhỏ hoặc âm, % tăng trưởng có thể rất lớn hoặc đảo dấu nên cần xem cùng giá trị tuyệt đối.")
+        st.markdown(lnst_html, unsafe_allow_html=True)
+    else:
+        st.caption(f"Chưa có dữ liệu LNST theo quý cho ngành {sector}. Thêm các dòng có cột Ngành = \"{sector}\" vào {LNST_PATH}.")
 
     # --- Bốn góc nhìn
     st.subheader("Cổ phiếu theo vị thế")
