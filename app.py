@@ -3060,7 +3060,21 @@ def page_livestream():
             f"{d_chg:+.2f}%</span></div>" if pd.notna(price) else "",
             unsafe_allow_html=True
         )
-        layers = ["Dual Ichimoku", "EMA 50/200", "Supertrend", "Khối lượng", "MACD", "RSI"]
+        # Cho phép bật/tắt từng lớp chỉ báo ngay trong trang livestream.
+        # Mặc định chỉ bật Khối lượng và Dual Ichimoku theo yêu cầu.
+        layer_options = [
+            "Khối lượng", "Dual Ichimoku", "EMA 50/200", "Supertrend",
+            "Bollinger", "MACD", "RSI", "StochRSI", "VNINDEX",
+            "RS vs VNINDEX", "Vùng giá", "Dự báo", "Elliott",
+            "Wyckoff", "Tín hiệu quá khứ", "Hull Suite"
+        ]
+        layers = st.multiselect(
+            "Chỉ báo hiển thị trên biểu đồ",
+            options=layer_options,
+            default=["Khối lượng", "Dual Ichimoku"],
+            key="live_chart_layers",
+            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định chỉ hiển thị Khối lượng và Dual Ichimoku."
+        )
         try:
             st.plotly_chart(make_chart(A["D"], code, "D", layers, None, False, min(150, len(A["D"]["g"])), "pan"),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
