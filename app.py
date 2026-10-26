@@ -2252,8 +2252,12 @@ def _brand_tag() -> str:
             f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
 
 
-def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix=""):
-    """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D")."""
+def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix="",
+               height_px=None, hide_legend=False, title_text=None):
+    """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D").
+    height_px: chiều cao nền (px) thay cho mặc định, mỗi khung chỉ báo phụ thứ 2 trở đi cộng thêm 100px (Livestream dùng để hai biểu đồ vừa một màn hình).
+    hide_legend: ẩn dòng chú giải các đường (và thu gọn khoảng trống phía trên).
+    title_text: không có metrics thì thay dòng thương hiệu TRẠM TÍN HIỆU | MIN TRADING bằng chữ này (Livestream ghi KHUNG TUẦN)."""
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
@@ -2265,6 +2269,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
+    if height_px:
+        height = height_px + 100 * max(0, len(subs) - 1)
     # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
     # hộp thông tin khi rê chuột vào nến: "T6, 24/10/2026" + Mở / Cao / Thấp / Đóng (giống biểu đồ VNINDEX)
@@ -2540,6 +2546,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
         top += BRAND_H
         height += BRAND_H - 80                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
+        if hide_legend:                                # không có dòng chú giải thì bỏ phần lề trên dành cho nó (thương hiệu cao nhất ở brand_y + ~34px)
+            top -= 72
+            height -= 72
         ph = height - top - bot
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=brand_y, showarrow=False,
                            text=_brand_tag(), font=dict(size=22))
@@ -2556,11 +2565,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=58, showarrow=False,
-                           text=_brand_tag(), font=dict(size=22))
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=96, b=10),
+        _title = (f'<b style="color:#E6EDF3">{htmllib.escape(title_text)}</b>' if title_text else _brand_tag())
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=(12 if hide_legend else 58), showarrow=False,
+                           text=_title, font=dict(size=22))
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=(50 if hide_legend else 96), b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
+    if hide_legend:
+        fig.update_layout(showlegend=False)
     if "Dual Ichimoku" in layers:
         # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
         _yr = fig.layout.yaxis.range
@@ -2988,6 +3000,8 @@ def _route_inner():
 
 
 # ------------------------------------------------------------------ DASHBOARD LIVESTREAM
+LIVE_DAILY_H = 540        # chiều cao nền (px) biểu đồ Ngày ở Livestream (chưa tính phần đầu); chỉnh nhỏ lại nếu muốn hai biểu đồ gọn hơn nữa
+LIVE_WEEKLY_H = 300       # chiều cao (px) biểu đồ Tuần ở Livestream (đã gồm dòng chữ KHUNG TUẦN)
 def page_livestream():
     """Bố cục phát sóng: chart ngày/tuần bên trái, kết luận và dữ liệu bên phải."""
     st.markdown("""
@@ -3079,13 +3093,14 @@ def page_livestream():
             help="Chọn hoặc bỏ chọn chỉ báo. Mặc định chỉ hiển thị Khối lượng và Dual Ichimoku."
         )
         try:
-            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, min(150, len(A["D"]["g"])), "pan", name_suffix=" - D"),
+            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, min(150, len(A["D"]["g"])), "pan", name_suffix=" - D",
+                                      height_px=LIVE_DAILY_H, hide_legend=True),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ ngày: {exc}")
-        st.markdown("<div class='live-card-title' style='margin-top:12px'>📅 KHUNG TUẦN · WEEKLY</div>", unsafe_allow_html=True)
         try:
-            st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, min(90, len(A["W"]["g"])), "pan"),
+            st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, min(90, len(A["W"]["g"])), "pan",
+                                      height_px=LIVE_WEEKLY_H, hide_legend=True, title_text="KHUNG TUẦN"),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ tuần: {exc}")
