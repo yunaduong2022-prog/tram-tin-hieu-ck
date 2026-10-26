@@ -264,7 +264,7 @@ def context_html(r: pd.Series, view: str, n: int, period: str = DEFAULT_PERIOD) 
 
 
 # ------------------------------------------------------------------ TĂNG TRƯỞNG LNST CÔNG TY MẸ THEO QUÝ (YoY)
-LNST_PATH = "data/lnst_quy.csv"     # cột: Ngành, Mã, Vốn hóa, Thanh khoản (CP), Q3/24, Q4/24, ... (số %, để trống nếu chưa có)
+LNST_PATH = "data/lnst_quy.csv"     # cột: Ngành, Mã, Vốn hóa, Thanh khoản (CP), Q3/24, ..., Tổng hợp (1 = dòng tổng cả ngành); số %, để trống nếu chưa có
 _LNST_Q = re.compile(r"^Q[1-4]/\d{2}$")
 _LNST_SCALE = 100.0                  # |tăng trưởng| từ mức này trở lên tô đậm nhất
 
@@ -310,7 +310,8 @@ def lnst_sector_html(df: pd.DataFrame, sector: str) -> str:
     head = "<th>Mã CP</th><th>Vốn hóa</th><th>Thanh khoản<br>(CP)</th>" + "".join(f"<th>{esc(q)}</th>" for q in qcols)
     rows = []
     for _, r in d.iterrows():
-        agg = r["Mã"].casefold() == str(sector).strip().casefold()      # dòng tổng hợp của cả ngành
+        # dòng tổng hợp cả ngành: cột "Tổng hợp" = 1, hoặc Mã trùng tên ngành
+        agg = r["Mã"].casefold() == str(sector).strip().casefold() or pd.to_numeric(r.get("Tổng hợp"), errors="coerce") == 1
         tds = [f'<td class="code">{esc(r["Mã"])}</td>']
         for c in ("Vốn hóa", "Thanh khoản (CP)"):
             v = pd.to_numeric(r.get(c), errors="coerce")

@@ -47,6 +47,8 @@ Tab đầu tiên của mục **Thị trường** và cũng là trang mở đầu
 ## Ngành > Vị thế cổ phiếu ngành (mới)
 Code trong `sector_ranking.py` (ngưỡng ở `CFG`). Chọn một ngành để xem bảng xếp hạng RS của mọi mã trong ngành (giá, Score, RS, RS so với ngành, GTGD 5p/TB20, ROE, trạng thái, vị thế) và 4 góc nhìn dạng thẻ MUA / CHỜ MUA có thêm khối **Vị thế trong ngành**: Mạnh nhất theo RS · Xu hướng tăng + thanh khoản · Tích lũy / gần điểm mua · Yếu hơn ngành / suy yếu. ROE lấy từ `data/fundamentals.csv` hoặc `data/nhap_tay.csv`; thiếu thì hiện trống.
 
+Dưới bảng xếp hạng có bảng nhiệt **Tăng trưởng LNST công ty mẹ (YoY)** theo quý (Q3/24 … Q3/26), kèm vốn hóa và thanh khoản, tô xanh khi lãi tăng, đỏ khi giảm / lỗ. Dữ liệu ở `data/lnst_quy.csv` (cột `Ngành`, `Mã`, `Vốn hóa`, `Thanh khoản (CP)`, rồi các cột quý; số là %, để trống nếu chưa có). Dòng có cột `Tổng hợp` = 1 (hoặc `Mã` trùng tên ngành) là dòng tổng cả ngành (in đậm). Hiện có ngành Dầu khí và Cảng biển; muốn thêm ngành khác chỉ cần thêm dòng với `Ngành` đúng tên nhóm trong `watchlist.GROUPS`, thêm quý mới thì thêm cột `Qx/yy`.
+
 ## Cảnh báo phân kỳ RSI & giá (mới)
 Thẻ ở **Lọc tất cả CP** và **Chờ mua** có thêm khối cảnh báo phân kỳ RSI(14) so với giá, tính trên khung **D** và **W** từ 2 đỉnh / 2 đáy (pivot) gần nhất. Code nằm trong `rsi_divergence.py`.
 - **Cảnh báo đảo chiều**: Phân kỳ thường giảm (giá HH, RSI LH), phân kỳ thường tăng (giá LL, RSI HL), phân kỳ phóng đại (2 đỉnh / 2 đáy giá bằng nhau, RSI đỉnh sau thấp hơn / đáy sau cao hơn) → nhãn `TẠI VÙNG CẢN`.

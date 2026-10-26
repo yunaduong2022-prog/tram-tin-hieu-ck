@@ -11,8 +11,11 @@ VN30_DU_PHONG = ["ACB", "BCM", "BID", "BSR", "CTG", "FPT", "GAS", "GVR", "HDB", 
                  "SAB", "SHB", "SSB", "SSI", "STB", "TCB", "TCX", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE"]
 
 GROUPS: dict[str, list[str]] = {
-    "Dầu khí": ["GAS", "PLX", "BSR", "PVD", "PVS", "PVC", "OIL", "PGD"],
-    "Cảng biển": ["MVN", "PHP", "GMD", "DXP", "VSC", "SGP", "CDN", "TCL"],
+    "Dầu khí": ["GAS", "PLX", "BSR", "PVD", "PVS", "PVC", "OIL", "PGD",
+                "POS", "PPT", "PTV", "PVB", "PVM", "PXS", "PVE"],
+    "Cảng biển": ["MVN", "PHP", "GMD", "DXP", "VSC", "SGP", "CDN", "TCL",
+                  "CAG", "CCR", "CCT", "CLL", "CMP", "CQN", "DVP", "GIC", "ILB", "IST", "NAP", "PAP", "PDN",
+                  "PQN", "PSN", "STG", "TCW", "TMS", "VGP", "VGR", "VIN", "VMS", "CCP", "CPI", "DS3", "QNP"],
     "Vận tải biển hàng hóa": ["HAH", "VTO", "VOS", "PVT", "PVP", "VIP", "PPH"],
     "Vận tải": ["GSP", "SAS", "VJC", "HVN", "SCS"],
     "Cao su": ["GVR", "DRI", "PHR", "DPR", "TRC", "BRC", "HRC", "DRC", "CSM", "SRC"],
