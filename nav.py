@@ -13,9 +13,10 @@ MENU = {
                           "Watchlist", "Cổ phiếu của tôi", "Danh sách cảnh báo",
                           "Bán / Chốt lời", "Backtest chiến lược"],
     "Biểu đồ": [],
+    "Livestream": [],
 }
 DEFAULT_MAIN = "Thị trường"   # trang mở đầu khi vào app (muốn như cũ thì đổi thành "Bộ lọc & Backtest")
-ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Biểu đồ": "📈"}
+ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Biểu đồ": "📈", "Livestream": "🎥"}
 
 # Mô tả nội dung từng tab phụ của mục "Thị trường" (hiển thị ở trang chờ cho tới khi có nội dung thật)
 MARKET_DESC = {

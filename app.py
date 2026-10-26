@@ -44,7 +44,7 @@ import stock_map as SM
 import crosshair as CH
 import draw_tools as DT
 
-st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
+st.set_page_config(layout="wide", page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon())
 
 TH.inject()
 st.markdown(WYK.CSS, unsafe_allow_html=True)      # CSS khối ghi chú Wyckoff trong thẻ (wy-*)
@@ -2967,12 +2967,195 @@ def _route_inner():
         return NAV.placeholder("🧪 Backtest chiến lược",
                                ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",
                                 "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])
+    if main == "Livestream":
+        return page_livestream()
     if main in ("Biểu đồ", "Cổ phiếu") and (main == "Biểu đồ" or sub in ("Tổng quát", "Chỉ báo kỹ thuật")):
         return page_stock()
     if main == "Cổ phiếu" and sub in ST.TABS:
         return page_stock_tab(sub)
     NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""),
                     NAV.MARKET_DESC.get(sub) if main == "Thị trường" else None)
+
+
+
+# ------------------------------------------------------------------ DASHBOARD LIVESTREAM
+def page_livestream():
+    """Bố cục phát sóng: chart ngày/tuần bên trái, kết luận và dữ liệu bên phải."""
+    st.markdown("""
+    <style>
+    .live-shell{background:#0b1220;border:1px solid #263449;border-radius:14px;padding:14px 16px;margin:0 0 12px}
+    .live-eyebrow{font-size:11px;letter-spacing:1.2px;font-weight:800;color:#8da3bd;text-transform:uppercase}
+    .live-title{font-size:25px;font-weight:850;line-height:1.15;color:#f4f7fb;margin:4px 0}
+    .live-sub{font-size:12px;color:#91a0b5}
+    .live-card{background:#111b2b;border:1px solid #29384d;border-radius:12px;padding:13px 15px;margin-bottom:12px}
+    .live-card-title{font-size:13px;font-weight:800;color:#c7d4e5;letter-spacing:.45px;margin-bottom:9px}
+    .live-verdict{font-size:22px;line-height:1.15;font-weight:900;color:#40d6a0}
+    .live-price{font-size:28px;line-height:1.15;font-weight:900;color:#f8fafc}
+    .live-muted{font-size:12px;color:#8fa1b8}
+    .live-kpi{background:#0b1422;border:1px solid #26364b;border-radius:8px;padding:9px}
+    .live-kpi span{display:block;font-size:10px;color:#8fa1b8;margin-bottom:4px}
+    .live-kpi b{font-size:16px;color:#f1f5f9}
+    .live-table{width:100%;border-collapse:collapse;font-size:12px;color:#dce5f0}
+    .live-table th{text-align:left;color:#8fa1b8;font-weight:700;border-bottom:1px solid #314158;padding:7px 5px}
+    .live-table td{border-bottom:1px solid #202e42;padding:8px 5px}
+    .live-positive{color:#43d6a1;font-weight:800}.live-warn{color:#f7bd55;font-weight:800}
+    div[data-testid="stPlotlyChart"]{border:1px solid #263449;border-radius:10px;overflow:hidden}
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="live-shell"><div class="live-eyebrow">MIN TRADING · ON AIR DASHBOARD</div>'
+        '<div class="live-title">TRẠM TÍN HIỆU <span style="color:#39d6a0">/ LIVESTREAM</span></div>'
+        '<div class="live-sub">Phân tích đa khung thời gian · Dữ liệu cuối phiên theo nguồn đang chọn · '
+        'Thông tin chỉ phục vụ tham khảo, không phải khuyến nghị đầu tư</div></div>',
+        unsafe_allow_html=True
+    )
+    available = sorted(set(res_df["Mã"].astype(str).tolist()))
+    default_code = st.session_state.get("selected_code", "DRI")
+    if default_code not in available:
+        default_code = "DRI" if "DRI" in available else (available[0] if available else None)
+    top_a, top_b, top_c = st.columns([1.25, 1, 1])
+    code = top_a.selectbox("Mã đang phát", available, index=available.index(default_code), key="live_code")
+    st.session_state["selected_code"] = code
+    top_b.markdown(f"<div class='live-muted' style='padding-top:32px'>📅 Dữ liệu đến {latest_date:%d/%m/%Y}</div>", unsafe_allow_html=True)
+    top_c.markdown(f"<div class='live-muted' style='padding-top:32px'>🟢 {data_mode}</div>", unsafe_allow_html=True)
+
+    A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
+    info = stock_row(code)
+    if info is None:
+        st.warning(f"Chưa đủ dữ liệu để hiển thị {code}.")
+        return
+    d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
+    conclusion = E.mtf_conclusion(A)
+    try:
+        price = float(info["Giá"])
+    except Exception:
+        price = float("nan")
+    # Mức hỗ trợ/kháng cự lấy từ bộ phân tích kỹ thuật hiện có, nếu thiếu sẽ hiển thị dấu gạch.
+    daily = A["D"].get("g")
+    support = resistance = None
+    try:
+        lev = ML.levels(daily) if daily is not None else {}
+        support = lev.get("support") or lev.get("sup")
+        resistance = lev.get("resistance") or lev.get("res")
+    except Exception:
+        pass
+    def _fmt_level(v):
+        try:
+            return f"{float(v):,.2f}" if v is not None and pd.notna(v) else "—"
+        except Exception:
+            return "—"
+    # Chỉ dùng mức mục tiêu/cắt lỗ tính minh họa khi không có mức kỹ thuật tương ứng.
+    buy_low = price * 0.98 if pd.notna(price) else None
+    buy_high = price * 1.02 if pd.notna(price) else None
+    target = resistance if resistance is not None else (price * 1.15 if pd.notna(price) else None)
+    stop = support if support is not None else (price * 0.92 if pd.notna(price) else None)
+
+    left, right = st.columns([6, 4], gap="medium")
+    with left:
+        st.markdown("<div class='live-card-title'>📌 KHUNG NGÀY · DAILY</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='live-muted' style='margin-bottom:4px'>{code} · {info.get('Tên','')}</div>"
+            f"<div style='font-size:24px;font-weight:900;color:#f5f8fc;margin-bottom:6px'>{price:,.2f} "
+            f"<span style='font-size:14px;color:{'#f06b7c' if pd.notna(d_chg) and d_chg < 0 else '#40d6a0'}'>"
+            f"{d_chg:+.2f}%</span></div>" if pd.notna(price) else "",
+            unsafe_allow_html=True
+        )
+        layers = ["Dual Ichimoku", "EMA 50/200", "Supertrend", "Khối lượng", "MACD", "RSI"]
+        try:
+            st.plotly_chart(make_chart(A["D"], code, "D", layers, None, False, min(150, len(A["D"]["g"])), "pan"),
+                            config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
+        except Exception as exc:
+            st.warning(f"Không dựng được biểu đồ ngày: {exc}")
+        st.markdown("<div class='live-card-title' style='margin-top:12px'>📅 KHUNG TUẦN · WEEKLY</div>", unsafe_allow_html=True)
+        try:
+            st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, min(90, len(A["W"]["g"])), "pan"),
+                            config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
+        except Exception as exc:
+            st.warning(f"Không dựng được biểu đồ tuần: {exc}")
+        st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
+
+    with right:
+        verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
+        st.markdown(
+            f"<div class='live-card'><div class='live-card-title'>🏆 KẾT LUẬN ĐA KHUNG</div>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>"
+            f"<div class='live-verdict'>{htmllib.escape(verdict.upper())}</div>"
+            f"<div style='text-align:right'><div class='live-muted'>{code}</div><div class='live-price'>{price:,.2f}</div></div></div>"
+            f"<div style='height:1px;background:#29384d;margin:12px 0'></div>"
+            f"<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
+            f"<div class='live-kpi'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
+            f"<div class='live-kpi'><span>MỤC TIÊU / KHÁNG CỰ</span><b>{_fmt_level(target)}</b></div>"
+            f"<div class='live-kpi'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
+            f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{float(info.get('RS20', float('nan'))):.2f}</b></div>"
+            f"</div><div class='live-muted' style='margin-top:9px'>Vùng mua/cắt lỗ dự phòng là mức tham khảo nếu dữ liệu kỹ thuật không trả về hỗ trợ/kháng cự.</div></div>",
+            unsafe_allow_html=True
+        )
+
+        st.markdown("<div class='live-card'><div class='live-card-title'>🚀 ĐỘNG LỰC TĂNG TRƯỞNG & ĐỊNH GIÁ</div>", unsafe_allow_html=True)
+        meta = {}
+        try:
+            meta = _wb_meta(code) or {}
+        except Exception:
+            pass
+        pb = meta.get("P/B", "—")
+        market_cap = meta.get("Vốn hóa", "—")
+        roe = meta.get("ROE", "—")
+        st.markdown(
+            f"<div style='color:#dce5f0;font-size:13px;line-height:1.8'>"
+            f"<div>• <b>Giá cao su thế giới:</b> cần cập nhật từ nguồn hàng hóa riêng; không giả lập dữ liệu thời gian thực.</div>"
+            f"<div>• <b>Định giá:</b> P/B <span class='live-positive'>{htmllib.escape(str(pb))}</span> "
+            f"· ROE <b>{htmllib.escape(str(roe))}</b></div>"
+            f"<div>• <b>Vốn hóa:</b> {htmllib.escape(str(market_cap))}</div>"
+            f"<div>• <b>Yếu tố theo dõi:</b> diễn biến giá cao su, biên lợi nhuận, sản lượng và chính sách cổ tức.</div>"
+            f"</div></div>", unsafe_allow_html=True
+        )
+
+        st.markdown("<div class='live-card'><div class='live-card-title'>🌳 TOP CỔ PHIẾU MẠNH CÙNG NGÀNH CAO SU</div>", unsafe_allow_html=True)
+        rubber_codes = [x for x in ("DPR", "GVR", "DRI") if x in set(res_df["Mã"].astype(str))]
+        if rubber_codes:
+            rows = []
+            for symbol in rubber_codes:
+                rr = res_df[res_df["Mã"].astype(str) == symbol].iloc[0]
+                rs_val = rr.get("RS vs VNI", float("nan"))
+                score = rr.get("Score", float("nan"))
+                trend = str(rr.get("MA align", "Chưa rõ"))
+                status = "Khỏe" if pd.notna(rs_val) and rs_val >= 1.05 else ("Theo dõi" if pd.notna(rs_val) and rs_val >= 0.95 else "Yếu / chờ")
+                trend_text = "📈 Tăng" if "Đã align" in trend else ("🔄 Tích lũy" if pd.notna(score) and score >= 4 else "↔ Trung tính")
+                rows.append((symbol, f"{float(rs_val):.2f}" if pd.notna(rs_val) else "—", trend_text, status))
+            html = "<table class='live-table'><thead><tr><th>Mã CP</th><th>RS</th><th>Xu hướng</th><th>Trạng thái</th></tr></thead><tbody>"
+            for symbol, rs_val, trend_text, status in rows:
+                html += f"<tr><td><b>{symbol}</b></td><td>{rs_val}</td><td>{trend_text}</td><td>{status}</td></tr>"
+            html += "</tbody></table>"
+            st.markdown(html, unsafe_allow_html=True)
+        else:
+            st.info("Chưa có đủ mã DPR/GVR/DRI trong nguồn dữ liệu hiện tại.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.caption("RS trong bảng là chỉ số tương đối theo dữ liệu ứng dụng; trạng thái được suy ra từ dữ liệu hiện có, không phải dữ liệu khuyến nghị.")
+
+    st.divider()
+    st.markdown("### Các thẻ phân tích hiện có")
+    st.caption("Khu vực này giữ lại các thẻ tín hiệu chi tiết bên dưới dashboard để không làm chật khung livestream.")
+    lower_left, lower_right = st.columns([6, 4], gap="medium")
+    with lower_left:
+        try:
+            st.markdown(setup_card(A["D"]["g"]), unsafe_allow_html=True)
+        except Exception:
+            pass
+        if A["D"].get("enough"):
+            st.markdown(forecast_card(A["D"], "D"), unsafe_allow_html=True)
+        try:
+            st.markdown(action_html(code), unsafe_allow_html=True)
+        except Exception:
+            pass
+    with lower_right:
+        try:
+            st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
+        except Exception:
+            pass
+        try:
+            st.markdown(_wy_note(code), unsafe_allow_html=True)
+        except Exception:
+            pass
 
 
 def _cap_open(code):
