@@ -3068,11 +3068,21 @@ def page_livestream():
         unsafe_allow_html=True
     )
     available = sorted(set(res_df["Mã"].astype(str).tolist()))
+    # Lọc theo ngành (nhóm ngành trong watchlist.GROUPS; mã thuộc nhiều nhóm thì hiện ở từng nhóm): danh sách mã bên cạnh thu hẹp theo ngành đã chọn
+    ALL_SECTORS = "Tất cả ngành"
+    sectors = sorted({g_ for c_ in available for g_ in MEMBER.get(c_, []) if g_ in WL.GROUPS})
+    top_a, top_s, top_b, top_c = st.columns([1.25, 1, 1, 1])      # Mã đang phát bên trái, lọc Ngành bên phải ô mã (ô Ngành tạo trước vì danh sách mã phụ thuộc vào nó)
+    sector = top_s.selectbox("Ngành", [ALL_SECTORS] + sectors, key="live_sector")
+    codes_in = available if sector == ALL_SECTORS else [c_ for c_ in available if sector in MEMBER.get(c_, [])]
     default_code = st.session_state.get("selected_code", "DRI")
-    if default_code not in available:
-        default_code = "DRI" if "DRI" in available else (available[0] if available else None)
-    top_a, top_b, top_c = st.columns([1.25, 1, 1])
-    code = top_a.selectbox("Mã đang phát", available, index=available.index(default_code), key="live_code")
+    if default_code not in codes_in:
+        default_code = "DRI" if "DRI" in codes_in else (codes_in[0] if codes_in else None)
+    if st.session_state.get("live_code") not in codes_in:       # chưa chọn, hoặc mã đang chọn không thuộc ngành mới: đặt trước khi tạo ô chọn mã
+        st.session_state["live_code"] = default_code
+    if not codes_in:
+        st.info("Chưa có mã nào thuộc ngành này trong dữ liệu.")
+        return
+    code = top_a.selectbox("Mã đang phát", codes_in, key="live_code")      # giá trị lấy từ session_state["live_code"] (không truyền index để khỏi cảnh báo)
     st.session_state["selected_code"] = code
     top_b.markdown(f"<div class='live-muted' style='padding-top:32px'>📅 Dữ liệu đến {latest_date:%d/%m/%Y}</div>", unsafe_allow_html=True)
     top_c.markdown(f"<div class='live-muted' style='padding-top:32px'>🟢 {data_mode}</div>", unsafe_allow_html=True)
