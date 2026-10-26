@@ -306,7 +306,7 @@ else:
         st.stop()
 
 try:
-    raw = E.clean_raw(raw)
+    raw = drop_small_caps(E.clean_raw(raw))        # bỏ mã vốn hóa dưới MIN_CAP_BN tỷ để đỡ tốn RAM
     frames = build_frames(raw, E.ENGINE_VERSION)
 except Exception as e:
     st.error(f"Lỗi khi xử lý dữ liệu: {e}")
@@ -806,6 +806,46 @@ def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap
 _TF_HEAD = {"D": ("📅 D (Ngày)", "#10B981"), "W": ("🗓️ W (Tuần)", "#3B82F6"), "M": ("🏛️ M (Tháng)", "#8B5CF6")}
 
 
+
+MIN_CAP_BN = 1000      # chỉ giữ cổ phiếu vốn hóa từ mức này (tỷ đồng) trở lên; mã chưa biết vốn hóa vẫn giữ. Đặt 0 để tắt bộ lọc.
+
+
+def market_cap_map(prices: dict) -> dict:
+    """{mã: vốn hóa tỷ đồng}. Ưu tiên tăng dần: data/stock_metadata.csv -> giá đóng cửa x SLCP lưu hành (thong_tin_chung.csv, thiếu thì
+    shares_outstanding.csv) -> ô "Vốn hóa TT" nhập tay trong nhap_tay.csv. prices: {mã: giá đóng cửa mới nhất, đơn vị nghìn đồng}."""
+    cap_map: dict = {}
+    if os.path.exists("data/stock_metadata.csv"):
+        try:
+            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
+            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns):
+                cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        _info = ST._read_csv_by_code(ST.INFO_PATH)
+        _sh = ST._read_csv_by_code(ST.SHARES_PATH)
+        for _c, _p in prices.items():
+            _n = pd.to_numeric(_info.at[_c, "SLCP lưu hành (cp)"], errors="coerce") if (_c in _info.index and "SLCP lưu hành (cp)" in _info.columns) else float("nan")
+            if pd.isna(_n) and _c in _sh.index and "Số CP lưu hành" in _sh.columns:
+                _n = pd.to_numeric(_sh.at[_c, "Số CP lưu hành"], errors="coerce")
+            if pd.notna(_n) and pd.notna(_p) and _n > 0:
+                cap_map[_c] = round(float(_p) * float(_n) / 1e6)
+    except Exception:  # noqa: BLE001
+        pass
+    apply_manual_overrides({}, cap_map)
+    return cap_map
+
+
+def drop_small_caps(raw: pd.DataFrame, min_bn: float = MIN_CAP_BN) -> pd.DataFrame:
+    """Bỏ các mã vốn hóa dưới min_bn tỷ đồng khỏi dữ liệu giá ngay từ đầu (đỡ tốn RAM). Chỉ số (VNINDEX...) và mã chưa có vốn hóa được giữ."""
+    if not min_bn or raw.empty:
+        return raw
+    last = raw.sort_values("Ngày").groupby("Mã")["Giá đóng cửa"].last()
+    caps = market_cap_map({str(c).upper(): float(p) for c, p in last.items() if pd.notna(p)})
+    small = {c for c in last.index
+             if str(c).upper() not in E.INDEX_CODES and pd.notna(caps.get(str(c).upper())) and float(caps[str(c).upper()]) < min_bn}
+    return raw[~raw["Mã"].isin(small)] if small else raw
+
 def sup_text(r):
     """Hỗ trợ: dạng khoảng 'thấp – cao' khi giá nằm trên mây (cả dải mây là vùng đỡ), ngược lại là một mức."""
     if r["sup"] is None:
@@ -1132,25 +1172,8 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
 @st.cache_data(show_spinner=False)
 def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     """Vốn hóa (data/stock_metadata.csv), tên/P/B/ROE (data/fundamentals.csv) và số nhập tay - cùng nguồn với thẻ ở Bộ lọc."""
-    cap_map, fund_map = {}, {}
-    if os.path.exists("data/stock_metadata.csv"):
-        try:
-            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
-            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
-        except Exception: pass
-    # Vốn hóa = giá đóng cửa mới nhất x số CP lưu hành (giá nghìn đồng x số CP / 1e6 = tỷ đồng); số CP lấy ở thong_tin_chung.csv, thiếu thì shares_outstanding.csv
-    try:
-        _info = ST._read_csv_by_code(ST.INFO_PATH)
-        _sh = ST._read_csv_by_code(ST.SHARES_PATH)
-        _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
-        for _c, _p in _px.items():
-            _n = pd.to_numeric(_info.at[_c, "SLCP lưu hành (cp)"], errors="coerce") if (_c in _info.index and "SLCP lưu hành (cp)" in _info.columns) else float("nan")
-            if pd.isna(_n) and _c in _sh.index and "Số CP lưu hành" in _sh.columns:
-                _n = pd.to_numeric(_sh.at[_c, "Số CP lưu hành"], errors="coerce")
-            if pd.notna(_n) and pd.notna(_p) and _n > 0:
-                cap_map[_c] = round(float(_p) * float(_n) / 1e6)
-    except Exception:  # noqa: BLE001
-        pass
+    _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
+    cap_map = market_cap_map(_px)
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
     return cap_map, fund_map
