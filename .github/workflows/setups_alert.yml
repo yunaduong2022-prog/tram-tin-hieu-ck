@@ -1,0 +1,33 @@
+name: Tin Telegram Phân loại trạng thái
+
+on:
+  schedule:
+    - cron: "0 12 * * 1-5"      # 19:00 giờ Việt Nam (UTC+7), thứ Hai đến thứ Sáu
+  workflow_dispatch:           # chạy tay: tab Actions > Run workflow
+
+permissions:
+  contents: read
+
+concurrency:
+  group: setups-alert
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cài thư viện
+        run: pip install "pandas>=2.0" "numpy>=1.24"
+
+      - name: Quét trạng thái và gửi Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python setups_scan.py
