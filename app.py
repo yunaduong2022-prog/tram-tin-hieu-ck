@@ -2252,7 +2252,8 @@ def _brand_tag() -> str:
             f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
 
 
-def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan"):
+def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix=""):
+    """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D")."""
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
@@ -2502,7 +2503,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         others = [m for m in metrics if m is not price_m]
         NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
         NAME_WRAP = 90                                  # tên công ty hiện trên 1 hàng ngang (tên dài nhất ~63 ký tự); chỉ xuống dòng khi dài bất thường
-        name_lines = textwrap.wrap(_chart_name(code) or "", NAME_WRAP)
+        _nm = _chart_name(code) or ""
+        name_lines = textwrap.wrap(_nm + name_suffix if _nm else "", NAME_WRAP)
         top, bot = 150, 10
         code_w = 0.20                                  # phần bên trái dành cho mã + giá
         # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
@@ -2669,6 +2671,34 @@ _STAR_CSS = """<style>
 </style>"""
 
 
+def _chart_metrics(code, info) -> list[dict]:
+    """Các chỉ số ở đầu biểu đồ (Giá + % từ đáy / đỉnh, Vol vs MA10, P/B, ROE, Vốn hóa, % Freefloat). Dùng chung cho trang Cổ phiếu và Livestream."""
+    _sw_text, _, _sw_tip, _ = swing_view(info)
+    _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
+    chart_metrics = [
+        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip,
+         **_price_change(code)},
+        {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
+    ]
+    # Cạnh Vol: P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
+    if str(code).upper() not in E.INDEX_CODES:
+        _wm = _wb_meta(code)
+        _na = lambda v: "-" if v in (None, "", "Chưa có") else v
+        chart_metrics += [
+            {"label": "P/B", "value": _na(_wm.get("P/B"))},
+            {"label": "ROE", "value": _na(_wm.get("ROE"))},
+            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa"))},
+        ]
+        try:
+            _ff = pd.to_numeric(ST._read_csv_by_code(ST.INFO_PATH).at[str(code).upper(), "%freefloat"], errors="coerce")
+        except Exception:  # noqa: BLE001
+            _ff = float("nan")
+        if pd.notna(_ff):
+            chart_metrics.append({"label": "% Freefloat", "value": f"{float(_ff):.1f}%"})
+
+    return chart_metrics
+
+
 def page_stock():
     st.title("📊 Cổ phiếu")
     header()
@@ -2705,28 +2735,7 @@ def page_stock():
     a = A[tf]
 
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
-    _sw_text, _, _sw_tip, _ = swing_view(info)
-    _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
-    chart_metrics = [
-        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip,
-         **_price_change(code)},
-        {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
-    ]
-    # Cạnh Vol: P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
-    if str(code).upper() not in E.INDEX_CODES:
-        _wm = _wb_meta(code)
-        _na = lambda v: "-" if v in (None, "", "Chưa có") else v
-        chart_metrics += [
-            {"label": "P/B", "value": _na(_wm.get("P/B"))},
-            {"label": "ROE", "value": _na(_wm.get("ROE"))},
-            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa"))},
-        ]
-        try:
-            _ff = pd.to_numeric(ST._read_csv_by_code(ST.INFO_PATH).at[str(code).upper(), "%freefloat"], errors="coerce")
-        except Exception:  # noqa: BLE001
-            _ff = float("nan")
-        if pd.notna(_ff):
-            chart_metrics.append({"label": "% Freefloat", "value": f"{float(_ff):.1f}%"})
+    chart_metrics = _chart_metrics(code, info)
 
     alert_banner(a, tf)
     col_main, col_side = st.columns([2.2, 1])
@@ -3053,13 +3062,7 @@ def page_livestream():
     left, right = st.columns([6, 4], gap="medium")
     with left:
         st.markdown("<div class='live-card-title'>📌 KHUNG NGÀY · DAILY</div>", unsafe_allow_html=True)
-        st.markdown(
-            f"<div class='live-muted' style='margin-bottom:4px'>{code} · {info.get('Tên','')}</div>"
-            f"<div style='font-size:24px;font-weight:900;color:#f5f8fc;margin-bottom:6px'>{price:,.2f} "
-            f"<span style='font-size:14px;color:{'#f06b7c' if pd.notna(d_chg) and d_chg < 0 else '#40d6a0'}'>"
-            f"{d_chg:+.2f}%</span></div>" if pd.notna(price) else "",
-            unsafe_allow_html=True
-        )
+        # Đầu biểu đồ Ngày: mã, giá, tên công ty, O/H/L/C, Vol vs MA10, P/B, ROE, Vốn hóa y như biểu đồ ở trang Cổ phiếu (tên có thêm " - D").
         # Cho phép bật/tắt từng lớp chỉ báo ngay trong trang livestream.
         # Mặc định chỉ bật Khối lượng và Dual Ichimoku theo yêu cầu.
         layer_options = [
@@ -3076,7 +3079,7 @@ def page_livestream():
             help="Chọn hoặc bỏ chọn chỉ báo. Mặc định chỉ hiển thị Khối lượng và Dual Ichimoku."
         )
         try:
-            st.plotly_chart(make_chart(A["D"], code, "D", layers, None, False, min(150, len(A["D"]["g"])), "pan"),
+            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, min(150, len(A["D"]["g"])), "pan", name_suffix=" - D"),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ ngày: {exc}")
