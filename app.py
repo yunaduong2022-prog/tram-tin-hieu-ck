@@ -2135,6 +2135,26 @@ DATE_TICK_STOPS = [
     dict(dtickrange=[31000000000, None], value="%Y"),
 ]
 
+PX_UP, PX_DOWN, PX_FLAT = "#2BD6A2", "#F2506E", "#F5C84C"     # giá tăng xanh / giảm đỏ / không đổi vàng
+
+
+def _price_change(code: str) -> dict:
+    """Thay đổi giá phiên mới nhất so với phiên trước: màu (xanh tăng, đỏ giảm, vàng không đổi) và dòng \"▼ -0.15 (-0.51%)\"."""
+    try:
+        g = df[df["Mã"].astype(str).str.upper() == str(code).upper()].sort_values("Ngày")
+        c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce").dropna()
+        last, prev = float(c.iloc[-1]), float(c.iloc[-2])
+    except Exception:  # noqa: BLE001
+        return {}
+    d = round(last - prev, 2)
+    pct = (last / prev - 1) * 100 if prev else 0.0
+    if d > 0:
+        return {"px_color": PX_UP, "px_chg": f"▲ {d:+.2f} ({pct:+.2f}%)"}
+    if d < 0:
+        return {"px_color": PX_DOWN, "px_chg": f"▼ {d:+.2f} ({pct:+.2f}%)"}
+    return {"px_color": PX_FLAT, "px_chg": "■ 0.00 (0.00%)"}
+
+
 def _chart_name(code: str) -> str:
     """Tên công ty (data/fundamentals.csv, sửa tay ở nhap_tay.csv / ten_cong_ty_tay.csv); chỉ số thì ghi tên chỉ số."""
     if str(code).upper() in E.INDEX_CODES:
@@ -2440,9 +2460,13 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34 + _dy, showarrow=False,
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
         if price_m:
+            _pc = price_m.get("px_color", "#E6EDF3")
             fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 18,
-                               yshift=40 + _dy, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=NAME_PX),
+                               yshift=58 + _dy, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=34, color=_pc),
                                hovertext=price_m.get("tip"))
+            if price_m.get("px_chg"):
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 20,
+                                   yshift=40 + _dy, showarrow=False, text=price_m["px_chg"], font=dict(size=13, color=_pc))
             if price_m.get("sub"):
                 fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32 + _dy, showarrow=False,
                                    align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 34)),
@@ -2545,7 +2569,10 @@ def metrics_html(metrics, code="", name="") -> str:
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
     head = ""
     if code:
-        price = f'<span class="cm-price">{htmllib.escape(str(price_m["value"]))}</span>' if price_m else ""
+        _pc = price_m.get("px_color", "var(--txt2)") if price_m else ""
+        price = (f'<span class="cm-price" style="color:{_pc}">{htmllib.escape(str(price_m["value"]))}'
+                 + (f'<span style="display:block;font-size:13px;font-weight:600">{htmllib.escape(price_m["px_chg"])}</span>' if price_m.get("px_chg") else "")
+                 + '</span>') if price_m else ""
         head = f'<div class="cm-head"><span class="cm-code">{htmllib.escape(str(code))}</span>{price}</div>'
         if name:
             head += f'<div class="cm-name">{htmllib.escape(str(name))}</div>'
@@ -2594,7 +2621,8 @@ def page_stock():
     _sw_text, _, _sw_tip, _ = swing_view(info)
     _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
     chart_metrics = [
-        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip},
+        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip,
+         **_price_change(code)},
         {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
     ]
     # Cạnh Vol: P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
