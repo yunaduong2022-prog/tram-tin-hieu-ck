@@ -2489,11 +2489,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
         if price_m:
             _pc = price_m.get("px_color", "#E6EDF3")
-            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 18,
+            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 32,
                                yshift=58 + _dy, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=34, color=_pc),
                                hovertext=price_m.get("tip"))
             if price_m.get("px_chg"):
-                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 20,
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 34,
                                    yshift=40 + _dy, showarrow=False, text=price_m["px_chg"], font=dict(size=13, color=_pc))
             if price_m.get("sub"):
                 fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32 + _dy, showarrow=False,
