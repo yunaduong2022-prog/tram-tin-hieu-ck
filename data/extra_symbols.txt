@@ -1,3 +1,3 @@
 # Mã thêm tay cho lần cập nhật cuối phiên (cách nhau bằng dấu phẩy hoặc xuống dòng).
 # Ví dụ: NTP, BVH
-DHT, DVN, TTD, DTP, DP3, GEE, POW, CTD, VEF, VNB, VPL
+DHT, DVN, TTD, DTP, DP3, GEE, POW, CTD, VEF, VNB, VPL, MZG, TRV
