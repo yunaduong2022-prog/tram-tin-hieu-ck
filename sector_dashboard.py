@@ -112,6 +112,7 @@ def calculate_sector_metrics(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         liquidity_ratio = (t_today / t_avg * 100) if pd.notna(t_today) and pd.notna(t_avg) and t_avg > 0 else np.nan
         rows.append({
             "Nhóm ngành": sector, "Số mã có dữ liệu": n_members,
+            "Hiệu suất 1 phiên (%)": returns["1 phiên"],
             "Hiệu suất 1 tuần (%)": returns["1 tuần"],
             "Hiệu suất 1 tháng (%)": returns["1 tháng"],
             "Hiệu suất 3 tháng (%)": returns["3 tháng"],
@@ -122,7 +123,7 @@ def calculate_sector_metrics(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "Mã thành viên": ", ".join(members),
         })
     result = pd.DataFrame(rows)
-    for label, col in [("1 tuần", "Hiệu suất 1 tuần (%)"), ("1 tháng", "Hiệu suất 1 tháng (%)"), ("3 tháng", "Hiệu suất 3 tháng (%)")]:
+    for label, col in [("1 phiên", "Hiệu suất 1 phiên (%)"), ("1 tuần", "Hiệu suất 1 tuần (%)"), ("1 tháng", "Hiệu suất 1 tháng (%)"), ("3 tháng", "Hiệu suất 3 tháng (%)")]:
         bench, source = benchmarks[label]
         result[f"RS {label} (điểm %) "] = result[col] - bench if bench is not None else np.nan
     if not result.empty:
