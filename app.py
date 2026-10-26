@@ -13,11 +13,6 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
-import fund_guard as FG
-import ichimoku_dual as IDU
-import setups as SU
-import supertrend as SPT
-import hull_suite as HUL
 import watchlist as WL
 import wyckoff as WYK
 import nav as NAV
@@ -26,28 +21,15 @@ import brand as BR
 import stock_tabs as ST
 import mtf_levels as ML
 import waiting_buy as WB
-import action_summary as AS
 import rsi_divergence as DV
 import foreign_flow as FF
-import sector_dashboard as SD
-import sector_ranking as SR
-import sector_rotation as SRT
 import market_view as MV
-import vnindex_view as VV
-import cap_groups as CG
-import market_overview as MO
 import my_watchlist as MW
-import my_portfolio as MP
 import sell_card
-import dry_supply as DS
-import stock_map as SM
-import crosshair as CH
-import draw_tools as DT
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
 TH.inject()
-st.markdown(WYK.CSS, unsafe_allow_html=True)      # CSS khối ghi chú Wyckoff trong thẻ (wy-*)
 
 st.markdown("""
 <style>
@@ -59,9 +41,6 @@ st.markdown("""
  .big{font-size:24px;font-weight:800;line-height:1.2;margin:2px 0 6px}
  .mtf-top{display:flex;justify-content:space-between;align-items:stretch;gap:12px}
  .mtf-code{display:flex;align-items:center;font-size:56px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--txt2)}
- .mtf-right{display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap}
- .mtf-px{display:flex;flex-direction:column;justify-content:center;line-height:1.2;text-align:right}
- .mtf-px b{font-size:30px;font-weight:800}.mtf-px span{font-size:12.5px;font-weight:600}
  .c-red{color:var(--red)}.c-green{color:var(--green)}.c-amber{color:var(--amber)}.c-gray{color:var(--muted)}
  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
  .tag-red{background:var(--tag-red-bg);color:var(--red)}.tag-green{background:var(--tag-green-bg);color:var(--tag-green-fg)}
@@ -144,9 +123,9 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Fibonacci", "Vùng giá", "Bollinger",
+              "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "RSI", "StochRSI"]
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Ichimoku", "Vùng giá", "Wyckoff", "EMA 50/200", "Khối lượng", "MACD", "RSI", "StochRSI"]
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -213,7 +192,7 @@ def wyckoff_table(_df: pd.DataFrame, key: str) -> dict:
             w = WYK.analyze(g.reset_index(drop=True))
         except Exception:
             w = None
-        out[code] = WYK.compact(w)
+        out[code] = None if w is None else {k: w[k] for k in ("kind", "re", "phase", "lean", "score", "title")}
     return out
 
 VN30_LIST, VN30_SRC = load_vn30()
@@ -342,80 +321,6 @@ res_df = screener_cached(frames, mkt, WY_KEY + "|" + E.ENGINE_VERSION).copy()
 res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
 res_df["_wy"] = res_df["Mã"].map(WY_TABLE.get)
 res_df["Wyckoff"] = res_df["_wy"].map(WYK.label)
-
-# VNINDEX không nằm trong bảng lọc cổ phiếu (res_df) nhưng vẫn xem được ở trang Cổ phiếu / Đa khung: tính riêng một dòng cho chỉ số
-INDEX_LIST = sorted({str(c_) for c_ in df["Mã"].unique() if str(c_).upper() in E.INDEX_CODES} - set(res_df["Mã"]))
-
-
-@st.cache_data(show_spinner=False)
-def index_row_cached(_frames: dict, _mkt: pd.Series, code: str, key: str):
-    sub_ = {tf_: g_[g_["Mã"] == code] for tf_, g_ in _frames.items()}
-    r_ = E.build_screener(sub_, _mkt, skip_index=False)
-    return r_.iloc[0] if len(r_) else None
-
-
-def stock_row(code):
-    """Dòng thông tin của mã: cổ phiếu lấy từ bảng lọc, chỉ số (VNINDEX) tính riêng. Không có dữ liệu thì trả None."""
-    r_ = res_df[res_df["Mã"] == code]
-    if len(r_):
-        return r_.iloc[0]
-    return index_row_cached(frames, mkt, code, WY_KEY + "|" + E.ENGINE_VERSION) if code in INDEX_LIST else None
-
-
-def _wy_note(code, compact_view: bool = False) -> str:
-    """Khối Wyckoff (pha A–E + chú thích pha) dùng chung cho mọi thẻ cổ phiếu."""
-    return WYK.note_html(WY_TABLE.get(str(code)), compact_view)
-
-def _lean_html(code) -> str:
-    """Dòng 'DỰ BÁO NGHIÊNG TĂNG / GIẢM' dùng chung cho mọi thẻ: cùng phép tính với biểu đồ (khung Ngày; |độ nghiêng| >= 1.0)."""
-    try:
-        a = analyze_cached(frames, str(code), "D", DATA_KEY)
-        d = a.get("dir", 0) if a.get("enough") else 0
-    except Exception:
-        d = 0
-    if d > 0:
-        return ('<div class="lean-line" style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#08785E">'
-                '▲ DỰ BÁO NGHIÊNG TĂNG</div>')
-    if d < 0:
-        return ('<div class="lean-line" style="margin:6px 0 2px;font-size:12px;font-weight:800;letter-spacing:.3px;color:#C02645">'
-                '▼ DỰ BÁO NGHIÊNG GIẢM</div>')
-    return ""
-
-
-@st.cache_data(show_spinner=False)
-def _wb_rows(key: str) -> dict:
-    """Trạng thái chờ mua / lý do / vùng mua của từng mã (từ bảng Chờ mua), dùng cho khối Tóm tắt nhanh."""
-    t = _wb_table()
-    cols = [c for c in ("Trạng thái", "Lý do", "Vùng mua từ", "Vùng mua đến") if c in t.columns]
-    return t.drop_duplicates("Mã", keep="first").set_index("Mã")[cols].to_dict("index")
-
-
-def _action_html(code) -> str:
-    """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
-    hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py."""
-    try:
-        code = str(code)
-        g = df[df["Mã"] == code].sort_values("Ngày")
-        c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce")
-        if c.empty:
-            return ""
-        ma = {n: (float(c.rolling(n).mean().iloc[-1]) if len(c) >= n else None) for n in (20, 50, 200)}
-        w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb12").get(code, {})
-        state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
-        a = analyze_cached(frames, code, "D", DATA_KEY)
-        d = mtf_cached(frames, code, DATA_KEY)["D"]
-        # ngày ở chân thẻ: ngày cập nhật dữ liệu; chế độ Vnstock trực tiếp thì nến cuối có thể là phiên đang giao dịch
-        _date = f"Phiên ngày {pd.Timestamp(g['Ngày'].iloc[-1]):%d/%m/%Y} (đang cập nhật)" if data_mode == MODE_LIVE else latest_date
-        ctx = dict(code=code, date=_date, close=float(c.iloc[-1]), ma20=ma[20], ma50=ma[50], ma200=ma[200],
-                   label=WB.status_tag(state, reason)[0] if state else "", state=state, reason=reason,
-                   lean=(a.get("dir", 0) if a.get("enough") else 0),
-                   div=divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"),
-                   wy=WY_TABLE.get(code), sup=d.get("sup") if d.get("ok") else None, res=d.get("res") if d.get("ok") else None,
-                   zone=(w.get("Vùng mua từ"), w.get("Vùng mua đến")) if state in WB.STATE_GROUP and WB.STATE_GROUP[state] in WB.BUY_GROUPS else None)
-        return AS.html(ctx)
-    except Exception:
-        return ""
-
 
 TABLE_COLS = ["ST", "Mã", "Nhóm", "Giá", "Score", "RS vs VNI", "% Biên độ", "Position %", "Zone", "Lực mua/bán",
               "Giá tăng/giảm", "Vol vs tháng trước", "Vol/Avg10", "Nhận xét", "MACD D", "MACD W", "Fisher D",
@@ -629,7 +534,10 @@ def show_detail(code):
                             unsafe_allow_html=True)
         else:
             st.info("Mã này chưa thuộc nhóm ngành nào trong watchlist.py.")
-        st.markdown(_wy_note(code), unsafe_allow_html=True)
+        w = r["_wy"]
+        if w:
+            st.markdown(card("Wyckoff", f'{tag(r["Wyckoff"], "green" if w["kind"] == "acc" else "red" if w["kind"] == "dist" else "gray")}'
+                             f' <span class="muted">khớp mẫu {w["score"]}%</span>'), unsafe_allow_html=True)
     with right:
         yn = lambda b: "✅" if b else "—"
         st.markdown(card("Dòng tiền nội tại",
@@ -790,11 +698,7 @@ def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap
         name = row.get("Tên công ty")
         if isinstance(name, str) and name.strip():
             fund_map.setdefault(code, {})["Tên công ty"] = name.strip()
-        txt = row.get("Bảng xếp hạng")
-        if isinstance(txt, str) and txt.strip():
-            fund_map.setdefault(code, {})["Bảng xếp hạng"] = txt.strip()
-        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N", "EPS", "Giá trị sổ sách", "KLGD MA20",
-                    "Xếp hạng", "Xếp hạng tài chính", "Xếp hạng kinh doanh"):
+        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N"):
             v = num(row.get(col))
             if v is not None:
                 fund_map.setdefault(code, {})[col] = v
@@ -831,12 +735,7 @@ def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
 
 
-def _min_trading() -> str:
-    """Dòng 'Min Trading dd/mm/yyyy' cuối khung Vùng mua: ngày cập nhật dữ liệu + 1 ngày (dữ liệu cập nhật chiều, hôm sau mới gửi khách)."""
-    return f"Min Trading {(pd.Timestamp(latest_date) + pd.Timedelta(days=1)):%d/%m/%Y}"
-
-
-def mtf_strategy_box(s: dict, code: str = "") -> str:
+def mtf_strategy_box(s: dict) -> str:
     """Bảng Vùng mua - Cắt lỗ - Mục tiêu dạng hàng ngang, cùng kiểu khối "Mua ngay" ở Cổ phiếu chờ mua
     (class wb-* lấy từ waiting_buy.card_css). Số liệu lấy nguyên từ ML._strategy, không đổi cách tính."""
     if not s["ok"]:
@@ -845,15 +744,23 @@ def mtf_strategy_box(s: dict, code: str = "") -> str:
     px = lambda x: f"{x:,.1f}"
     pct = lambda x: f" ({(x / n['close'] - 1) * 100:+.1f}%)"
     go = n["close"] <= n["entry_hi"]
-    pc = lambda x: (x / n["close"] - 1) * 100
-    rr_cls = "wb-go" if s["rr_value"] >= 1.8 else "wb-wait"
-    rr_tag = f'<small class="{rr_cls}" style="margin-left:8px">R:R 1:{s["rr_value"]} · {s["rr_label"]}</small>'
-    notes = [s["status"]] + ["⚠ " + w for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else [])] + ([s["tp2_note"]] if s.get("tp2_note") else [])
-    return WB.ladder_html(code, n["close"], n["entry_lo"], n["entry_hi"], go, n["sl"], pc(n["sl"]), n["tp"], pc(n["tp"]), rr_tag,
-                          n.get("tp2"), pc(n["tp2"]) if n.get("tp2") is not None else None, "", " ".join(notes), _min_trading())
+    zone_badge = '<span class="wb-go">✔ Vào được ngay</span>' if go else '<span class="wb-wait">⏳ Chờ mua</span>'
+    rr_badge = (f'<span class="wb-go">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>' if s["rr_value"] >= 1.8
+                else f'<span class="wb-wait">R:R 1:{s["rr_value"]} · {s["rr_label"]}</span>')
+    extra = "".join(f'<div class="wb-sub">⚠ {htmllib.escape(w)}</div>' for w in s["warn"] + ([s["tp_note"]] if s["tp_note"] else []))
+    return ('<div class="wb-box">'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Vùng mua</span>'
+            f'<span class="wb-zone"><b>{px(n["entry_lo"])} – {px(n["entry_hi"])}</b>{zone_badge}</span></div>'
+            f'<div class="wb-sub">{htmllib.escape(s["status"])}</div></div>'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Cắt lỗ</span>'
+            f'<b class="wb-red">{px(n["sl"])}{pct(n["sl"])}</b></div></div>'
+            f'<div class="wb-sec"><div class="wb-line"><span class="wb-lab">Mục tiêu</span>'
+            f'<span class="wb-zone"><b class="wb-grn">{px(n["tp"])}{pct(n["tp"])}</b>{rr_badge}</span></div>{extra}</div>'
+            f'<div class="wb-foot">Vùng mua = hỗ trợ đến hỗ trợ +2% · Cắt lỗ = hỗ trợ −{s["sl_pct"]}% · Mục tiêu = kháng cự gần nhất · '
+            f'R:R tính từ giữa vùng mua · % so với giá hiện tại {px(n["close"])}</div></div>')
 
 
-def mtf_block(res: dict, code: str = "", parts: bool = False):
+def mtf_block(res: dict) -> str:
     """Khối 'Phân tích đa khung D - W - M' + hộp chiến lược cho thẻ kết quả lọc (không có dòng trống / thụt lề để Markdown không vỡ)."""
     subs = []
     for tf in ("D", "W", "M"):
@@ -868,12 +775,9 @@ def mtf_block(res: dict, code: str = "", parts: bool = False):
         else:
             body, trend = f'<div class="tf-comment">💬 {htmllib.escape(r["cmt"])}</div>', '<span class="c-gray">—</span>'
         subs.append(f'<div class="tf-subcard" style="border-top:3px solid {accent}"><div class="tf-title"><span>{title}</span>{trend}</div>{body}</div>')
-    strat = mtf_strategy_box(res["strategy"], code)
-    tf_html = ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
-               f'<div class="multi-tf-container">{"".join(subs)}</div>')
-    if parts:     # thẻ kết quả lọc: tách khung Vùng mua (đặt lên trên) khỏi phần phân tích D-W-M (đặt dưới RSI/Wyckoff)
-        return tf_html, strat
-    return tf_html + strat
+    strat = mtf_strategy_box(res["strategy"])
+    return ('<div class="multi-tf-title">📊 PHÂN TÍCH ĐA KHUNG (D - W - M):</div>'
+            f'<div class="multi-tf-container">{"".join(subs)}</div>{strat}')
 
 
 # ------------------------------------------------------------------ KẾT QUẢ LỌC: thống kê · tìm kiếm · lọc thời hạn · sắp xếp · bảng
@@ -1011,7 +915,12 @@ def page_filter():
         except Exception: pass
     # Tên công ty, P/B, ROE: data/fundamentals.csv do update_fundamentals.py tự cập nhật; tên sửa tay ở data/ten_cong_ty_tay.csv
     fund_map = {}
-    fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
+    if os.path.exists("data/fundamentals.csv"):
+        try:
+            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
+            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
+            fund_map = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
+        except Exception: pass
     if os.path.exists("data/ten_cong_ty_tay.csv"):
         try:
             _nt = pd.read_csv("data/ten_cong_ty_tay.csv", dtype=str)
@@ -1020,8 +929,6 @@ def page_filter():
                     fund_map.setdefault(_c, {})["Tên công ty"] = _n.strip()
         except Exception: pass
     apply_manual_overrides(fund_map, cap_map)
-    for _w in FG.warnings():
-        st.warning("Dữ liệu cơ bản: " + _w)
     if f.empty:
         st.info("Không có mã nào thỏa bộ lọc hiện tại. Hãy nới lỏng một vài điều kiện.")
         return
@@ -1064,9 +971,8 @@ def page_filter():
                         or '<span class="muted">Chưa có chỉ báo Tốt</span>'
                 else:
                     chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
-                mtf_html, strat_html = mtf_block(mtf_cached(frames, code, DATA_KEY), code, parts=True) if show_mtf else ("", "")
+                mtf_html = mtf_block(mtf_cached(frames, code, DATA_KEY)) if show_mtf else ""
                 div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-                lean_html = _lean_html(code)
                 _wb = _wb_map.get(code)
                 if _wb:
                     _tl, _tbg, _tfg = WB.status_tag(_wb["Trạng thái"], _wb["Lý do"])
@@ -1077,7 +983,7 @@ def page_filter():
                 html = (f'<div class="stock-card in-box">'
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
-                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div>{lean_html}</div>{status_html}</div>'
+                        f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div></div>{status_html}</div>'
                         f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
@@ -1087,7 +993,7 @@ def page_filter():
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
                         f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
                         + _ma_summary_html(code)
-                        + f'<div class="tag-container">' + chips_html + '</div>' + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '') + div_html + _wy_note(code, True) + mtf_html + _action_html(code) + '</div>')
+                        + f'<div class="tag-container">' + chips_html + '</div>' + div_html + mtf_html + '</div>')
                 with st.container(border=True):
                     st.markdown(html, unsafe_allow_html=True)
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
@@ -1111,7 +1017,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb12")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb10")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 @st.cache_data(show_spinner=False)
@@ -1123,7 +1029,12 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
             meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
             if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
         except Exception: pass
-    fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
+    if os.path.exists("data/fundamentals.csv"):
+        try:
+            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
+            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
+            fund_map = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
+        except Exception: pass
     apply_manual_overrides(fund_map, cap_map)
     return cap_map, fund_map
 
@@ -1139,11 +1050,7 @@ def _wb_meta(code: str) -> dict:
     return {"Tên": (str(fd["Tên công ty"]).strip() if isinstance(fd.get("Tên công ty"), str) else ""),
             "Ngành": ", ".join(sectors) if sectors else "Khác / chưa phân loại",
             "Vốn hóa": fmt(cap_map.get(code.upper()), "{:,.0f} tỷ"),
-            "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%"),
-            "P/E": fmt(fd.get("P/E"), "{:.1f}"), "EPS": fmt(fd.get("EPS"), "{:,.0f}"),
-            "BVPS": fmt(fd.get("Giá trị sổ sách"), "{:,.0f}"), "KLGD MA20": fmt(fd.get("KLGD MA20"), "{:,.0f}"),
-            "Xếp hạng": (f"{int(fd['Xếp hạng'])} (TC {int(fd['Xếp hạng tài chính'])} · KD {int(fd['Xếp hạng kinh doanh'])}) · {fd.get('Bảng xếp hạng', '')}"
-                         if pd.notna(fd.get("Xếp hạng")) and pd.notna(fd.get("Xếp hạng tài chính")) and pd.notna(fd.get("Xếp hạng kinh doanh")) else "")}
+            "P/B": fmt(fd.get("P/B"), "{:.2f}"), "ROE": fmt(fd.get("ROE"), "{:.1f}%")}
 
 
 def _wb_ma_of(code: str) -> dict:
@@ -1177,105 +1084,12 @@ def _wb_card(r, group):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
         div_html = DV.html(divergence_cached(frames, str(r["Mã"]), DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading(), "", _action_html(r["Mã"])), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"]))), unsafe_allow_html=True)
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = r["Mã"]
             NAV.goto("Cổ phiếu", "Tổng quát")
-
-
-# ------------------------------------------------------------------ THẺ DÙNG CHUNG CHO CÁC TRANG DANH SÁCH
-# Tăng mạnh / Giảm mạnh / Đang phục hồi / Danh sách cảnh báo / Bán - Chốt lời dùng đúng thẻ của Chờ mua, Mua ngay, Watchlist
-# (waiting_buy.card_html + nút "Xem biểu đồ", lưới 3 cột, ô lọc, "Hiện tất cả"). Chỉ khác nhãn huy hiệu và một dòng ghi chú.
-TONE_UI = {      # tone -> (nhãn trên huy hiệu, màu huy hiệu g/a/r/v/n, gợi ý hành động)
-    "sell":    ("BÁN", "r", "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."),
-    "tp":      ("CHỐT LỜI", "a", "Đang có lãi: chốt lời. Đang lỗ: cân nhắc cắt lỗ hoặc hạ tỷ trọng."),
-    "risk":    ("THEO DÕI SUY YẾU", "r", sell_card.TONES["risk"]["hint"]),
-    "over":    ("KHÔNG MUA ĐUỔI", "a", sell_card.TONES["over"]["hint"]),
-    "surge":   ("TĂNG MẠNH", "g", sell_card.TONES["surge"]["hint"]),
-    "plunge":  ("GIẢM MẠNH", "r", sell_card.TONES["plunge"]["hint"]),
-    "recover": ("ĐANG PHỤC HỒI", "v", sell_card.TONES["recover"]["hint"]),
-    "dry":     ("CẠN CUNG", "c", sell_card.TONES["dry"]["hint"]),
-}
-
-
-def _open_chart_of(code: str):
-    st.session_state["selected_code"] = code
-    for _k in ("mtf_code", "tab_code"):
-        st.session_state[_k] = code
-    NAV.goto("Cổ phiếu", "Tổng quát")
-
-
-def _tone_card(r, tone: str, key: str):
-    """Một thẻ ở các trang danh sách. tone = sell (tự tách BÁN / CHỐT LỜI theo cột 'Hành động bán'), tp, risk, over, surge, plunge, recover."""
-    r = r.copy()
-    code = str(r["Mã"])
-    if tone == "sell" and str(r.get("Hành động bán")) == "CHỐT LỜI":
-        tone = "tp"
-    label, badge, hint = TONE_UI[tone]
-    r["Trạng thái"] = label
-    r["Lý do"] = re.sub(r"^\s*(BÁN|CHỐT LỜI)\s*:\s*", "", str(r.get("Lý do") or ""), flags=re.I)      # nhãn huy hiệu đã nói rõ, bỏ tiền tố
-    if tone == "plunge":
-        v, fmt = r.get("Giảm từ đỉnh %"), "Đã giảm {:.0f}% từ đỉnh"
-    elif tone == "surge":
-        v, fmt = r.get("Tăng từ đáy hiện tại %"), "Đã tăng {:.0f}% từ đáy"
-    else:
-        v, fmt = r.get("Tăng từ đáy %"), "Đã tăng {:.0f}% từ đáy"
-    gain = fmt.format(float(v)) + ". " if v is not None and pd.notna(v) else ""
-    if tone == "dry":      # thay dòng "Đã tăng ... từ đáy" bằng khối lượng phiên cuối và các nguồn báo cạn cung
-        vr_ = r.get("Vol / MA20 Vol")
-        gain = (f"Khối lượng phiên cuối = {float(vr_):.2f} lần MA20 Vol. " if vr_ is not None and pd.notna(vr_) else "") \
-            + "Nguồn: " + " · ".join(r.get("Nguồn cạn cung") or []) + ". "
-    ctx = f'<div class="wb-sub" style="margin:-4px 0 12px">{htmllib.escape(gain + hint)}</div>'
-    with st.container(key=f"wbcard-{tone}-{code}"):          # tiền tố wbcard- để ăn CSS thẻ và cuộn tới thẻ (_wb_scroll_to)
-        div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
-                                 _min_trading(), ctx, _action_html(code)), unsafe_allow_html=True)
-        if st.button("📊 Xem biểu đồ", key=f"{key}_chart_{code}", use_container_width=True):
-            _open_chart_of(code)
-
-
-def _tone_limit(d: pd.DataFrame, key: str) -> pd.DataFrame:
-    """Giống Mua ngay: hiện WB_PER_GROUP thẻ đầu, tick 'Hiện tất cả' để xem hết."""
-    show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key=f"{key}_all")
-    return d if show_all else d.head(WB_PER_GROUP)
-
-
-def _tone_grid(shown: pd.DataFrame, total: int, tone, key: str):
-    cols = st.columns(3)
-    for i, (_, r) in enumerate(shown.iterrows()):
-        with cols[i % 3]:
-            _tone_card(r, tone(r) if callable(tone) else tone, key)
-    if total > len(shown):
-        st.caption(f"Đang hiển thị {len(shown)}/{total} mã có thứ tự ưu tiên cao nhất.")
-
-
-def _tone_filters(d: pd.DataFrame, key: str) -> pd.DataFrame:
-    """Ô Tìm mã + Nhóm ngành, cùng bố cục với Mua ngay."""
-    f1, f2 = st.columns([1.2, 3])
-    q = f1.text_input("Tìm mã", "", key=f"{key}_q", placeholder="🔍 Tìm mã...").upper().strip()
-    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
-                          key=f"{key}_ind", placeholder="Tất cả nhóm")
-    if q:
-        d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
-    if inds:
-        d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
-    return d
-
-
-def _chip(code, color: str, linked) -> str:
-    """Mã trong 'Danh sách tổng hợp': bấm để cuộn tới thẻ (chỉ khi thẻ đang hiển thị)."""
-    c = htmllib.escape(str(code))
-    if linked is not None and str(code) not in linked:
-        return f'<span style="color:{color};font-weight:600;opacity:.7">{c}</span>'
-    return (f'<a class="sc-jump" href="#sc-{c}" data-code="{c}" '
-            f'style="color:{color};font-weight:600;text-decoration:none;cursor:pointer">{c}</a>')
-
-
-def _chip_box(sub: str, chips: str) -> str:
-    return (f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
-            f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">{sub}</div>{chips}</div>')
 
 
 def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
@@ -1296,7 +1110,7 @@ def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
 def page_wait_buy():
     st.title("🛒 Chờ mua")
     header()
-    st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với mục Lọc tất cả CP và Backtest. "
+    st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với Bộ lọc Realtime và Backtest. "
                "Chỉ gồm mã có xu hướng đủ khỏe; mã đang phục hồi nằm ở mục **Đang phục hồi**; mã tăng quá đà, suy yếu hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
@@ -1402,33 +1216,6 @@ def page_buy_now():
             _wb_card(r, str(r["Danh sách"]))
     if len(d) > WB_PER_GROUP and not show_all:
         st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
-    _rt_focus_scroll()
-
-
-def page_sector_ranking():
-    """Ngành > Vị thế cổ phiếu ngành: dùng đúng thẻ MUA / CHỜ MUA, thêm khối Vị thế trong ngành."""
-    header()
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
-    t = _wb_table()
-    _now = set(_buy_now_table(t)["Mã"])      # cùng quy tắc nhãn MUA như mục Mua ngay
-    _, fund_map = _wb_meta_maps(WY_KEY)
-
-    def _card(r, ctx_html, vi):
-        r = r.copy()
-        if r["Mã"] in _now and r["Trạng thái"] in (WB.BUY_SIGNAL, WB.GOOD_ENTRY):
-            r["Trạng thái"] = "MUA"
-        code = str(r["Mã"])
-        with st.container(key=f"wbcard-sr{vi}-{code}"):
-            div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-            st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code),
-                                     _wy_note(code), _lean_html(code), _min_trading(), ctx_html, _action_html(code)), unsafe_allow_html=True)
-            if st.button("📊 Xem biểu đồ", key=f"sr_chart_{vi}_{code}", use_container_width=True):
-                st.session_state["selected_code"] = code
-                for _k in ("mtf_code", "tab_code"):
-                    st.session_state[_k] = code
-                NAV.goto("Cổ phiếu", "Tổng quát")
-
-    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt)
 
 
 def _wl_card(r, u, ver):
@@ -1436,7 +1223,7 @@ def _wl_card(r, u, ver):
     code = str(r["Mã"])
     with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading(), "", _action_html(code)), unsafe_allow_html=True)
+        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code)), unsafe_allow_html=True)
         pos = MW.position_html(u, r["Giá"])
         if pos:
             st.markdown(pos, unsafe_allow_html=True)
@@ -1464,52 +1251,6 @@ def page_watchlist():
         NAV.goto("Cổ phiếu", "Tổng quát")
 
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
-    _rt_focus_scroll()
-
-
-def page_my_portfolio():
-    st.title("💼 Cổ phiếu của tôi")
-    header()
-
-    def _open_chart(code: str):
-        st.session_state["selected_code"] = code
-        for _k in ("mtf_code", "tab_code"):
-            st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
-
-    MP.render(_wb_table(), res_df, _open_chart, latest_date)
-
-
-def page_realtime_filter():
-    """Bộ lọc Realtime: chọn ngành / mã -> sơ đồ tư duy: mã đang nằm ở mục nào, ý chính của mục, và nhánh cơ bản."""
-    st.title("🧭 Bộ lọc Realtime")
-    header()
-    t = _wb_table()
-    cap_map, fund_map = _wb_meta_maps(WY_KEY)
-    now = set(_buy_now_table(t)["Mã"])
-    vol = res_df.set_index("Mã")["Vol/Avg10"] if "Vol/Avg10" in res_df.columns else None
-    try:
-        _wl_df = MW.load()
-        wl = set(_wl_df["Mã"].astype(str).str.upper())
-        wl_pos = _wl_df.set_index("Mã").to_dict("index")
-    except Exception:
-        wl, wl_pos = set(), {}
-
-    def _open_chart(code: str):
-        st.session_state["selected_code"] = code
-        for _k in ("mtf_code", "tab_code"):
-            st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
-
-    def _mtf(code: str):
-        try:
-            A = {t_: analyze_cached(frames, code, t_, DATA_KEY) for t_ in ("M", "W", "D")}
-            return E.mtf_conclusion(A), A
-        except Exception:
-            return None, None
-
-    SM.render(t, cap_map, fund_map, now, wl, vol, _open_chart, _mtf, lambda c_: WY_TABLE.get(str(c_)), wl_pos, _action_html,
-              {str(r_["Mã"]): r_["Nguồn cạn cung"] for _, r_ in _dry_table().iterrows()})
 
 
 def _move_page(kind: str):
@@ -1519,8 +1260,7 @@ def _move_page(kind: str):
     header()
     lbl_ses = "Tăng trong phiên" if up else "Giảm trong phiên"
     lbl_leg = "Tăng từ đáy" if up else "Giảm từ đỉnh"
-    st.session_state.setdefault(f"mv_mode_{kind}", lbl_ses)
-    mode = st.segmented_control("Chế độ", [lbl_ses, lbl_leg], key=f"mv_mode_{kind}",
+    mode = st.segmented_control("Chế độ", [lbl_ses, lbl_leg], default=lbl_ses, key=f"mv_mode_{kind}",
                                 label_visibility="collapsed") or lbl_ses
     by_leg = mode == lbl_leg
     if by_leg:
@@ -1589,20 +1329,14 @@ def _move_page(kind: str):
                 else f'{head}{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
         return f'{"Tăng" if up else "Giảm"} {abs(float(r["Chg %"])):.2f}% trong phiên gần nhất{vt}. Trạng thái hiện tại: {r["Danh sách"]}'
     d = d.assign(**{"Lý do": d.apply(_why, axis=1)})
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
-    shown = _tone_limit(d, f"mv_{kind}_{int(by_leg)}")
-    _sc = set(shown["Mã"].astype(str))
-    _chips = ", ".join(_chip(c_, "var(--green)" if up else "var(--red)", _sc) for c_ in d["Mã"])
-    if not up:      # Giảm mạnh: chia danh sách theo cấu trúc Wyckoff (khung Ngày), bấm mã cuộn xuống thẻ bên dưới
-        _chips = sell_card.chips_by_structure(list(d["Mã"]), WY_TABLE, "var(--red)", linked=_sc)
-        _sub = (f'Danh sách tổng hợp ({len(d)} mã) · chia theo cấu trúc Wyckoff khung Ngày: Tích lũy, Đi ngang, Phân phối, Chưa rõ cấu trúc. '
-                'Bấm vào mã để xuống thẻ bên dưới')
-    else:
-        _sub = f'Danh sách tổng hợp ({len(d)} mã)'
-    st.markdown(_chip_box(_sub, _chips), unsafe_allow_html=True)
-    _tone_grid(shown, len(d), kind, f"mv_{kind}")
+    _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
+                       f'style="color:{"var(--green)" if up else "var(--red)"};font-weight:600;text-decoration:none;cursor:pointer">'
+                       f'{htmllib.escape(str(c_))}</a>' for c_ in d["Mã"])
+    st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+                f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
+                f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, kind), unsafe_allow_html=True)
     _sell_jump_js()
-    _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "Chg %", col, "Vol/Avg10", "Score", "RS20", "Nhóm", "Danh sách"]].loc[:, lambda x: ~x.columns.duplicated()]
                      .reset_index(drop=True), hide_index=True,
@@ -1623,73 +1357,15 @@ def page_plunge():
     _move_page("plunge")
 
 
-def _dry_table() -> pd.DataFrame:
-    """Bảng Cạn cung (dry_supply.py): gộp mọi mục đang nói mã cạn cung; dùng chung cho trang Cạn cung và Bộ lọc Realtime."""
-    t = _wb_table()
-    now = set(_buy_now_table(t)["Mã"])
-    return DS.build(res_df, t, WY_TABLE, df, now)
-
-
-def _lean_of(codes) -> dict:
-    """{mã: +1 / -1 / 0}: dự báo nghiêng tăng / giảm của biểu đồ khung Ngày (cùng phép tính với _lean_html)."""
-    out = {}
-    for c_ in codes:
-        try:
-            a = analyze_cached(frames, str(c_), "D", DATA_KEY)
-            out[str(c_)] = int(a.get("dir", 0)) if a.get("enough") else 0
-        except Exception:
-            out[str(c_)] = 0
-    return out
-
-
-def page_dry_supply():
-    st.title("🧊 Cạn cung")
-    header()
-    st.caption("Các mã mà **bất kỳ mục nào của app** đang ghi là cạn cung / khối lượng cạn, gộp vào một danh sách: cờ **Cạn cung** ở Lọc tất cả CP, "
-               "trạng thái **Điểm mua đẹp** và **Tích lũy / Siết nền giá** ở Chờ mua / Mua ngay, và sự kiện **Spring / Test / LPS volume thấp** của Wyckoff (tích lũy Pha C/D). "
-               "Mã được nhiều nguồn cùng báo xếp trước. Cạn cung chỉ cho biết lực bán đã yếu, chưa phải tín hiệu mua: xem vùng mua và cắt lỗ ở mục **Chờ mua**. "
-               "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
-    d = _dry_table()
-    m = st.columns(5)
-    m[0].metric("Tổng số mã", len(d))
-    for col, src in zip(m[1:], DS.SOURCES):
-        col.metric(src, int(d["Nguồn cạn cung"].map(lambda L, s=src: s in L).sum()) if not d.empty else 0, help=DS.SRC_HELP[src])
-    if d.empty:
-        st.info("Hiện chưa có mã nào cạn cung.")
-        return
-    d = _tone_filters(d, "dry")
-    srcs = st.multiselect("Nguồn", list(DS.SOURCES), key="dry_src", placeholder="Tất cả nguồn")
-    if srcs:
-        d = d[d["Nguồn cạn cung"].apply(lambda L: any(s in L for s in srcs))]
-    if d.empty:
-        st.info("Không có mã nào phù hợp bộ lọc.")
-        return
-    shown = _tone_limit(d, "dry")
-    _sc = set(shown["Mã"].astype(str))
-    st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã) · chia theo dự báo nghiêng tăng / nghiêng giảm (khung Ngày) · bấm vào mã để xuống thẻ bên dưới",
-                          DS.chips_html(d, lambda c_: _chip(c_, "var(--accent)", _sc), _lean_of(d["Mã"]))), unsafe_allow_html=True)
-    _tone_grid(shown, len(d), "dry", "dry")
-    _sell_jump_js()
-    _rt_focus_scroll()
-    with st.expander("Xem dạng bảng"):
-        st.dataframe(d.assign(**{"Nguồn": d["Nguồn cạn cung"].map(" · ".join)})[["Mã", "Giá", "Chg %", "Vol / MA20 Vol", "Số nguồn", "Nguồn", "Score", "RS20", "Nhóm", "Danh sách"]]
-                     .reset_index(drop=True), hide_index=True,
-                     column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
-                                    "Chg %": st.column_config.NumberColumn(format="%.2f"),
-                                    "Vol / MA20 Vol": st.column_config.NumberColumn(format="%.2f"),
-                                    "Score": st.column_config.NumberColumn(format="%.1f"),
-                                    "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
-                     **_STRETCH_DF)
-
-
 def page_recovering():
     st.title("🌱 Đang phục hồi")
     header()
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: đang hồi phục hoặc có dấu hiệu tích lũy sau nhịp giảm. "
                "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng). "
-               "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")
+               "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
     t = _wb_table()
+    if "Hành động bán" in t.columns:
+        t = t[~t["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     d = t[t["Danh sách"] == WB.L_RECOVER].sort_values("Score", ascending=False)
     st.metric("Tổng số mã", len(d))
     if d.empty:
@@ -1701,14 +1377,7 @@ def page_recovering():
                     "MA20 %": d["Mã"].map(lambda c_: _ma[c_].get(20, (None, None))[1]),
                     "MA50": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[0]),
                     "MA50 %": d["Mã"].map(lambda c_: _ma[c_].get(50, (None, None))[1])})
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS thẻ (wb-*)
-    d = _tone_filters(d, "rc")
-    if d.empty:
-        st.info("Không có mã nào phù hợp bộ lọc.")
-        return
-    shown = _tone_limit(d, "rc")
-    _tone_grid(shown, len(d), "recover", "rc")
-    _rt_focus_scroll()
+    st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, "recover"), unsafe_allow_html=True)
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Giá", "MA20", "MA50", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
                      column_config={"Giá": st.column_config.NumberColumn(format="%.2f"),
@@ -1723,11 +1392,14 @@ def page_alert_lists():
     st.title("⚠️ Danh sách cảnh báo")
     header()
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: xu hướng suy yếu, tăng quá đà. Mã đang phục hồi có mục riêng **Đang phục hồi**. "
-               "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")
-    t_all = t = _wb_table()      # một mã có thể nằm ở nhiều mục: mã có tín hiệu BÁN / CHỐT LỜI vẫn hiện ở đây nếu Danh sách của nó là cảnh báo
+               "Mã đã có tín hiệu **BÁN / CHỐT LỜI** chỉ hiện ở mục **Bán / Chốt lời**, không lặp lại ở đây.")
+    t_all = _wb_table()
+    t = t_all
+    if "Hành động bán" in t_all.columns:      # mỗi mã chỉ nằm một nơi: có tín hiệu BÁN / CHỐT LỜI thì thuộc trang Bán / Chốt lời
+        t = t_all[~t_all["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     lists = [(WB.L_RISK, "Xu hướng suy yếu", "Xu hướng suy yếu, chưa có tín hiệu bán: không mua mới, theo dõi sát."),
              (WB.L_OVERBOUGHT, "Tăng quá đà", "Cảnh báo không mua đuổi (Overbought).")]
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    _, _fm = _wb_meta_maps(WY_KEY)
     _TONE_OF = {WB.L_RISK: "risk", WB.L_OVERBOUGHT: "over"}
     _CHIP_COL = {WB.L_RISK: "var(--txt2)", WB.L_OVERBOUGHT: "#F5B942"}
     for tab, (key, title, note) in zip(st.tabs([f"{ttl} ({int((t['Danh sách'] == k).sum())})" for k, ttl, _ in lists]), lists):
@@ -1737,15 +1409,24 @@ def page_alert_lists():
             if d.empty:
                 st.info("Không có mã nào.")
                 continue
-            d = _tone_filters(d, f"alert_{key}")      # bộ lọc nằm ngay trên Danh sách tổng hợp (mỗi tab có bộ lọc riêng)
+            f1, f2 = st.columns([1.2, 3])      # bộ lọc nằm ngay trên Danh sách tổng hợp (mỗi tab có bộ lọc riêng)
+            q = f1.text_input("Tìm mã", "", key=f"alert_q_{key}", placeholder="🔍 Tìm mã...").upper().strip()
+            inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+                                  key=f"alert_ind_{key}", placeholder="Tất cả nhóm")
+            if q:
+                d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+            if inds:
+                d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
             if d.empty:
                 st.info("Không có mã nào khớp bộ lọc.")
                 continue
-            shown = _tone_limit(d, f"alert_{key}")
-            _sc = set(shown["Mã"].astype(str))
-            _chips = ", ".join(_chip(c_, _CHIP_COL[key], _sc) for c_ in d["Mã"])
-            st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã)", _chips), unsafe_allow_html=True)
-            _tone_grid(shown, len(d), _TONE_OF[key], f"alert_{key}")
+            _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
+                               f'style="color:{_CHIP_COL[key]};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
+                               for c_ in d["Mã"])
+            st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+                        f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
+                        f'Danh sách tổng hợp ({len(d)} mã)</div>{_chips}</div>', unsafe_allow_html=True)
+            st.markdown(sell_card.cards_html(sell_card.add_names(d, _fm), latest_date, _TONE_OF[key]), unsafe_allow_html=True)
             _sell_jump_js()
             with st.expander("Xem dạng bảng"):
                 st.dataframe(d[["Mã", "Giá", "Score", "RS20", "Nhóm", "Lý do"]].reset_index(drop=True), hide_index=True,
@@ -1753,7 +1434,6 @@ def page_alert_lists():
                                             "Score": st.column_config.NumberColumn(format="%.1f"),
                                             "RS20": st.column_config.NumberColumn("RS vs VNI", format="%.2f")},
                              **_STRETCH_DF)
-    _rt_focus_scroll()
     st.caption(f"{int((t_all['Danh sách'] == WB.L_NONE).sum())} mã thuộc nhóm “Không có điểm mua / Bắt buộc đứng ngoài” đã bị loại khỏi mọi danh sách cơ hội.")
 
 
@@ -1762,15 +1442,13 @@ def _sell_jump_js():
     import streamlit.components.v1 as components
     components.html("""<script>
 const d=window.parent.document;
-if(!d.__scJump2){d.__scJump2=true;
+if(!d.__scJump){d.__scJump=true;
  d.addEventListener('click',function(e){
   const a=e.target.closest&&e.target.closest('a.sc-jump');if(!a)return;
   e.preventDefault();
-  const code=a.dataset.code;
-  const el=[...d.querySelectorAll('[class*="st-key-wbcard-"]')].find(x=>[...x.classList].some(c=>c.startsWith('st-key-wbcard-')&&c.endsWith('-'+code)));
-  if(!el)return;
+  const el=d.getElementById('sc-'+a.dataset.code);if(!el)return;
   el.scrollIntoView({behavior:'smooth',block:'center'});
-  el.classList.add('wb-focus');setTimeout(()=>el.classList.remove('wb-focus'),2000);
+  el.classList.add('sc-flash');setTimeout(()=>el.classList.remove('sc-flash'),2000);
  });}
 </script>""", height=0)
 
@@ -1813,15 +1491,17 @@ def page_sell_list():
         return
     d = (d.assign(_o=d["Hành động bán"].map({"BÁN": 0, "CHỐT LỜI": 1})).sort_values(["_o", "Score"], ascending=[True, False])
           .drop(columns="_o"))
-    st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
-    shown = _tone_limit(d, "sell")
-    _sc = set(shown["Mã"].astype(str))
-    _chips = ", ".join(_chip(c_, "var(--red)" if a_ == "BÁN" else "#F5B942", _sc) for c_, a_ in zip(d["Mã"], d["Hành động bán"]))
-    st.markdown(_chip_box('Danh sách tổng hợp ({} mã) · <span style="color:var(--red)">BÁN</span> · '
-                          '<span style="color:#F5B942">CHỐT LỜI</span>'.format(len(d)), _chips), unsafe_allow_html=True)
-    _tone_grid(shown, len(d), "sell", "sell")
+    _chips = ", ".join(f'<a class="sc-jump" href="#sc-{htmllib.escape(str(c_))}" data-code="{htmllib.escape(str(c_))}" '
+                       f'style="color:{"var(--red)" if a_ == "BÁN" else "#F5B942"};font-weight:600;text-decoration:none;cursor:pointer">{htmllib.escape(str(c_))}</a>'
+                       for c_, a_ in zip(d["Mã"], d["Hành động bán"]))
+    st.markdown(f'<div style="margin:6px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);'
+                f'line-height:1.9;font-size:15px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'
+                f'Danh sách tổng hợp ({len(d)} mã) · <span style="color:var(--red)">BÁN</span> · '
+                f'<span style="color:#F5B942">CHỐT LỜI</span></div>{_chips}</div>', unsafe_allow_html=True)
+    _, _fm = _wb_meta_maps(WY_KEY)
+    d = d.assign(**{"Tên công ty": d["Mã"].map(lambda c: (_fm.get(str(c).upper()) or {}).get("Tên công ty", ""))})
+    st.markdown(sell_card.cards_html(d, latest_date), unsafe_allow_html=True)
     _sell_jump_js()
-    _rt_focus_scroll()
     with st.expander("Xem dạng bảng"):
         st.dataframe(d[["Mã", "Hành động bán", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Lý do"]].rename(columns={"Hành động bán": "Tín hiệu"})
                      .reset_index(drop=True), hide_index=True,
@@ -1858,30 +1538,8 @@ def dir_kind(d):
     return "green" if d > 0 else "red" if d < 0 else "gray"
 
 
-def _mtf_price_html(price, chg) -> str:
-    """Giá phiên gần nhất cạnh mã: xanh nếu tăng so với phiên trước, đỏ nếu giảm, xám nếu đứng giá / chưa có phiên so sánh."""
-    try:
-        price = float(price)
-    except (TypeError, ValueError):
-        return ""
-    if pd.isna(price):
-        return ""
-    chg = float(chg) if chg is not None and pd.notna(chg) else None
-    if chg is None:
-        col, sub = "var(--muted)", ""
-    elif chg > 1e-9:
-        col, sub = "var(--green)", f"▲ {price - price / (1 + chg / 100):+,.2f} ({chg:+.2f}%)"
-    elif chg < -1e-9:
-        col, sub = "var(--red)", f"▼ {price - price / (1 + chg / 100):+,.2f} ({chg:+.2f}%)"
-    else:
-        col, sub = "var(--muted)", "— 0.00 (0.00%)"
-    return (f'<div class="mtf-px" style="color:{col}"><b>{price:,.2f}</b>' + (f"<span>{sub}</span>" if sub else "") + "</div>")
-
-
-def mtf_card(conc, A, code="", price=None, chg=None):
+def mtf_card(conc, A, code=""):
     code_html = f'<div class="mtf-code">{htmllib.escape(str(code))}</div>' if code else ""
-    if code_html:       # giá hiện tại nằm cạnh mã
-        code_html = f'<div class="mtf-right">{code_html}{_mtf_price_html(price, chg)}</div>'
     if conc is None:
         return card("Kết luận đa khung", f'<div class="mtf-top"><div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>{code_html}</div>')
     k = conc["kind"]
@@ -1903,11 +1561,11 @@ def mtf_card(conc, A, code="", price=None, chg=None):
                 'chọn điểm vào. Hai khung lớn cùng giảm thì không mua; khung lớn ngược nhau thì CHỜ. ⚠ = chưa đủ nến '
                 'cho Ichimoku/EMA200 nên các chỉ báo đó chưa được tính điểm. Đây là xác suất, không phải chắc chắn: '
                 'luôn đặt cắt lỗ.</div>')
-    return f'<div class="card" id="mtf-conclusion">{"".join(html)}</div>'
+    return f'<div class="card">{"".join(html)}</div>'
 
 
 def rsi_card(a, tf, code):
-    """Thẻ Phân tích RSI: giá trị RSI(14) khung đang xem + phân kỳ RSI/giá khung M, W và D (cùng quy tắc thẻ ở mục Lọc tất cả CP)."""
+    """Thẻ Phân tích RSI: giá trị RSI(14) khung đang xem + phân kỳ RSI/giá khung M, W và D (cùng quy tắc thẻ ở Bộ lọc Realtime)."""
     rsi = DV.rsi14(a["g"]["Giá đóng cửa"]).dropna()
     if rsi.empty:
         head = '<div class="muted">Chưa đủ dữ liệu để tính RSI(14).</div>'
@@ -1925,58 +1583,6 @@ def rsi_card(a, tf, code):
             'phân kỳ ẩn (giá HL/RSI LL, giá LH/RSI HH) là xác nhận tiếp diễn. Tín hiệu hết hạn khi giá vượt đỉnh / thủng đáy của pivot sau; '
             'pivot cần vài nến để xác nhận nên luôn trễ. Hiển thị cả khung M, W và D; chỉ để tham khảo, không phải khuyến nghị đầu tư.</div>')
     return card("Phân tích RSI", head + body + note)
-
-
-SETUP_BT = {        # backtest 147 mã 2019-2026, vào mở cửa phiên sau, đã trừ phí 0,15%/chiều + thuế 0,1% + trượt giá 0,1%/chiều, T+2,
-                    # thoát khi chạm cắt lỗ hoặc đóng cửa dưới Supertrend, tối đa 60 phiên: (số lệnh, lãi TB %, thắng %, R/lệnh)
-    "BOTTOM": (603, 4.1, 37, 0.53), "BASE_HL": (1309, 2.8, 34, 0.36), "BREAKOUT": (3074, 1.5, 30, 0.25), "TREND": (3629, 3.0, 34, 0.50)}
-SETUP_BASE = (5880, 2.1, 34, 0.31)      # vào ngẫu nhiên, cùng cách cắt lỗ và thoát
-
-
-def setup_card(g_day):
-    """Thẻ Phân loại trạng thái (khung Ngày): trạng thái giá, điểm vào, cắt lỗ, mục tiêu. Logic ở setups.py."""
-    p = SU.plan(g_day)
-    if p is None:
-        return card("Phân loại trạng thái · khung Ngày", '<div class="muted">Chưa đủ dữ liệu (cần từ 130 phiên để tính Kijun 129).</div>')
-    s_ = p["state"]
-    head = tag(p["label"], p["tag"]) + (f' <span class="muted">báo cách đây {p["bars_ago"]} phiên</span>' if p["bars_ago"] else "")
-    html = [head, f'<div class="muted" style="margin-top:8px">{p["text"]}</div>']
-    box = []
-    if p["entry"] is not None:
-        lab = {"WATCH": "Giá kích hoạt (chờ vượt)", "TREND": "Giá hiện tại"}.get(s_, "Đỉnh nền vừa vượt")
-        risk = (p["entry"] - p["stop"]) / p["entry"] * 100
-        box += [row(lab, f'<b>{fp(p["entry"])}</b>'),
-                row("Cắt lỗ", f'<span class="c-red">{fp(p["stop"])}</span> <span class="muted">−{risk:.1f}%</span>'),
-                row("Mục tiêu 1 (2R)", f'<span class="c-green">{fp(p["t1"])}</span>'),
-                row("Mục tiêu 2 (3R)", f'<span class="c-green">{fp(p["t2"])}</span>')]
-        if p["st_line"] and p["st_up"]:
-            box.append(row("Thoát khi đóng cửa dưới Supertrend", fp(p["st_line"])))
-        if s_ in ("BOTTOM", "BASE_HL", "BREAKOUT") and p["ext"] is not None and p["ext"] > 0.05:
-            html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đã cao hơn điểm vào {p["ext"] * 100:.1f}%: đã chạy xa, tránh đuổi; chờ nhịp lùi về gần đỉnh nền.</div>')
-    elif s_ == "RANGE":
-        box += [row("Kháng cự (đường trên)", f'<span class="c-red">{fp(p["res"])}</span>'),
-                row("Hỗ trợ (đường dưới)", f'<span class="c-green">{fp(p["sup"])}</span>')]
-    box += [row("Tenkan 65 / Kijun 129", f'{fp(p["tenkan"])} / {fp(p["kijun"])}'),
-            row("Mây Kumo (9-17-26)", f'{fp(p["cloud_bot"])} – {fp(p["cloud_top"])}'),
-            row("RSI(14)", f'{p["rsi"]:.0f}')]
-    html.append('<div class="box">' + "".join(box) + "</div>")
-    html.append(f'<div class="muted" style="margin-top:6px">{tag("Động lượng RSI", p["rsi_kind"])} {p["rsi_note"]}</div>')
-    if p["div_note"]:
-        html.append(f'<div class="muted" style="margin-top:6px">{tag("Phân kỳ tăng", "green" if p["div"]["state"] == "confirmed" else "amber")} {p["div_note"]}</div>')
-    if s_ in SETUP_BT:
-        n, rt, w, rr = SETUP_BT[s_]
-        bn, brt, bw, brr = SETUP_BASE
-        html.append(f'<div class="muted" style="margin-top:8px">Backtest kiểu này ({n:,} lệnh, 147 mã, 2019-2026, đã trừ phí, thuế, trượt giá, T+2): '
-                    f'lãi trung bình {rt:+.1f}%/lệnh, thắng {w}%, {rr:+.2f}R/lệnh. Vào ngẫu nhiên với cùng cách thoát: {brt:+.1f}%, thắng {bw}%, {brr:+.2f}R. '
-                    'Tức là tỷ lệ thắng chỉ khoảng một phần ba; lợi nhuận đến từ vài lệnh lớn, và kết quả âm ở các năm 2019, 2022, 2024, 2026. '
-                    'Chia nhỏ vốn, luôn đặt cắt lỗ; đây là công cụ lọc, không phải lệnh chắc thắng.</div>')
-    elif s_ == "WEAK":
-        html.append('<div class="muted" style="margin-top:6px">Trạng thái yếu nhất trong backtest: +0,8%/lệnh, 0,06R, thấp hơn nhiều so với vào ngẫu nhiên.</div>')
-    elif s_ == "RANGE":
-        html.append('<div class="muted" style="margin-top:6px">Mua sát hỗ trợ giữa Tenkan và Kijun cho kỳ vọng gần 0 và 50% lần bị quét cắt lỗ trong 10 phiên; '
-                    'vượt đường trên kèm khối lượng mới có lợi thế (+2,3% sau 20 phiên so với mức nền +1,7%).</div>')
-    html.append('<div class="muted" style="margin-top:6px">Cắt lỗ = mức thấp hơn giữa giá vào − 2 ATR và đáy nền − 1% (kẹp trong 3–12% rủi ro); với Xu hướng tăng lấy thêm đường Supertrend nếu chặt hơn.</div>')
-    return card("Phân loại trạng thái · khung Ngày", "".join(html))
 
 
 def forecast_card(a, tf):
@@ -2028,21 +1634,13 @@ def backtest_card(a, tf, code, include_short):
     pf = "∞" if s["pf"] == float("inf") else f'{s["pf"]:.2f}'
     cnt = f'{s["n"]} (mua {s["buy"]}' + (f', bán {s["sell"]})' if include_short else ")")
     rec = f'{s["rec_n"]} lệnh, {s["rec_exp"]:+.2f}R' if s["rec_n"] else "chưa có lệnh"
-    ideal = E.backtest_stats(a.get("trades_ideal", pd.DataFrame()), a["n"], include_short) if "trades_ideal" in a else None
-    extra = []
-    if ideal is not None:
-        extra.append(row("Kỳ vọng lý tưởng (không phí, không T+2)", f'{ideal["exp"]:+.2f}R'))
-        extra.append(row("Chênh lệch do thực tế giao dịch", f'{s["exp"] - ideal["exp"]:+.2f}R'))
-    if s.get("skipped"):
-        extra.append(row("Tín hiệu không mua được (khóa trần)", f'{s["skipped"]}'))
     html = [badge, '<div style="height:6px"></div>', row("Số lệnh", cnt), row("Tỷ lệ thắng", f'{s["win"]:.0f}%'),
             row("Kỳ vọng mỗi lệnh", f'{s["exp"]:+.2f}R'), row("Profit factor", pf),
-            row("Sụt giảm tối đa", f'{s["mdd"]:.1f}R'), row("30% dữ liệu mới nhất", rec), *extra,
+            row("Sụt giảm tối đa", f'{s["mdd"]:.1f}R'), row("30% dữ liệu mới nhất", rec),
             '<div class="muted" style="margin-top:6px">Kỳ vọng = tỷ lệ thắng × lãi trung bình − tỷ lệ thua × lỗ trung bình, '
             'tính theo R (1R = mức rủi ro mỗi lệnh). Thắng nhiều chưa chắc có lời. Cần từ 20 lệnh trở lên và kỳ vọng '
-            'dương ở cả phần dữ liệu mới nhất mới đáng tin. Tín hiệu Mua theo giá + khối lượng; vào ở giá mở cửa phiên kế tiếp, cắt lỗ 1,5 ATR, chốt 2R, giữ tối đa '
-            '20 nến. Đã tính phí môi giới 0,15%/chiều, thuế bán 0,1%, trượt giá 0,1%/chiều, bước giá, T+2 (khung Ngày), gap qua cắt lỗ và phiên khóa trần/sàn '
-            '(chỉnh ở BT_COST trong engine.py). Chưa tính thanh khoản thực tế và thiên lệch sống sót của rổ mã.' + ('' if include_short else ' Chỉ tính lệnh Mua (thị trường VN không bán khống).') + '</div>']
+            'dương ở cả phần dữ liệu mới nhất mới đáng tin. Tín hiệu Mua theo giá + khối lượng; vào tại giá đóng cửa, cắt lỗ 1,5 ATR, chốt 2R, giữ tối đa '
+            '20 nến.' + ('' if include_short else ' Chỉ tính lệnh Mua (thị trường VN không bán khống).') + '</div>']
     return card(title, "".join(html))
 
 
@@ -2054,14 +1652,13 @@ def elliott_card(a):
 def wyckoff_card(a):
     w = a.get("wy")
     if not w:
-        return card("Phân tích Wyckoff", '<div class="muted">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến trong khung biên độ không quá 10%, chạm cả hai biên từ 2 lần). '
-                                         'Giá đang ở trạng thái xu hướng hoặc biên quá rộng.</div>').replace('<div class="card">', '<div class="card" id="wyckoff-detail">', 1)
+        return card("Phân tích Wyckoff", '<div class="muted">Chưa thấy vùng đi ngang đủ rõ (tối thiểu 30 nến, chạm cả hai biên từ 2 lần). '
+                                         'Giá đang ở trạng thái xu hướng hoặc biên quá rộng.</div>')
     k = {"buy": "green", "sell": "red"}.get(w["lean"], "gray")
     head = tag(WYK.label(w), k) + f' <span class="muted">khớp mẫu {w["score"]}%</span>'
     html = [head, f'<div class="muted" style="margin-top:8px">{w["summary"]}</div>']
     if w["kind"] != "unk" or w["trigger"]:
         html.append('<div class="box">' + row("Biên trên / dưới", f'{fp(w["tr"]["top"])} / {fp(w["tr"]["bot"])}')
-                    + row("Số nến đi ngang · biên độ", f'{w["tr"]["L"]} nến · {(w["tr"]["top"] / w["tr"]["bot"] - 1) * 100:.1f}%')
                     + row(w["trigger"]["txt"], f'<b>{fp(w["trigger"]["p"])}</b>')
                     + row(w["inval"]["txt"], f'<b>{fp(w["inval"]["p"])}</b>') + "</div>")
     for e in sorted(w["events"], key=lambda x: -x["i"]):
@@ -2069,10 +1666,10 @@ def wyckoff_card(a):
                     f'<div class="muted" style="margin-left:50px">{e["txt"]}</div></div>')
     if w["notes"]:
         html.append(f'<div class="muted" style="margin-top:6px">{" ".join(w["notes"])}</div>')
-    html.append('<div class="muted" style="margin-top:6px">Wyckoff đọc cấu trúc giá và volume nên mang tính chủ quan. Vùng đi ngang chỉ tính khi biên độ không quá 10%; phiên đóng cửa vượt khung rồi quay lại khung cũ được ghi là breakout giả. '
-                'Vùng còn cần biên chạm nhiều lần và giá cắt đường giữa nhiều lần; sự kiện dò theo volume và biên độ nến. Máy có thể gắn nhãn khác cách bạn đọc, '
+    html.append('<div class="muted" style="margin-top:6px">Wyckoff đọc cấu trúc giá và volume nên mang tính chủ quan. Vùng đi ngang được tìm bằng quy tắc '
+                '(biên chạm nhiều lần, giá cắt đường giữa nhiều lần), sự kiện dò theo volume và biên độ nến. Máy có thể gắn nhãn khác cách bạn đọc, '
                 'và vẫn có thể thấy "cấu trúc" ngay trên dữ liệu ngẫu nhiên, nên chỉ dùng để quan sát cùng các chỉ báo khác, không tính vào điểm tín hiệu và backtest.</div>')
-    return card("Phân tích Wyckoff", "".join(html)).replace('<div class="card">', '<div class="card" id="wyckoff-detail">', 1)
+    return card("Phân tích Wyckoff", "".join(html))
 
 
 def zones_card(a):
@@ -2094,7 +1691,7 @@ def signals_card(a, include_short):
     for _, r in t.tail(8).iloc[::-1].iterrows():
         buy = r["dir"] == 1
         ref = "" if (buy or include_short) else ' <span class="muted">(tham khảo)</span>'
-        val = '<span class="muted">không mua được (khóa trần)</span>' if bool(r.get("skip", False)) else '<span class="muted">đang mở</span>' if r["open"] else (
+        val = '<span class="muted">đang mở</span>' if r["open"] else (
             f'<span class="{"c-green" if r["R"] > 0 else "c-red"}">{r["R"]:+.2f}R</span>')
         html.append(f'<div class="row"><span class="{"c-green" if buy else "c-red"}"><b>{"Mua" if buy else "Bán"}</b> '
                     f'{r["Ngày"]:%d/%m/%Y}{ref}<br><span class="muted">{E.PV_LABEL.get(r["code"], "")}</span></span>'
@@ -2125,83 +1722,17 @@ def future_date(last, tf, k):
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
 
 
-DATE_GAP_PX = 34       # khe (px) giữa biểu đồ nến và khung bên dưới: chứa dải nhãn ngày + nhãn ngày của đường gióng
-# Định dạng nhãn trục ngày chỉ dùng mã số (không cần ngôn ngữ), Plotly tự chọn theo bước chia khi zoom:
-# ngày/tuần -> 24/10 · mỗi tháng -> Tháng 10 · mỗi 2-11 tháng -> T10/2026 · từ 1 năm -> 2026
-DATE_TICK_STOPS = [
-    dict(dtickrange=[None, 2500000000], value="%-d/%-m"),
-    dict(dtickrange=[2500000000, 2700000000], value="Tháng %-m"),
-    dict(dtickrange=[2700000000, 31000000000], value="T%-m/%Y"),
-    dict(dtickrange=[31000000000, None], value="%Y"),
-]
-
-def _chart_name(code: str) -> str:
-    """Tên công ty (data/fundamentals.csv, sửa tay ở nhap_tay.csv / ten_cong_ty_tay.csv); chỉ số thì ghi tên chỉ số."""
-    if str(code).upper() in E.INDEX_CODES:
-        return "Chỉ số VN-Index"
-    try:
-        name = _wb_meta(str(code)).get("Tên", "") or ""
-    except Exception:  # noqa: BLE001
-        return ""
-    # "Công ty cổ phần" (không phân biệt hoa/thường) -> "CTCP"
-    return re.sub(r"công\s+ty\s+cổ\s+phần", "CTCP", str(name), flags=re.IGNORECASE)
-
-
-def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
-    """Dòng nhỏ dưới tên công ty: khung + O/H/L/C và thay đổi của nến cuối, kiểu TradingView (tên công ty vẽ riêng, cỡ chữ bằng giá)."""
-    if g is None or len(g) == 0:
-        return ""
-    r = g.iloc[-1]
-    prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else float("nan")
-    o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
-    up = (c >= prev) if pd.notna(prev) else (c >= o)
-    col = "#2BD6A2" if up else "#F2506E"
-    head = f'<span style="color:#8B95A5;font-size:14px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
-    pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
-    chg = ""
-    if pd.notna(pct) and pd.notna(prev):
-        chg = f' {c - prev:+,.2f} ({f"{pct:+.2f}".replace(".", ",")}%)'
-    ohlc = f'<span style="color:{col};font-size:14px">  O{o:,.2f} H{h:,.2f} L{l_:,.2f} C{c:,.2f}{chg}</span>'
-    return head + ohlc
-
-
-_CODE_PX = {"I": 16, "J": 22, "L": 26, "M": 40, "W": 46, "Q": 34, "G": 32, "O": 33, "D": 32, "N": 32, "H": 32, "U": 31, "V": 30,
-            "A": 31, "C": 29, "B": 28, "S": 27, "R": 28, "E": 25, "F": 24, "P": 27, "T": 25, "K": 30, "X": 29, "Y": 29, "Z": 26}
-
-
-def _code_px(code: str) -> int:
-    """Chiều ngang ước lượng (px) của chữ mã ở cỡ 56 đậm, để đặt giá ngay bên phải mã."""
-    return int(sum(_CODE_PX.get(ch, 28) for ch in str(code).upper()))
-
-
-def _brand_tag() -> str:
-    """Dòng thương hiệu trên biểu đồ: TRẠM TÍN HIỆU | MIN TRADING (tên lấy từ brand.py)."""
-    return (f'<b style="color:#E6EDF3">{BR.TITLE.upper()}</b> <span style="color:#6B7686">|</span> '
-            f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
-
-
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan"):
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
-    subs = [s for s in ("Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI") if s in layers]
-    if str(code).upper() in E.INDEX_CODES:
-        subs = [s for s in subs if s not in ("VNINDEX", "RS vs VNINDEX")]   # đang xem chính VNINDEX thì không cần 2 khung này
-    elif len(mkt) == 0:
-        subs = [s for s in subs if s != "RS vs VNINDEX"]
+    subs = [s for s in ("Khối lượng", "MACD", "RSI", "StochRSI") if s in layers]
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
-    height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
-    # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
-    fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
-    # hộp thông tin khi rê chuột vào nến: "T6, 24/10/2026" + Mở / Cao / Thấp / Đóng (giống biểu đồ VNINDEX)
-    _kl = pd.to_numeric(t["Khối lượng khớp lệnh"], errors="coerce").fillna(0).to_numpy()
-    _tip = [f"<b>{VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}<br>KL {v_ / 1e6:,.2f} triệu cp"
-            for d_, o_, h_, l_, c_, v_ in zip(x, t["Giá mở cửa"], t["Giá cao nhất"], t["Giá thấp nhất"], t["Giá đóng cửa"], _kl)]
+    fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=0.025, row_heights=heights)
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
-                                 close=t["Giá đóng cửa"], name=code, whiskerwidth=0, text=_tip, hoverinfo="text",      # thân nến đặc, cùng màu với biểu đồ VNINDEX
-                                 increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
-                                 decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=1, col=1)
+                                 close=t["Giá đóng cửa"], name=code, increasing_line_color="#0E8A6D",
+                                 decreasing_line_color="#C93A52"), row=1, col=1)
 
     def line(col, name, color, w=1.2, dash=None):
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
@@ -2209,11 +1740,13 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     if "EMA 50/200" in layers:
         fig.add_trace(line("EMA50", "EMA50", "#8B5CF6"), row=1, col=1)
         fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
-    if "Dual Ichimoku" in layers:      # bộ 1 (9-26-52) chỉ mây, bộ 2 (65-129) chỉ Tenkan và Kijun; chi tiết ở ichimoku_dual.py
-        _last = pd.Timestamp(g["Ngày"].iloc[-1])
-        for _tr in IDU.traces(g, len(t), lambda k_: future_date(_last, tf, k_)):
-            fig.add_trace(_tr, row=1, col=1)
-        _cloud_end = IDU.cloud_end(g, lambda k_: future_date(_last, tf, k_))
+    if "Ichimoku" in layers:
+        fig.add_trace(line("Tenkan", "Tenkan", "#E4572E", 1), row=1, col=1)
+        fig.add_trace(line("Kijun", "Kijun", "#1D4ED8", 1), row=1, col=1)
+        fig.add_trace(go.Scatter(x=x, y=t["SpanA"], line=dict(width=0.6, color="rgba(14,138,109,.5)"),
+                                 showlegend=False, hoverinfo="skip"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=x, y=t["SpanB"], line=dict(width=0.6, color="rgba(201,58,82,.5)"), fill="tonexty",
+                                 fillcolor="rgba(100,150,200,0.18)", name="Mây Kumo", hoverinfo="skip"), row=1, col=1)
     if "Bollinger" in layers:
         fig.add_trace(go.Scatter(x=x, y=t["BB_up"], line=dict(width=0.8, color="rgba(59,130,246,.7)"),
                                  name="Bollinger", legendgroup="bb"), row=1, col=1)
@@ -2226,13 +1759,24 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fx = future_date(x.iloc[-1], tf, E.HORIZON)
     ys = [t["Giá thấp nhất"].min(), t["Giá cao nhất"].max()]
 
+    if enough and "Fibonacci" in layers and a["fib"]:
+        (ia, _, pa), (ib, _, pb) = a["fib"]["A"], a["fib"]["B"]
+        x0 = max(g["Ngày"].iat[ia], x.iloc[0])
+        lv = [(f"{r * 100:.1f}%", pb - (pb - pa) * r) for r in (0, 0.236, 0.382, 0.5, 0.618, 0.786, 1)]
+        lv += [("Fib 127.2%", pa + (pb - pa) * 1.272), ("Fib 161.8%", pa + (pb - pa) * 1.618)]
+        for name, y in lv:
+            fig.add_trace(go.Scatter(x=[x0, x.iloc[-1]], y=[y, y], mode="lines+text", text=["", name],
+                                     textposition="middle right", textfont=dict(size=9, color="#B7791F"),
+                                     line=dict(width=0.8, dash="dot", color="rgba(183,121,31,.7)"),
+                                     showlegend=False, hoverinfo="skip"), row=1, col=1)
+        ys += [pa, pb]
     if enough and "Vùng giá" in layers:
         for z in a["zones"]:
             red = z["kind"] == "Kháng cự"
             fig.add_hrect(y0=z["lo"], y1=z["hi"], row=1, col=1, line_width=0,
-                          fillcolor="rgba(242,80,110,.10)" if red else "rgba(43,214,162,.12)",
+                          fillcolor="rgba(201,58,82,.10)" if red else "rgba(14,138,109,.12)",
                           annotation_text=f'{z["kind"]} {z["n"]}x', annotation_position="top left",
-                          annotation_font=dict(size=9, color="#F2506E" if red else "#2BD6A2"))
+                          annotation_font=dict(size=9, color="#C93A52" if red else "#0E8A6D"))
     if enough and "Elliott" in layers and a["elliott"]["points"]:
         pts = a["elliott"]["points"]
         fig.add_trace(go.Scatter(x=[g["Ngày"].iat[i] for i, _, _ in pts], y=[p for _, p, _ in pts],
@@ -2241,7 +1785,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     wy = a.get("wy") if enough and "Wyckoff" in layers else None
     if wy and wy["tr"]["e_date"] >= x.iloc[0]:
         tr_ = wy["tr"]
-        wc = {"acc": "43,214,162", "dist": "242,80,110"}.get(wy["kind"], "107,114,128")
+        wc = {"acc": "14,138,109", "dist": "201,58,82"}.get(wy["kind"], "107,114,128")
         xs0 = max(tr_["s_date"], x.iloc[0])
         fig.add_shape(type="rect", x0=xs0, x1=tr_["e_date"], y0=tr_["bot"], y1=tr_["top"], row=1, col=1,
                       line=dict(width=1.3, color=f"rgb({wc})"), fillcolor=f"rgba({wc},0.07)", layer="below")
@@ -2259,8 +1803,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                      marker=dict(symbol="diamond", size=8, color=f"rgb({wc})"),
                                      hovertext=[f'{e["label"]}: {e["txt"]}' for e in evs], hoverinfo="text+x"), row=1, col=1)
     if "Tín hiệu quá khứ" in layers:
-        for d, sym, color, col, off, nm in ((1, "triangle-up", "#2BD6A2", "Giá thấp nhất", 0.985, "Mua"),
-                                            (-1, "triangle-down", "#F2506E", "Giá cao nhất", 1.015, "Bán")):
+        for d, sym, color, col, off, nm in ((1, "triangle-up", "#0E8A6D", "Giá thấp nhất", 0.985, "Mua"),
+                                            (-1, "triangle-down", "#C93A52", "Giá cao nhất", 1.015, "Bán")):
             s_ = t[t["PV_signal"] == d]
             if not s_.empty:
                 fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers", name=nm,
@@ -2269,9 +1813,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                                     for c, v in zip(s_["PV_code"], s_["Vol_vs_MA10"])],
                                          hoverinfo="text+x"), row=1, col=1)
     if fc:
-        lx, col_ = x.iloc[-1], ("#F2506E" if fc["dir"] < 0 else "#2BD6A2")
-        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#F2506E", "dash"),
-                                     ("Mục tiêu 1", fc["t1"], "#2BD6A2", "dash"), ("Mục tiêu 2", fc["t2"], "#2BD6A2", "dot")):
+        lx, col_ = x.iloc[-1], ("#C93A52" if fc["dir"] < 0 else "#0E8A6D")
+        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#C93A52", "dash"),
+                                     ("Mục tiêu 1", fc["t1"], "#0E8A6D", "dash"), ("Mục tiêu 2", fc["t2"], "#0E8A6D", "dot")):
             fig.add_trace(go.Scatter(x=[lx, fx], y=[y, y], mode="lines+text", text=["", f"{name} {y:,.2f}"],
                                      textposition="top left", textfont=dict(size=9, color=color),
                                      line=dict(width=1, dash=dash, color=color), showlegend=False, hoverinfo="skip"),
@@ -2282,17 +1826,6 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                            text="Dự báo " + ("tăng" if fc["dir"] > 0 else "giảm"), font=dict(size=11, color="#fff"),
                            bgcolor=col_)
 
-    # Hull Suite + Supertrend vẽ SAU các lớp giá khác để nằm trên cùng, không bị mây / vùng giá che; tính trên toàn bộ lịch sử rồi cắt phần hiển thị
-    if "Hull Suite" in layers:
-        for _tr in HUL.traces(x, HUL.compute(g).iloc[-len(t):]):
-            fig.add_trace(_tr, row=1, col=1)
-    if "Supertrend" in layers:
-        _stv = SPT.compute(g).iloc[-len(t):]
-        for _tr in SPT.traces(x, _stv):
-            fig.add_trace(_tr, row=1, col=1)
-        for _an in SPT.annotations(x, _stv):
-            fig.add_annotation(**_an, row=1, col=1)
-
     r = 2
     if "Khối lượng" in subs:
         vol_all = pd.to_numeric(g["Khối lượng khớp lệnh"], errors="coerce")
@@ -2300,50 +1833,13 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         vol = vol_all.loc[t.index]
         up_ = (t["Giá đóng cửa"] >= t["Giá mở cửa"]).to_numpy()
         fig.add_trace(go.Bar(x=x, y=vol, name="Khối lượng", showlegend=False,
-                             marker_color=np.where(up_, "#2BD6A2", "#F2506E")), row=r, col=1)
+                             marker_color=np.where(up_, "rgba(14,138,109,.75)", "rgba(201,58,82,.75)")), row=r, col=1)
         fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
         fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
         r += 1
-    if "VNINDEX" in subs:
-        _fi = frames[tf]
-        _vi = _fi[_fi["Mã"].astype(str).str.upper().isin(E.INDEX_CODES)]
-        _vi = _vi[(_vi["Ngày"] >= x.iloc[0]) & (_vi["Ngày"] <= x.iloc[-1])]
-        if len(_vi):
-            _vtip = [f"<b>VNINDEX · {VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}"
-                     for d_, o_, h_, l_, c_ in zip(_vi["Ngày"], _vi["Giá mở cửa"], _vi["Giá cao nhất"], _vi["Giá thấp nhất"], _vi["Giá đóng cửa"])]
-            fig.add_trace(go.Candlestick(x=_vi["Ngày"], open=_vi["Giá mở cửa"], high=_vi["Giá cao nhất"], low=_vi["Giá thấp nhất"],
-                                         close=_vi["Giá đóng cửa"], name="VNINDEX", whiskerwidth=0, text=_vtip, hoverinfo="text", showlegend=False,
-                                         increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
-                                         decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=r, col=1)
-            _vc = _vi["Giá đóng cửa"]
-            _vlast = float(_vc.iloc[-1])
-            _vchg = (_vlast / float(_vc.iloc[-2]) - 1) * 100 if len(_vc) > 1 else 0.0
-        else:
-            _vlast = _vchg = float("nan")
-        fig.update_yaxes(title_text="VNINDEX", title_font_size=10, row=r, col=1)
-        r += 1
-    if "RS vs VNINDEX" in subs:
-        # RS = giá mã / VNINDEX, tính trên toàn lịch sử rồi chuẩn hoá về 100 tại nến đầu vùng hiển thị; MA20 để lọc nhiễu
-        _dates = pd.DatetimeIndex(g["Ngày"])
-        _m = mkt.copy(); _m.index = pd.DatetimeIndex(_m.index)
-        _m = _m[~_m.index.duplicated(keep="last")].sort_index()
-        _mk = _m.reindex(_m.index.union(_dates)).ffill().reindex(_dates).to_numpy()      # tuần/tháng: lấy VNINDEX tại ngày của nến
-        rs_all = pd.Series(g["Giá đóng cửa"].to_numpy() / _mk, index=g.index)
-        rs_ma = rs_all.rolling(20, min_periods=5).mean().loc[t.index]
-        rs_t = rs_all.loc[t.index]
-        _base = rs_t.dropna().iloc[0] if rs_t.notna().any() else 1.0
-        rs_t, rs_ma = rs_t / _base * 100, rs_ma / _base * 100
-        _above = (rs_t >= rs_ma).to_numpy()
-        fig.add_hline(y=100, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
-        fig.add_trace(go.Scatter(x=x, y=rs_t, name="RS vs VNINDEX", line=dict(width=1.6, color="#2BD6A2" if _above[-1] else "#F2506E"),
-                                 hovertemplate="RS %{y:.1f}<extra></extra>"), row=r, col=1)
-        fig.add_trace(go.Scatter(x=x, y=rs_ma, name="MA20 RS", line=dict(width=1.2, color="#F59E0B"),
-                                 hovertemplate="MA20 RS %{y:.1f}<extra></extra>"), row=r, col=1)
-        fig.update_yaxes(title_text="RS vs VNINDEX", title_font_size=10, row=r, col=1)
-        r += 1
     if "MACD" in subs:
         fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
-                             marker_color=np.where(t["MACD_hist"] >= 0, "#2BD6A2", "#F2506E")), row=r, col=1)
+                             marker_color=np.where(t["MACD_hist"] >= 0, "#0E8A6D", "#C93A52")), row=r, col=1)
         fig.add_trace(line("MACD", "MACD", "#3B82F6", 1), row=r, col=1)
         fig.add_trace(line("MACD_sig", "Tín hiệu", "#F59E0B", 1), row=r, col=1)
         fig.update_yaxes(title_text="MACD 12-26-9", title_font_size=10, row=r, col=1)
@@ -2359,7 +1855,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             for s_ in DV.detect(g, tf):
                 if pd.Timestamp(s_["d2"]) < x.iloc[0]:
                     continue
-                cl_ = "#2BD6A2" if s_["dir"] == "up" else "#F2506E"
+                cl_ = "#0E8A6D" if s_["dir"] == "up" else "#C93A52"
                 fig.add_trace(go.Scatter(x=[s_["d1"], s_["d2"]], y=[s_["r1"], s_["r2"]], mode="lines+markers", showlegend=False,
                                          line=dict(width=1.6, color=cl_), marker=dict(size=6, color=cl_),
                                          hovertext=s_["name"], hoverinfo="text"), row=r, col=1)
@@ -2382,7 +1878,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_yaxes(side="right", title_text=None)
     last_c = float(t["Giá đóng cửa"].iloc[-1])
     prev_c = float(t["Giá đóng cửa"].iloc[-2]) if len(t) > 1 else last_c
-    tag_col = "#2BD6A2" if last_c >= prev_c else "#F2506E"
+    tag_col = "#0E8A6D" if last_c >= prev_c else "#C93A52"
     fig.add_hline(y=last_c, line_dash="dot", line_color=tag_col, line_width=1, row=1, col=1)
     fig.add_annotation(xref="paper", yref="y", x=1, y=last_c, xanchor="left", yanchor="middle", showarrow=False,
                        text=f"<b>{last_c:,.2f}</b>", font=dict(size=11, color="#FFFFFF"), bgcolor=tag_col, borderpad=3)
@@ -2398,14 +1894,6 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     lr = t.iloc[-1]
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
-    if "VNINDEX" in subs:
-        _vcol = "#2BD6A2" if _vchg >= 0 else "#F2506E"
-        _hdr("VNINDEX", f'VNINDEX  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
-             else "VNINDEX: chưa có dữ liệu trong vùng đang xem")
-    if "RS vs VNINDEX" in subs:
-        _st = "mạnh hơn thị trường" if _above[-1] else "yếu hơn thị trường"
-        _hdr("RS vs VNINDEX", f'RS = {code}/VNINDEX (=100 đầu vùng)  <b style="color:#CBD2DC">{rs_t.iloc[-1]:.1f}</b>  '
-                              f'MA20: <span style="color:#F59E0B">{rs_ma.iloc[-1]:.1f}</span>  · {_st}')
     if "MACD" in subs:
         _hdr("MACD", f'MACD(12,26,9)  DIF: <span style="color:#3B82F6">{lr["MACD"]:.2f}</span>  '
                      f'DEA: <span style="color:#F59E0B">{lr["MACD_sig"]:.2f}</span>  MACD: <b style="color:#CBD2DC">{lr["MACD_hist"]:.2f}</b>')
@@ -2413,93 +1901,49 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         _hdr("RSI", f'RSI(14): <b style="color:#8B5CF6">{rsi_t.iloc[-1]:.2f}</b>')
     if "StochRSI" in subs:
         _hdr("StochRSI", f'StochRSI  %K: <span style="color:#F59E0B">{lr["SRSI_K"]:.1f}</span>  %D: <span style="color:#3B82F6">{lr["SRSI_D"]:.1f}</span>')
-    if "Dual Ichimoku" in layers:                  # kéo trục tới hết phần mây tương lai (25 nến) như TradingView, không cắt cụt ở nến dự báo
-        fx = max(fx, _cloud_end)
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    # Trục ngày: hiện ngay dưới biểu đồ nến (trên khung khối lượng), không chỉ ở đáy cùng; nhãn tự đổi theo mức zoom
-    fig.update_xaxes(hoverformat="%d/%m/%Y")        # ngày trong hộp rê chuột của các đường chỉ báo luôn đầy đủ, không theo nhãn tháng của trục
-    fig.update_xaxes(tickformatstops=DATE_TICK_STOPS, tickangle=0, ticks="outside", ticklen=4, tickfont=dict(size=11))
-    fig.update_xaxes(showticklabels=True, row=1, col=1)
+    height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
     if metrics:
-        # Bên trái: MÃ + GIÁ cạnh nhau (bỏ nhãn "Giá"), dòng phụ của giá nằm dưới mã. Bên phải mã: tên công ty (cỡ chữ bằng giá, hiện
-        # đủ, tự xuống dòng) rồi O/H/L/C. Các chỉ số còn lại nằm ngay trên biểu đồ.
-        import textwrap
-        price_m = next((m for m in metrics if m["label"] == "Giá"), None)
-        others = [m for m in metrics if m is not price_m]
-        NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
-        NAME_WRAP = 60                                  # số ký tự tối đa mỗi dòng tên (vùng bên phải mã rộng ~80% biểu đồ, đủ chứa ~60-65 ký tự cỡ 26px)
-        name_lines = textwrap.wrap(_chart_name(code) or "", NAME_WRAP)
+        # 5 chỉ số (Giá, Vol vs MA10, Position %, Cảnh báo, Độ nghiêng) nằm ngay trên biểu đồ, dưới hàng chú thích
         top, bot = 150, 10
-        code_w = 0.20                                  # phần bên trái dành cho mã + giá
-        step = (1 - code_w) / max(1, len(others))
+        ph = height - top - bot                       # chiều cao vùng vẽ (px) để đổi px -> toạ độ paper
+        code_w = 0.16                                  # phần bên trái dành cho tên mã; giá nằm phía phải
+        step = (1 - code_w) / len(metrics)
+        import textwrap
+        _last_price = float(t["Giá đóng cửa"].iloc[-1])
+        _prev_price = float(t["Giá đóng cửa"].iloc[-2]) if len(t) > 1 else _last_price
+        _pct = ((_last_price / _prev_price) - 1) * 100 if _prev_price else 0.0
+        _abs = _last_price - _prev_price
+        _qcolor = "#25A879" if _pct > 0 else ("#E5586A" if _pct < 0 else "#F5C542")
+        _delta_label = f"{_abs:+.2f} ({_pct:+.2f}%)" if _pct != 0 else "0.00 (0.00%)"
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34, showarrow=False,
-                           text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
-        if price_m:
-            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 18,
-                               yshift=40, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=NAME_PX),
-                               hovertext=price_m.get("tip"))
-            if price_m.get("sub"):
-                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32, showarrow=False,
-                                   align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 34)),
-                                   font=dict(size=11, color=price_m.get("color", "#8B95A5")), hovertext=price_m.get("tip"))
-        # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
-        for i, m in enumerate(others):
+                           text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=42))
+        fig.add_annotation(xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="bottom", yshift=38, showarrow=False,
+                           text=f'<b>{_last_price:,.2f}</b>', font=dict(size=27, color=_qcolor))
+        fig.add_annotation(xref="paper", yref="paper", x=1, y=1, xanchor="right", yanchor="bottom", yshift=17, showarrow=False,
+                           text=_delta_label, font=dict(size=11, color=_qcolor))
+        # Chỉ số phụ xếp thành một hàng bên dưới tiêu đề mã/giá
+        for i, m in enumerate(metrics):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
-            fig.add_annotation(**base, yanchor="bottom", yshift=66, text=m["label"], font=dict(size=12, color="#8B95A5"),
+            fig.add_annotation(**base, yanchor="bottom", yshift=55, text=m["label"], font=dict(size=12, color="#8B95A5"),
                                hovertext=m.get("tip"))
-            fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
+            fig.add_annotation(**base, yanchor="bottom", yshift=29, text=f'<b>{m["value"]}</b>', font=dict(size=26),
                                hovertext=m.get("tip"))
             if m.get("sub"):
-                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
+                fig.add_annotation(**base, yanchor="top", yshift=25, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
-        # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
-        brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
-        BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
-        top += BRAND_H
-        height += BRAND_H - 80                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
-        ph = height - top - bot
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=brand_y, showarrow=False,
-                           text=_brand_tag(), font=dict(size=22))
-        if name_lines:
-            fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=106, showarrow=False,
-                               align="left", text="<br>".join(htmllib.escape(x_) for x_ in name_lines),
-                               font=dict(size=NAME_PX, color="#E6EDF3"))
-        fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
-                           align="left", text=_ohlc_header(code, tf, g))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
-                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + 104 / ph, font=dict(size=10)))
     elif mobile:
         # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=58, showarrow=False,
-                           text=_brand_tag(), font=dict(size=22))
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=96, b=10),
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=30, b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
-    if "Dual Ichimoku" in layers:
-        # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
-        _yr = fig.layout.yaxis.range
-        _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
-        _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
-        if _ppu > 0:
-            _cur, _gap = last_c * _ppu, 15.0
-            _pos = []
-            for _v, _bg, _fg in IDU.price_tags(g, len(t), lambda k_: future_date(_last, tf, k_)):
-                if _yr[0] <= _v <= _yr[1]:
-                    _pos.append([_v * _ppu, _v, _bg, _fg])
-            _prev = _cur                                  # nhãn giá hiện tại đứng yên; các nhãn phía trên xếp dần lên, phía dưới xếp dần xuống
-            for _r in sorted((r_ for r_ in _pos if r_[0] >= _cur), key=lambda r_: r_[0]):
-                _r[0] = _prev = max(_r[0], _prev + _gap)
-            _prev = _cur
-            for _r in sorted((r_ for r_ in _pos if r_[0] < _cur), key=lambda r_: -r_[0]):
-                _r[0] = _prev = min(_r[0], _prev - _gap)
-            for _p, _v, _bg, _fg in _pos:
-                fig.add_annotation(xref="paper", yref="y", x=1, y=_v, xanchor="left", yanchor="middle", showarrow=False,
-                                   yshift=_p - _v * _ppu, text=f"{_v:,.2f}", font=dict(size=11, color=_fg), bgcolor=_bg, borderpad=3)
     if mobile:
         fig.update_layout(dragmode=drag)
         if drag is False:                      # chế độ "Cuộn trang": khóa mọi thao tác kéo/zoom để biểu đồ không giữ cử chỉ vuốt
@@ -2530,31 +1974,22 @@ def is_mobile() -> bool:
     return any(k in ua for k in ("iphone", "android", "mobile", "ipad"))
 
 
-def metrics_html(metrics, code="", name="") -> str:
-    """Điện thoại: mã + giá cạnh nhau, tên công ty (cỡ chữ bằng giá, hiện đủ) rồi lưới chỉ số 2 cột."""
-    price_m = next((m for m in metrics if m["label"] == "Giá"), None)
+def metrics_html(metrics, code="", price=None, change_text="", price_color="#F5C542"):
+    """Phần đầu biểu đồ trên điện thoại: mã ở trái, giá và biến động ở phải."""
     cells = []
     for m in metrics:
-        if m is price_m:
-            continue
         sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"]))}</div>' if m.get("sub") else "")
         cells.append(f'<div class="cm-item"><div class="cm-lab">{htmllib.escape(m["label"])}</div>'
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
-    head = ""
-    if code:
-        price = f'<span class="cm-price">{htmllib.escape(str(price_m["value"]))}</span>' if price_m else ""
-        head = f'<div class="cm-head"><span class="cm-code">{htmllib.escape(str(code))}</span>{price}</div>'
-        if name:
-            head += f'<div class="cm-name">{htmllib.escape(str(name))}</div>'
-        if price_m and price_m.get("sub"):
-            head += f'<div class="cm-sub" style="color:{price_m.get("color", "#8B95A5")};margin-bottom:6px">{htmllib.escape(str(price_m["sub"]))}</div>'
+    header = (f'<div class="cm-head"><div class="cm-code">{htmllib.escape(str(code))}</div>'
+              f'<div class="cm-quote"><div class="cm-price" style="color:{price_color}">{htmllib.escape(str(price))}</div>'
+              f'<div class="cm-change" style="color:{price_color}">{htmllib.escape(str(change_text))}</div></div></div>') if code else ""
     return ('<style>.cm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:4px 0 6px}'
             '.cm-lab{font-size:12px;color:var(--muted)}.cm-val{font-size:24px;font-weight:800;line-height:1.25;color:var(--txt2)}'
-            '.cm-sub{font-size:11.5px;line-height:1.35}.cm-code{font-size:56px;font-weight:800;line-height:1.1;color:var(--txt2)}'
-            '.cm-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:2px 0 2px}'
-            '.cm-price{font-size:24px;font-weight:800;color:var(--txt2)}'
-            '.cm-name{font-size:24px;line-height:1.3;color:var(--txt);margin:0 0 4px}</style>'
-            + head + '<div class="cm-grid">' + "".join(cells) + '</div>')
+            '.cm-sub{font-size:11.5px;line-height:1.35}.cm-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 8px}'
+            '.cm-code{font-size:42px;font-weight:850;line-height:1;color:var(--txt2)}.cm-quote{text-align:right;flex-shrink:0}'
+            '.cm-price{font-size:27px;font-weight:850;line-height:1.05}.cm-change{font-size:11px;font-weight:650;line-height:1.4}</style>'
+            + header + '<div class="cm-grid">' + "".join(cells) + '</div>')
 
 
 def pick_layers():
@@ -2570,7 +2005,7 @@ def page_stock():
     st.title("📊 Cổ phiếu")
     header()
 
-    codes = sorted(list(res_df["Mã"].unique()) + INDEX_LIST)      # gồm cả VNINDEX
+    codes = sorted(res_df["Mã"].unique())
     saved = st.session_state.get("selected_code")
     c1, c2, c3 = st.columns([1.2, 2, 1.8])
     code = c1.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0)
@@ -2581,17 +2016,17 @@ def page_stock():
     layers = pick_layers()
 
     A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
-    info = stock_row(code)
-    if info is None:
-        st.warning(f"Chưa đủ dữ liệu để phân tích {code}.")
-        return
+    info = res_df[res_df["Mã"] == code].iloc[0]
     a = A[tf]
 
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
     _sw_text, _, _sw_tip, _ = swing_view(info)
     _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
+    _chg_pct = float(d_chg) if pd.notna(d_chg) else 0.0
+    _chg_abs = float(info["Giá"]) * _chg_pct / (100.0 + _chg_pct) if (100.0 + _chg_pct) != 0 else 0.0
+    _quote_color = "#25A879" if _chg_pct > 0 else ("#E5586A" if _chg_pct < 0 else "#F5C542")
+    _quote_text = f"{_chg_abs:+.2f} ({_chg_pct:+.2f}%)" if _chg_pct != 0 else "0.00 (0.00%)"
     chart_metrics = [
-        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip},
         {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
         {"label": "Position %", "value": f"{info['Position %']:.0f}%" if pd.notna(info["Position %"]) else "-"},
         {"label": "Cảnh báo (phiên mới nhất)", "value": info["Cảnh báo"] if info["Cảnh báo"] != "-" else "Không có"},
@@ -2607,7 +2042,7 @@ def page_stock():
         _mob = is_mobile()
         _drag, _cfg, _bars = "pan", {"displayModeBar": True}, None
         if _mob:
-            st.markdown(metrics_html(chart_metrics, code, _chart_name(code)), unsafe_allow_html=True)
+            st.markdown(metrics_html(chart_metrics, code, f"{info['Giá']:,.2f}", _quote_text, _quote_color), unsafe_allow_html=True)
             _mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True, key="mob_chart_mode",
                              help="Cuộn trang: vuốt để cuộn trang bình thường, biểu đồ không bị kéo/zoom ngoài ý muốn. "
                                   "Kéo & zoom: kéo ngang để xem, dùng nút +/- và nút nhà (đặt lại) trên thanh công cụ; chạm đúp để đặt lại.")
@@ -2617,16 +2052,9 @@ def page_stock():
             _drag, _cfg = mobile_chart_opts(_mode)
         st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag),
                         config=_cfg, **_STRETCH)
-        if not _mob:
-            CH.inject()                # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
-            DT.inject(code, tf)        # thanh công cụ vẽ kiểu TradingView (đường, mũi tên, hình, đo giá/ngày, chữ...), lưu theo mã + khung
 
     with col_side:
-        st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
-        try:
-            st.markdown(setup_card(A["D"]["g"]), unsafe_allow_html=True)
-        except Exception as _e:        # thẻ phụ không được làm hỏng cả trang
-            st.caption(f"Không tính được phân loại trạng thái: {_e}")
+        st.markdown(mtf_card(E.mtf_conclusion(A), A, code), unsafe_allow_html=True)
         if a["enough"]:
             st.markdown(forecast_card(a, tf), unsafe_allow_html=True)
         st.markdown(backtest_card(a, tf, code, include_short), unsafe_allow_html=True)
@@ -2648,7 +2076,6 @@ def page_stock():
             if not info["reasons"]:
                 st.write("Chưa có chỉ báo nào đóng góp điểm.")
 
-    _rt_focus_scroll()
     st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
 
@@ -2656,7 +2083,12 @@ def page_stock_tab(sub):
     st.title(f"📊 Cổ phiếu · {sub}")
     header()
     fm = {}
-    fm = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
+    if os.path.exists("data/fundamentals.csv"):
+        try:
+            _fd = pd.read_csv("data/fundamentals.csv", dtype={"Mã": str})
+            _fd["Mã"] = _fd["Mã"].str.upper().str.strip()
+            fm = _fd.drop_duplicates("Mã", keep="last").set_index("Mã").to_dict("index")
+        except Exception: pass
     cap = {}
     if os.path.exists("data/stock_metadata.csv"):
         try:
@@ -2702,7 +2134,7 @@ def mtf_strategy_card(s):
 def page_mtf_levels():
     st.title("📐 Đa khung Ngày · Tuần · Tháng")
     header()
-    codes = sorted(list(res_df["Mã"].unique()) + INDEX_LIST)      # gồm cả VNINDEX
+    codes = sorted(res_df["Mã"].unique())
     saved = st.session_state.get("selected_code")
     code = st.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0, key="mtf_code")
     st.session_state["selected_code"] = code
@@ -2714,71 +2146,8 @@ def page_mtf_levels():
                "Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
 
 
-# ------------------------------------------------------------------ LIÊN KẾT TỪ SƠ ĐỒ (Bộ lọc Realtime)
-_RT_JS = """<script>
-const f=%s;let tries=0;
-function find(d){
- if(f.kind==='wb')return [...d.querySelectorAll('[class*="st-key-wbcard-"]')].find(e=>[...e.classList].some(c=>c.startsWith('st-key-wbcard-')&&c.endsWith('-'+f.code)));
- return d.getElementById(f.id);}
-function go(){const d=window.parent.document;
- if(f.tab){const t=[...d.querySelectorAll('[role="tab"]')].find(b=>b.textContent.trim().startsWith(f.tab));
-  if(t&&t.getAttribute('aria-selected')!=='true')t.click();}
- const el=find(d);
- if(el&&el.offsetParent!==null){el.scrollIntoView({behavior:'smooth',block:'center'});
-  if(f.kind==='wb'){el.classList.add('wb-focus');setTimeout(()=>el.classList.remove('wb-focus'),4000);}
-  else if(f.kind==='sc'){el.classList.add('sc-flash');setTimeout(()=>el.classList.remove('sc-flash'),3000);}
-  else{el.style.boxShadow='0 0 0 2px #2DD4A7';setTimeout(()=>{el.style.boxShadow=''},3000);}}
- else if(tries++<32)setTimeout(go,250);}
-go();</script>"""
-
-
-def _rt_focus_scroll():
-    """Trang đích gọi sau khi vẽ xong thẻ: cuộn tới thẻ của mã vừa bấm ở sơ đồ Bộ lọc Realtime (chỉ một lần)."""
-    f = st.session_state.pop("rt_focus", None)
-    if f:
-        import streamlit.components.v1 as components
-        components.html(_RT_JS % json.dumps(f), height=0)
-
-
-def _rt_go(target: str, code: str):
-    """Đặt trang đích + mã cần cuộn tới theo liên kết ?rtgo=<đích>~<mã> ở sơ đồ Bộ lọc Realtime."""
-    code = code.upper().strip()
-    BT = "Bộ lọc & Backtest"
-    if target == "wait":      # trang Chờ mua đã có sẵn cơ chế wb_focus
-        st.session_state["_nav_pending"] = (BT, "Chờ mua")
-        st.session_state["wb_view"], st.session_state["wb_focus"] = "Thẻ", code
-    elif target == "buynow":
-        st.session_state["_nav_pending"] = (BT, "Mua ngay")
-        st.session_state["bn_all"] = True
-        st.session_state["rt_focus"] = {"kind": "wb", "code": code}
-    elif target == "watch":
-        st.session_state["_nav_pending"] = (BT, "Watchlist")
-        st.session_state["wl_view"] = "Thẻ"
-        st.session_state["rt_focus"] = {"kind": "wb", "code": code}
-    elif target == "dry":
-        st.session_state["_nav_pending"] = (BT, "Cạn cung")
-        st.session_state["rt_focus"] = {"kind": "wb", "code": code}
-    elif target in ("recover", "risk", "over", "sell"):
-        sub = {"recover": "Đang phục hồi", "risk": "Danh sách cảnh báo", "over": "Danh sách cảnh báo", "sell": "Bán / Chốt lời"}[target]
-        st.session_state["_nav_pending"] = (BT, sub)
-        st.session_state["rt_focus"] = {"kind": "sc", "id": f"sc-{code}", "tab": {"risk": "Xu hướng suy yếu", "over": "Tăng quá đà"}.get(target, "")}
-    elif target in ("surge-s", "surge-l", "plunge-s", "plunge-l"):
-        up = target.startswith("surge")
-        kind = "surge" if up else "plunge"
-        st.session_state["_nav_pending"] = (BT, "Tăng mạnh" if up else "Giảm mạnh")
-        by_leg = target.endswith("-l")
-        st.session_state[f"mv_mode_{kind}"] = ((("Tăng từ đáy" if up else "Giảm từ đỉnh")) if by_leg else ("Tăng trong phiên" if up else "Giảm trong phiên"))
-        st.session_state["rt_focus"] = {"kind": "sc", "id": f"sc-{code}", "tab": ""}
-    elif target in ("chart", "wyckoff"):
-        st.session_state["selected_code"] = code
-        for _k in ("mtf_code", "tab_code"):
-            st.session_state[_k] = code
-        st.session_state["_nav_pending"] = ("Biểu đồ", None)
-        st.session_state["rt_focus"] = {"kind": "id", "id": "mtf-conclusion" if target == "chart" else "wyckoff-detail", "tab": ""}
-
-
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
-def _route_inner():
+def route():
     BR.render_header(f"Dữ liệu EOD · {latest_date:%d/%m/%Y}")
     _go = st.query_params.get("wbgo")      # liên kết "Xem thêm" ở bảng Cổ phiếu chờ mua -> mở thẻ của mã đó
     if _go:
@@ -2786,49 +2155,21 @@ def _route_inner():
         st.session_state["_nav_pending"] = ("Bộ lọc & Backtest", "Chờ mua")
         st.session_state["wb_view"] = "Thẻ"
         st.session_state["wb_focus"] = str(_go).upper().strip()
-    _rt = st.query_params.get("rtgo")      # liên kết ở sơ đồ Bộ lọc Realtime -> mở thẻ của mã ở đúng trang
-    if _rt:
-        st.query_params.clear()
-        if "~" in str(_rt):
-            _rt_go(*str(_rt).split("~", 1))
     main, sub = NAV.render_nav()
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
-    if main == "Thị trường" and sub == "Tổng quan":
-        try:
-            _waiting_overview = _wb_table()
-            _buy_overview = _buy_now_table(_waiting_overview)
-            _wait_n = int(_waiting_overview["Mã"].nunique()) if "Mã" in _waiting_overview else len(_waiting_overview)
-            _buy_n = int(_buy_overview["Mã"].nunique()) if "Mã" in _buy_overview else len(_buy_overview)
-        except Exception:
-            _buy_n, _wait_n = None, None
-        return MO.render(raw, DATA_KEY, buy_n=_buy_n, wait_n=_wait_n)
     if main == "Thị trường" and sub == "Góc nhìn thị trường":
         return MV.render()
-    if main == "Thị trường" and sub == "Nhận định VNINDEX":
-        return VV.render(raw, DATA_KEY)
-    if main == "Thị trường" and sub == "Nhóm vốn hóa":
-        return CG.render(raw, DATA_KEY, vn30=VN30_LIST, on_open=_cap_open, openable=set(res_df["Mã"]))
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
-    if main == "Ngành" and sub == "Tổng quan ngành":
-        return SD.render(raw)
-    if main == "Ngành" and sub == "Cảnh báo luân chuyển dòng tiền":
-        header()
-        return SRT.render(raw, mkt, WL.GROUPS, mkt_src)
-    if main == "Ngành" and sub == "Vị thế cổ phiếu ngành":
-        return page_sector_ranking()
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
-        if sub == "Lọc tất cả CP": return page_filter()
-        if sub == "Bộ lọc Realtime": return page_realtime_filter()
+        if sub == "Bộ lọc Realtime": return page_filter()
         if sub == "Chờ mua": return page_wait_buy()
         if sub == "Tăng mạnh": return page_surge()
         if sub == "Giảm mạnh": return page_plunge()
-        if sub == "Cạn cung": return page_dry_supply()
         if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
-        if sub == "Cổ phiếu của tôi": return page_my_portfolio()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
         return NAV.placeholder("🧪 Backtest chiến lược",
@@ -2840,19 +2181,6 @@ def _route_inner():
         return page_stock_tab(sub)
     NAV.placeholder(f"{NAV.ICON[main]} {main}" + (f" · {sub}" if sub else ""),
                     NAV.MARKET_DESC.get(sub) if main == "Thị trường" else None)
-
-
-def _cap_open(code):
-    """Mở thẻ chi tiết của mã từ tab Nhóm vốn hóa (giống nút \"Xem biểu đồ\" ở các mục khác)."""
-    st.session_state["selected_code"] = code
-    for _k in ("mtf_code", "tab_code"):
-        st.session_state[_k] = code
-    NAV.goto("Cổ phiếu", "Tổng quát")
-
-
-def route():
-    _route_inner()
-    st.session_state.pop("rt_focus", None)      # trang đích không có thẻ của mã (rỗng / bị lọc): bỏ yêu cầu cuộn còn sót
 
 
 route()
