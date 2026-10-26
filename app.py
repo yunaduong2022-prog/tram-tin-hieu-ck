@@ -2433,15 +2433,18 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         name_lines = textwrap.wrap(_chart_name(code) or "", NAME_WRAP)
         top, bot = 150, 10
         code_w = 0.20                                  # phần bên trái dành cho mã + giá
+        # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
+        # nằm ngang hàng đáy chỉ số); tên nhiều dòng thì mã nâng thêm theo để vẫn thẳng hàng với dòng tên đầu tiên.
+        _dy = 33 + NAME_LH * (max(1, len(name_lines)) - 1)
         step = (1 - code_w) / max(1, len(others))
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34, showarrow=False,
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34 + _dy, showarrow=False,
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
         if price_m:
             fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 18,
-                               yshift=40, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=NAME_PX),
+                               yshift=40 + _dy, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=NAME_PX),
                                hovertext=price_m.get("tip"))
             if price_m.get("sub"):
-                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32, showarrow=False,
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32 + _dy, showarrow=False,
                                    align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 34)),
                                    font=dict(size=11, color=price_m.get("color", "#8B95A5")), hovertext=price_m.get("tip"))
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
