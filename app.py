@@ -144,7 +144,7 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
-              "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
+              "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
 LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
@@ -2138,9 +2138,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
-    subs = [s for s in ("Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI") if s in layers]
-    if str(code).upper() in E.INDEX_CODES or len(mkt) == 0:
-        subs = [s for s in subs if s != "RS vs VNINDEX"]            # chính VNINDEX thì không có RS so với VNINDEX
+    subs = [s for s in ("Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI") if s in layers]
+    if str(code).upper() in E.INDEX_CODES:
+        subs = [s for s in subs if s not in ("VNINDEX", "RS vs VNINDEX")]   # đang xem chính VNINDEX thì không cần 2 khung này
+    elif len(mkt) == 0:
+        subs = [s for s in subs if s != "RS vs VNINDEX"]
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
@@ -2256,6 +2258,24 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
         fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
         r += 1
+    if "VNINDEX" in subs:
+        _fi = frames[tf]
+        _vi = _fi[_fi["Mã"].astype(str).str.upper().isin(E.INDEX_CODES)]
+        _vi = _vi[(_vi["Ngày"] >= x.iloc[0]) & (_vi["Ngày"] <= x.iloc[-1])]
+        if len(_vi):
+            _vtip = [f"<b>VNINDEX · {VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}"
+                     for d_, o_, h_, l_, c_ in zip(_vi["Ngày"], _vi["Giá mở cửa"], _vi["Giá cao nhất"], _vi["Giá thấp nhất"], _vi["Giá đóng cửa"])]
+            fig.add_trace(go.Candlestick(x=_vi["Ngày"], open=_vi["Giá mở cửa"], high=_vi["Giá cao nhất"], low=_vi["Giá thấp nhất"],
+                                         close=_vi["Giá đóng cửa"], name="VNINDEX", whiskerwidth=0, text=_vtip, hoverinfo="text", showlegend=False,
+                                         increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
+                                         decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=r, col=1)
+            _vc = _vi["Giá đóng cửa"]
+            _vlast = float(_vc.iloc[-1])
+            _vchg = (_vlast / float(_vc.iloc[-2]) - 1) * 100 if len(_vc) > 1 else 0.0
+        else:
+            _vlast = _vchg = float("nan")
+        fig.update_yaxes(title_text="VNINDEX", title_font_size=10, row=r, col=1)
+        r += 1
     if "RS vs VNINDEX" in subs:
         # RS = giá mã / VNINDEX, tính trên toàn lịch sử rồi chuẩn hoá về 100 tại nến đầu vùng hiển thị; MA20 để lọc nhiễu
         _dates = pd.DatetimeIndex(g["Ngày"])
@@ -2332,6 +2352,10 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     lr = t.iloc[-1]
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
+    if "VNINDEX" in subs:
+        _vcol = "#2BD6A2" if _vchg >= 0 else "#F2506E"
+        _hdr("VNINDEX", f'VNINDEX  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
+             else "VNINDEX: chưa có dữ liệu trong vùng đang xem")
     if "RS vs VNINDEX" in subs:
         _st = "mạnh hơn thị trường" if _above[-1] else "yếu hơn thị trường"
         _hdr("RS vs VNINDEX", f'RS = {code}/VNINDEX (=100 đầu vùng)  <b style="color:#CBD2DC">{rs_t.iloc[-1]:.1f}</b>  '
