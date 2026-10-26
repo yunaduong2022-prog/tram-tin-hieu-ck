@@ -2907,7 +2907,7 @@ def _route_inner():
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
-        return SD.render(raw)
+        return SD.render(raw, *_wb_meta_maps(WY_KEY))
     if main == "Ngành" and sub == "Cảnh báo luân chuyển dòng tiền":
         header()
         return SRT.render(raw, mkt, WL.GROUPS, mkt_src)

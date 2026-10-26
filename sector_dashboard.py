@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import fund_guard as FG
 import watchlist as WL
 
 INDEX_NAMES = {"VNINDEX", "VN-INDEX", "VN_INDEX", "VNINDEXINDEX", "VNINDEX1", "^VNINDEX"}
@@ -151,7 +152,103 @@ def _fmt_pct(x, digits=1):
     return "—" if pd.isna(x) else f"{x:+.{digits}f}%"
 
 
-def render(raw: pd.DataFrame):
+def _num(v) -> float:
+    try:
+        x = float(v)
+        return x if np.isfinite(x) else np.nan
+    except (TypeError, ValueError):
+        return np.nan
+
+
+def _diff(now: float, avg: float) -> float:
+    """Chênh lệch % của chỉ số hiện tại so với trung bình 3 năm."""
+    return (now / avg - 1) * 100 if pd.notna(now) and pd.notna(avg) and avg > 0 and now > 0 else np.nan
+
+
+def _weighted_mult(caps: list[float], vals: list[float]) -> float:
+    """P/E, P/B của nhóm = tổng vốn hóa / tổng (vốn hóa / hệ số): bình quân điều hòa theo vốn hóa; bỏ mã thiếu số hoặc hệ số <= 0."""
+    pairs = [(c, v) for c, v in zip(caps, vals) if pd.notna(c) and c > 0 and pd.notna(v) and v > 0]
+    if not pairs:
+        return np.nan
+    return sum(c for c, _ in pairs) / sum(c / v for c, v in pairs)
+
+
+VAL_COLS = ["Mã CP", "Vốn hóa (tỷ)", "Thanh khoản (CP)",
+            "P/E hiện tại", "P/E TB 3 năm", "P/E chênh lệch",
+            "P/B hiện tại", "P/B TB 3 năm", "P/B chênh lệch"]
+
+
+def valuation_frame(sector: str, symbols: list[str], clean: pd.DataFrame, cap_map: dict, fund_map: dict) -> pd.DataFrame:
+    """Bảng định giá ngành: dòng đầu là cả ngành, tiếp theo là từng mã (vốn hóa giảm dần).
+    Thanh khoản = khối lượng khớp bình quân 20 phiên gần nhất (cổ phiếu)."""
+    rows = []
+    for sym in symbols:
+        fd = fund_map.get(sym, {}) or {}
+        g = clean[clean["Mã"] == sym].sort_values("Ngày")
+        liq = np.nan
+        if not g.empty and "Khối lượng khớp lệnh" in g and g["Khối lượng khớp lệnh"].notna().any():
+            liq = float(g["Khối lượng khớp lệnh"].tail(20).mean())
+        pe, pe3 = _num(fd.get("P/E")), _num(fd.get("P/E TB 3N"))
+        pb, pb3 = _num(fd.get("P/B")), _num(fd.get("P/B TB 3N"))
+        rows.append({"Mã CP": sym, "Vốn hóa (tỷ)": _num(cap_map.get(sym)), "Thanh khoản (CP)": liq,
+                     "P/E hiện tại": pe, "P/E TB 3 năm": pe3, "P/E chênh lệch": _diff(pe, pe3),
+                     "P/B hiện tại": pb, "P/B TB 3 năm": pb3, "P/B chênh lệch": _diff(pb, pb3)})
+    stocks = pd.DataFrame(rows, columns=VAL_COLS)
+    if stocks.empty:
+        return stocks
+    stocks = stocks.sort_values("Vốn hóa (tỷ)", ascending=False, na_position="last").reset_index(drop=True)
+    caps = stocks["Vốn hóa (tỷ)"].tolist()
+    agg = {"Mã CP": f"{sector}", "Vốn hóa (tỷ)": float(stocks["Vốn hóa (tỷ)"].sum(skipna=True)) if stocks["Vốn hóa (tỷ)"].notna().any() else np.nan,
+           "Thanh khoản (CP)": float(stocks["Thanh khoản (CP)"].sum(skipna=True)) if stocks["Thanh khoản (CP)"].notna().any() else np.nan}
+    for key, now_col, avg_col, diff_col in (("P/E", "P/E hiện tại", "P/E TB 3 năm", "P/E chênh lệch"),
+                                            ("P/B", "P/B hiện tại", "P/B TB 3 năm", "P/B chênh lệch")):
+        agg[now_col] = _weighted_mult(caps, stocks[now_col].tolist())
+        # TB 3 năm của ngành chỉ gộp các mã có đủ cả số hiện tại lẫn TB 3 năm, tránh lệch mẫu
+        both = stocks[stocks[now_col].notna() & stocks[avg_col].notna()]
+        agg[avg_col] = _weighted_mult(both["Vốn hóa (tỷ)"].tolist(), both[avg_col].tolist())
+        agg[diff_col] = _diff(agg[now_col], agg[avg_col])
+    return pd.concat([pd.DataFrame([agg], columns=VAL_COLS), stocks], ignore_index=True)
+
+
+
+def _render_valuation(sector: str, symbols: list[str], clean: pd.DataFrame, cap_map: dict | None, fund_map: dict | None) -> None:
+    st.markdown(f"**Định giá ngành {sector} — P/E, P/B hiện tại so với trung bình 3 năm**")
+    if fund_map is None:
+        fund_map = FG.load_fund_map()
+    if cap_map is None:
+        cap_map = {}
+        try:
+            md = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
+            cap_map = dict(zip(md["Mã"].str.upper().str.strip(), pd.to_numeric(md["Vốn hóa TT"], errors="coerce")))
+        except Exception:  # noqa: BLE001
+            pass
+    val = valuation_frame(sector, symbols, clean, cap_map, fund_map)
+    if val.empty:
+        st.info("Chưa có dữ liệu định giá cho các mã thuộc ngành này.")
+        return
+    if val[["P/E hiện tại", "P/B hiện tại"]].isna().all().all():
+        st.info("Chưa có số P/E, P/B của các mã trong ngành này. Số liệu lấy từ data/fundamentals.csv (bot cập nhật) hoặc điền tay ở data/nhap_tay.csv.")
+    fmt = {"Vốn hóa (tỷ)": "{:,.0f}", "Thanh khoản (CP)": "{:,.0f}",
+           "P/E hiện tại": "{:,.1f}", "P/E TB 3 năm": "{:,.1f}", "P/E chênh lệch": "{:+.1f}%",
+           "P/B hiện tại": "{:,.2f}", "P/B TB 3 năm": "{:,.2f}", "P/B chênh lệch": "{:+.1f}%"}
+
+    def _tone(v):
+        if pd.isna(v) or v == 0:
+            return ""
+        return "color:#25A879" if v > 0 else "color:#E5586A"
+
+    styler = val.style.format(fmt, na_rep="—")
+    _map = getattr(styler, "map", None) or styler.applymap
+    styler = _map(_tone, subset=["P/E chênh lệch", "P/B chênh lệch"])
+    styler = styler.apply(lambda r: ["color:#8B7CF6;font-weight:700" if r.name == 0 else "" for _ in r], axis=1)
+    st.dataframe(styler, hide_index=True, use_container_width=True)
+    st.caption("Dòng đầu là cả ngành: P/E, P/B ngành = tổng vốn hóa chia tổng (vốn hóa / hệ số) của các mã có số hợp lệ; TB 3 năm của ngành chỉ gộp các mã có đủ cả số hiện tại và TB 3 năm. "
+               "Chênh lệch = hiện tại / TB 3 năm − 1. Thanh khoản = khối lượng khớp bình quân 20 phiên gần nhất; vốn hóa = giá mới nhất × số CP lưu hành. "
+               "Ô hiện \"—\" là chưa có số trong data/fundamentals.csv hoặc data/nhap_tay.csv (cột P/E, P/B, P/E TB 3N, P/B TB 3N).")
+
+
+
+def render(raw: pd.DataFrame, cap_map: dict | None = None, fund_map: dict | None = None):
     st.title("🏭 Tổng quan ngành")
     st.caption("Bản đồ dòng tiền giúp nhận diện nhanh nhóm ngành mạnh/yếu, sau đó xem sức mạnh tương đối và cổ phiếu dẫn dắt. Dữ liệu lấy từ nguồn giá đang được app sử dụng; không phải khuyến nghị mua/bán.")
     metrics, info = calculate_sector_metrics(raw)
@@ -264,10 +361,12 @@ def render(raw: pd.DataFrame):
         st.markdown("**Cổ phiếu trong ngành — xếp theo hiệu suất 1 tháng**")
         st.dataframe(stock_df, hide_index=True, use_container_width=True, column_config={
             "Giá đóng cửa": st.column_config.NumberColumn(format="%.2f"),
+            "1 phiên": st.column_config.NumberColumn(format="%+.2f%%"),
             "1 tuần": st.column_config.NumberColumn(format="%+.2f%%"),
             "1 tháng": st.column_config.NumberColumn(format="%+.2f%%"),
             "3 tháng": st.column_config.NumberColumn(format="%+.2f%%"),
         })
     else:
         st.info("Chưa có dữ liệu giá cho các mã thuộc ngành này.")
+    _render_valuation(chosen, symbols, d, cap_map, fund_map)
     st.caption("Lưu ý: hiệu suất ngành hiện tính bình quân đều các mã có dữ liệu, chưa phải chỉ số ngành theo vốn hóa. GTGD xấp xỉ = giá đóng cửa × khối lượng, dùng để so sánh tương đối; không thay thế giá trị giao dịch chính thức. Dữ liệu ngắn hơn kỳ đo sẽ hiển thị thiếu thay vì tự suy diễn.")
