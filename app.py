@@ -2594,6 +2594,21 @@ def page_stock():
         {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip},
         {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
     ]
+    # Cạnh Vol: P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
+    if str(code).upper() not in E.INDEX_CODES:
+        _wm = _wb_meta(code)
+        _na = lambda v: "-" if v in (None, "", "Chưa có") else v
+        chart_metrics += [
+            {"label": "P/B", "value": _na(_wm.get("P/B"))},
+            {"label": "ROE", "value": _na(_wm.get("ROE"))},
+            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa"))},
+        ]
+        try:
+            _ff = pd.to_numeric(ST._read_csv_by_code(ST.INFO_PATH).at[str(code).upper(), "%freefloat"], errors="coerce")
+        except Exception:  # noqa: BLE001
+            _ff = float("nan")
+        if pd.notna(_ff):
+            chart_metrics.append({"label": "% Freefloat", "value": f"{float(_ff):.1f}%"})
 
     alert_banner(a, tf)
     col_main, col_side = st.columns([2.2, 1])
