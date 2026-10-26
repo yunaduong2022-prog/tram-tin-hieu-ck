@@ -2135,6 +2135,38 @@ DATE_TICK_STOPS = [
     dict(dtickrange=[31000000000, None], value="%Y"),
 ]
 
+def _chart_name(code: str) -> str:
+    """Tên công ty (data/fundamentals.csv, sửa tay ở nhap_tay.csv / ten_cong_ty_tay.csv); chỉ số thì ghi tên chỉ số."""
+    if str(code).upper() in E.INDEX_CODES:
+        return "Chỉ số VN-Index"
+    try:
+        return _wb_meta(str(code)).get("Tên", "") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
+    """Dòng dưới thương hiệu, bên phải mã: tên công ty (nhỏ hơn mã) · khung + O/H/L/C và thay đổi của nến cuối, kiểu TradingView."""
+    if g is None or len(g) == 0:
+        return ""
+    r = g.iloc[-1]
+    prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else float("nan")
+    o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
+    up = (c >= prev) if pd.notna(prev) else (c >= o)
+    col = "#2BD6A2" if up else "#F2506E"
+    name = htmllib.escape(_chart_name(code))
+    if len(name) > 42:
+        name = name[:41].rstrip() + "…"
+    head = (f'<span style="color:#E6EDF3;font-size:16px">{name}</span>' if name else "") \
+        + f'<span style="color:#8B95A5;font-size:14px">{" · " if name else ""}{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
+    pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
+    chg = ""
+    if pd.notna(pct) and pd.notna(prev):
+        chg = f' {c - prev:+,.2f} ({f"{pct:+.2f}".replace(".", ",")}%)'
+    ohlc = f'<span style="color:{col};font-size:14px">  O{o:,.2f} H{h:,.2f} L{l_:,.2f} C{c:,.2f}{chg}</span>'
+    return head + ohlc
+
+
 def _brand_tag() -> str:
     """Dòng thương hiệu trên biểu đồ: TRẠM TÍN HIỆU | MIN TRADING (tên lấy từ brand.py)."""
     return (f'<b style="color:#E6EDF3">{BR.TITLE.upper()}</b> <span style="color:#6B7686">|</span> '
@@ -2407,6 +2439,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         ph = height - top - bot
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=122, showarrow=False,
                            text=_brand_tag(), font=dict(size=22))
+        # tên công ty + O/H/L/C: bên phải mã, nằm giữa dòng thương hiệu và hàng chỉ số
+        fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=92, showarrow=False,
+                           align="left", text=_ohlc_header(code, tf, g), hovertext=_chart_name(code) or None)
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
                           legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
     elif mobile:
