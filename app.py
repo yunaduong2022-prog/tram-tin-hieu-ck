@@ -426,7 +426,7 @@ FLOW_OPTS = {"Vol tăng 3 phiên liên tiếp": "VolStep", "Dòng tiền sớm (
 MA_OPTS = ["Tất cả", "Ngắn hạn - TĂNG (MA10 > MA20)", "Trung hạn - TĂNG (MA20 > MA50 > MA100)",
            "Dài hạn - TĂNG (MA50 > MA100 > MA200)"]
 MA_COL = {MA_OPTS[1]: "Trend_NganHan", MA_OPTS[2]: "Trend_TrungHan", MA_OPTS[3]: "Trend_DaiHan"}
-WY_OPTS = ["Tích lũy", "Phân phối", "Pha C", "Pha D", "Pha E"]
+WY_OPTS = ["Tích lũy", "Phân phối", "Pha A", "Pha B", "Pha C", "Pha D", "Pha E"]
 
 
 def header():
@@ -465,7 +465,7 @@ def filter_panel():
         groups = c1.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
                                 help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
         wy = c2.multiselect("Wyckoff (pha / cấu trúc)", WY_OPTS, default=[], placeholder="Tất cả",
-                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
+                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha A/B = mới dừng đà / đang xây nền (chỉ quan sát), Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
         flow = c3.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), default=[],
                               help="Chọn nhiều mục = phải thoả tất cả")
         search = c4.text_input("Tìm mã", "").upper()
