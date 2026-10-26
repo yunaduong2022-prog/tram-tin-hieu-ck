@@ -216,6 +216,68 @@ def rsi_view(g: pd.DataFrame, f: pd.DataFrame, state: str) -> dict:
     return {"rsi": rsi, "rsi_note": note, "rsi_kind": kind, "div": div, "div_note": dnote}
 
 
+def macd_view(g: pd.DataFrame, f: pd.DataFrame) -> dict:
+    """MACD(12,26,9) kết hợp giá. Tín hiệu duy nhất có lợi thế trong backtest: DIF cắt lên 0 KHI giá đã trên Kijun và Supertrend tăng
+    (20 phiên sau +3,9%, thắng 58%; mức nền +1,8%, 52%). DIF cắt lên 0 mà giá còn yếu thì ngang mức nền; nối 2 đáy MACD hướng lên không có lợi thế."""
+    cs = pd.to_numeric(g[C], errors="coerce")
+    dif = cs.ewm(span=12, adjust=False).mean() - cs.ewm(span=26, adjust=False).mean()
+    sig = dif.ewm(span=9, adjust=False).mean()
+    d = dif.to_numpy(float)
+    cross = [i for i in range(max(1, len(d) - 5), len(d)) if d[i] > 0 >= d[i - 1]]      # DIF cắt lên 0 trong 5 phiên gần nhất
+    r = f.iloc[-1]
+    strong = bool(r["c"] > r["kijun"] and r["st_up"])
+    out = {"dif": float(d[-1]), "sig": float(sig.iloc[-1]), "cross_ago": (len(d) - 1 - cross[-1]) if cross else None}
+    if cross and strong:
+        out.update(kind="confirmed", tone="green", note=("MACD vừa cắt lên 0 khi giá đã trên Kijun và Supertrend tăng: xác nhận. "
+                   "Lịch sử +3,9% sau 20 phiên, thắng 58% (mức nền +1,8%, 52%)."))
+    elif cross:
+        out.update(kind="unconfirmed", tone="amber", note=("MACD vừa cắt lên 0 nhưng giá chưa trên Kijun hoặc Supertrend chưa tăng: chưa xác nhận. "
+                   "Lịch sử chỉ +1,7%, thắng 51%, ngang mức nền."))
+    elif d[-1] < 0:
+        out.update(kind="neg", tone="gray", note="MACD đang dưới 0. Nối hai đáy MACD hướng lên không phải tín hiệu mua (backtest +0,7%, thắng 49%); chờ MACD cắt lên 0 cùng lúc giá trên Kijun.")
+    else:
+        out.update(kind="pos", tone="gray", note="MACD đang trên 0, chưa có tín hiệu cắt mới.")
+    return out
+
+
+def rebound_view(g: pd.DataFrame, f: pd.DataFrame, state: str) -> dict | None:
+    """Phân biệt SÓNG HỒI và SÓNG TĂNG cho cổ phiếu đã giảm sâu ≥ 40% (đỉnh 250 phiên → đáy 60 phiên) đang có tín hiệu tích cực.
+    Dưới Kijun 129: sóng hồi, mục tiêu theo mức hồi 38,2 / 50 / 61,8% của đoạn giảm (Kijun thường nằm gần mốc 38,2%).
+    Trên Kijun + trên mây + Supertrend tăng: sóng tăng. Còn lại: đang vượt Kijun, chờ xác nhận.
+    Số liệu: backtest 515 lần giảm sâu → đi ngang → bùng nổ, 147 mã, 2019-2026, 60 phiên sau."""
+    r = f.iloc[-1]
+    if state not in ("BOTTOM", "BASE_HL", "BREAKOUT", "WATCH") or not bool(r["deep"]):
+        return None
+    h = pd.to_numeric(g[H], errors="coerce")
+    l = pd.to_numeric(g[L], errors="coerce")
+    peak, trough = float(h.iloc[-250:].max()), float(l.iloc[-60:].min())
+    drop = peak - trough
+    c, k = float(r["c"]), float(r["kijun"])
+    if drop <= 0 or c >= peak:
+        return None
+    if c < k:
+        kind, tone = "hoi", "amber"
+        title = "KHẢ NĂNG CÓ SÓNG HỒI"
+        text = ("Giá đã giảm sâu và vẫn dưới Kijun 129: nhiều khả năng đây là sóng hồi chứ chưa phải sóng tăng mới. "
+                "Backtest: mức hồi trung vị chỉ khoảng 38% đoạn giảm; 49% lần hồi tới 38,2%, 32% tới 50%, 20% tới 61,8%, chỉ 7% về lại đỉnh cũ. "
+                "62% lần giá chạm Kijun trong 60 phiên, và khoảng một nửa số đó vượt thật qua Kijun.")
+        probs = {0.382: 49, 0.5: 32, 0.618: 20}
+    elif c > float(r["cloud_top"]) and bool(r["st_up"]):
+        kind, tone = "tang", "green"
+        title = "SÓNG TĂNG (sau giảm sâu)"
+        text = ("Giá đã vượt Kijun 129 và mây, Supertrend tăng: coi là sóng tăng. Backtest: mức hồi trung vị 65% đoạn giảm, "
+                "83% lần hồi tới 38,2%, 65% tới 50%, 54% tới 61,8%, 26% về lại đỉnh cũ.")
+        probs = {0.382: 83, 0.5: 65, 0.618: 54}
+    else:
+        kind, tone = "cho", "amber"
+        title = "ĐANG VƯỢT KIJUN: CHỜ XÁC NHẬN SÓNG TĂNG"
+        text = "Giá đã trên Kijun 129 nhưng chưa trên mây hoặc Supertrend chưa tăng: chưa xác nhận sóng tăng, vẫn có thể chỉ là sóng hồi."
+        probs = {0.382: 83, 0.5: 65, 0.618: 54}
+    lv = [{"label": f"Hồi {int(round(x * 100 - 0.0))}%".replace("38%", "38,2%").replace("62%", "61,8%") + " đoạn giảm", "price": trough + x * drop,
+           "pct": ((trough + x * drop) / c - 1) * 100, "prob": pr} for x, pr in probs.items()]
+    return {"kind": kind, "tone": tone, "title": title, "text": text, "peak": peak, "trough": trough, "levels": lv}
+
+
 def plan(g: pd.DataFrame) -> dict | None:
     """Trạng thái và kế hoạch cho nến cuối cùng của g. Trả None nếu chưa đủ lịch sử (cần ≥ 130 nến cho Kijun 129)."""
     if len(g) < 130:
@@ -230,7 +292,7 @@ def plan(g: pd.DataFrame) -> dict | None:
            "tenkan": float(r["tenkan"]), "kijun": float(r["kijun"]), "res": float(r["tk_hi"]), "sup": float(r["tk_lo"]),
            "cloud_top": float(r["cloud_top"]), "cloud_bot": float(r["cloud_bot"]), "st_line": float(r["st_line"]) if pd.notna(r["st_line"]) else None,
            "st_up": bool(r["st_up"]), "vr": float(r["vr"]) if pd.notna(r["vr"]) else None,
-           "deep": bool(r["deep"]), "entry": None, "stop": None, "t1": None, "t2": None, "rr": None, "text": "", "bars_ago": None, "ext": None, "targets": None}
+           "deep": bool(r["deep"]), "entry": None, "stop": None, "t1": None, "t2": None, "rr": None, "text": "", "bars_ago": None, "ext": None, "targets": None, "rebound": None, "macd": None}
     # ngày của tín hiệu bùng nổ gần nhất còn hiệu lực
     if state in ("BOTTOM", "BASE_HL", "BREAKOUT"):
         col = {"BOTTOM": "bottom", "BASE_HL": "base_hl", "BREAKOUT": "breakout"}[state]
@@ -253,6 +315,8 @@ def plan(g: pd.DataFrame) -> dict | None:
                    targets=targets(g, f, entry, risk))
     out["text"] = _text(out)
     out.update(rsi_view(g, f, state))
+    out["macd"] = macd_view(g, f)
+    out["rebound"] = rebound_view(g, f, state)
     return out
 
 

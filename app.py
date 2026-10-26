@@ -1969,6 +1969,12 @@ def setup_card(g_day):
     s_ = p["state"]
     head = tag(p["label"], p["tag"]) + (f' <span class="muted">báo cách đây {p["bars_ago"]} phiên</span>' if p["bars_ago"] else "")
     html = [head, f'<div class="muted" style="margin-top:8px">{p["text"]}</div>']
+    _rb = p.get("rebound")
+    if _rb:
+        html.append(f'<div style="margin-top:8px">{tag(_rb["title"], _rb["tone"])}</div><div class="muted" style="margin-top:6px">{_rb["text"]}</div>')
+        _rr = [row(f'{l["label"]} · {l["prob"]}% lần chạm', f'<span class="c-green">{fp(l["price"])}</span> <span class="muted">{l["pct"]:+.1f}%</span>') for l in _rb["levels"]]
+        _rr.append(row("Đỉnh 250 phiên → đáy 60 phiên", f'{fp(_rb["peak"])} → {fp(_rb["trough"])}'))
+        html.append('<div class="box">' + "".join(_rr) + "</div>")
     box = []
     if p["entry"] is not None:
         lab = {"WATCH": "Giá kích hoạt (chờ vượt)", "TREND": "Giá hiện tại"}.get(s_, "Đỉnh nền vừa vượt")
@@ -2001,6 +2007,10 @@ def setup_card(g_day):
             row("RSI(14)", f'{p["rsi"]:.0f}')]
     html.append('<div class="box">' + "".join(box) + "</div>")
     html.append(f'<div class="muted" style="margin-top:6px">{tag("Động lượng RSI", p["rsi_kind"])} {p["rsi_note"]}</div>')
+    _mc = p.get("macd")
+    if _mc:
+        _lab = {"confirmed": "MACD xác nhận", "unconfirmed": "MACD chưa xác nhận"}.get(_mc["kind"], "Động lượng MACD")
+        html.append(f'<div class="muted" style="margin-top:6px">{tag(_lab, _mc["tone"])} {_mc["note"]}</div>')
     if p["div_note"]:
         html.append(f'<div class="muted" style="margin-top:6px">{tag("Phân kỳ tăng", "green" if p["div"]["state"] == "confirmed" else "amber")} {p["div_note"]}</div>')
     if s_ in SETUP_BT:
