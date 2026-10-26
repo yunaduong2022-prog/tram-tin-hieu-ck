@@ -172,13 +172,17 @@ def read_eod_meta() -> dict:
         return {}
 
 
+DAILY_KEEP = 750       # số phiên gần nhất của khung Ngày được giữ trong bộ nhớ (khoảng 3 năm). Tuần / Tháng vẫn giữ toàn bộ lịch sử. 0 = giữ hết.
+
+
 @st.cache_data(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...")
 def build_frames(raw: pd.DataFrame, ver: str = "") -> dict:
     parts = {"D": [], "W": [], "M": []}
     for _, g in raw.groupby("Mã"):
         base = g[["Mã", "Ngày"] + E.NUMERIC_COLS]
         for tf in parts:
-            parts[tf].append(E.add_indicators(E.resample_ohlcv(base, tf)))
+            f_ = E.add_indicators(E.resample_ohlcv(base, tf))      # chỉ báo luôn tính trên TOÀN BỘ lịch sử (EMA200, Ichimoku... không đổi giá trị)
+            parts[tf].append(f_.tail(DAILY_KEEP) if tf == "D" and DAILY_KEEP else f_)   # rồi chỉ giữ lại phần đuôi của khung Ngày để đỡ tốn RAM
     frames = {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
     frames["D"] = E.mask_chg_gaps(frames["D"])     # % thay đổi chỉ tính so với phiên kề trước, thiếu phiên thì hiện "—"
     return frames
