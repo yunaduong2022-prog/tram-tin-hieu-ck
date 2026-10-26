@@ -42,6 +42,7 @@ import sell_card
 import dry_supply as DS
 import stock_map as SM
 import crosshair as CH
+import draw_tools as DT
 
 st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
 
@@ -2544,6 +2545,7 @@ def page_stock():
                         config=_cfg, **_STRETCH)
         if not _mob:
             CH.inject()                # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+            DT.inject(code, tf)        # thanh công cụ vẽ kiểu TradingView (đường, mũi tên, hình, đo giá/ngày, chữ...), lưu theo mã + khung
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
