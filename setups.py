@@ -313,6 +313,13 @@ def plan(g: pd.DataFrame) -> dict | None:
         risk = entry - stop
         out.update(entry=entry, stop=stop, t1=entry + 2 * risk, t2=entry + 3 * risk, rr=2.0, ext=c / entry - 1,
                    targets=targets(g, f, entry, risk))
+    out["broken"] = False
+    if out["entry"] is not None and state in ("BOTTOM", "BASE_HL", "BREAKOUT", "WATCH") and c <= out["stop"]:
+        # giá đã thủng mức cắt lỗ của kế hoạch: nền / tín hiệu hỏng, bỏ kế hoạch (không báo điểm vào nữa)
+        out.update(state="NEUTRAL", label="Nền / tín hiệu đã hỏng: giá thủng mức cắt lỗ", tag="red", entry=None, stop=None, t1=None, t2=None,
+                   rr=None, ext=None, targets=None, bars_ago=None, broken=True)
+        state = "NEUTRAL"
+    out["below_entry"] = bool(out["entry"] is not None and state in ("BOTTOM", "BASE_HL", "BREAKOUT") and c < out["entry"])
     out["text"] = _text(out)
     out.update(rsi_view(g, f, state))
     out["macd"] = macd_view(g, f)
@@ -322,6 +329,11 @@ def plan(g: pd.DataFrame) -> dict | None:
 
 def _text(p: dict) -> str:
     s, c = p["state"], p["close"]
+    if p.get("broken"):
+        return "Giá đã đóng cửa dưới mức cắt lỗ của kế hoạch trước đó: nền hoặc tín hiệu bùng nổ đã hỏng. Không còn điểm vào; chờ cấu trúc mới."
+    if p.get("below_entry"):
+        return ("Tín hiệu bùng nổ còn hiệu lực nhưng giá đã quay về dưới điểm vào (đỉnh nền vừa vượt): chưa nên mua lúc này, "
+                "chờ giá đóng cửa lấy lại trên điểm vào. Cắt lỗ vẫn tính từ điểm vào đó.")
     if s == "BOTTOM":
         return "Giá đã giảm sâu, đi ngang tạo nền rồi vượt đỉnh nền kèm khối lượng lớn. Lịch sử kiểu này có tỷ lệ thắng nhỉnh hơn bùng nổ thường, nhưng cắt lỗ xa; nên chia vốn."
     if s == "BASE_HL":

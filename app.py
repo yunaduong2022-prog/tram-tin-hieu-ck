@@ -146,7 +146,7 @@ TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Wyckoff", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -426,7 +426,7 @@ FLOW_OPTS = {"Vol tăng 3 phiên liên tiếp": "VolStep", "Dòng tiền sớm (
 MA_OPTS = ["Tất cả", "Ngắn hạn - TĂNG (MA10 > MA20)", "Trung hạn - TĂNG (MA20 > MA50 > MA100)",
            "Dài hạn - TĂNG (MA50 > MA100 > MA200)"]
 MA_COL = {MA_OPTS[1]: "Trend_NganHan", MA_OPTS[2]: "Trend_TrungHan", MA_OPTS[3]: "Trend_DaiHan"}
-WY_OPTS = ["Tích lũy", "Phân phối", "Pha A", "Pha B", "Pha C", "Pha D", "Pha E"]
+WY_OPTS = ["Tích lũy", "Phân phối", "Pha C", "Pha D", "Pha E"]
 
 
 def header():
@@ -465,7 +465,7 @@ def filter_panel():
         groups = c1.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
                                 help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
         wy = c2.multiselect("Wyckoff (pha / cấu trúc)", WY_OPTS, default=[], placeholder="Tất cả",
-                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha A/B = mới dừng đà / đang xây nền (chỉ quan sát), Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
+                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
         flow = c3.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), default=[],
                               help="Chọn nhiều mục = phải thoả tất cả")
         search = c4.text_input("Tìm mã", "").upper()
@@ -1997,6 +1997,8 @@ def setup_card(g_day):
                         f'Trong backtest giá chạm mốc này trong 40 phiên khoảng {_tg["prob"]}% số lần, nhưng mốc chỉ cách giá vài % trong khi cắt lỗ xa hơn, '
                         'nên chốt hết ở đó không có lãi; chốt một nửa còn làm giảm lãi trung bình (+1,4% so với +2,6% khi kéo theo Supertrend). '
                         'Coi đây là mốc cản để tự quyết chốt bớt; cách thoát chính vẫn là đóng cửa dưới Supertrend.</div>')
+        if p.get("below_entry"):
+            html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đang dưới điểm vào {abs(p["ext"]) * 100:.1f}%: chưa mua, chờ đóng cửa lấy lại trên {fp(p["entry"])}.</div>')
         if s_ in ("BOTTOM", "BASE_HL", "BREAKOUT") and p["ext"] is not None and p["ext"] > 0.05:
             html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đã cao hơn điểm vào {p["ext"] * 100:.1f}%: đã chạy xa, tránh đuổi; chờ nhịp lùi về gần đỉnh nền.</div>')
     elif s_ == "RANGE":

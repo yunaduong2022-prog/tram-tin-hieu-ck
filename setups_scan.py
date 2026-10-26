@@ -53,7 +53,7 @@ def scan(path: str = CSV_PATH) -> tuple[pd.DataFrame, pd.Timestamp]:
                      "Điểm vào": p["entry"], "Cắt lỗ": p["stop"], "Mục tiêu 1": p["t1"], "Mục tiêu 2": p["t2"],
                      "Đã chạy xa (%)": None if p["ext"] is None else round(p["ext"] * 100, 1),
                      "Sóng": None if not rb else rb["kind"], "MACD": mc.get("kind"), "RSI": round(p["rsi"]),
-                     "R:R": p.get("rr"), "KL/TB": p.get("vr")})
+                     "R:R": p.get("rr"), "KL/TB": p.get("vr"), "Dưới điểm vào": bool(p.get("below_entry"))})
     return pd.DataFrame(rows), latest
 
 
@@ -75,7 +75,7 @@ def _line(r) -> str:
 def _rank_fresh(d: pd.DataFrame) -> pd.DataFrame:
     """Mã tiêu biểu lên đầu: chưa chạy xa, MACD xác nhận, khối lượng bùng nổ mạnh, R:R tốt, báo càng mới càng tốt."""
     x = d.copy()
-    x["_s"] = ((~x["chay"]).astype(float) * 2 + (x["MACD"] == "confirmed").astype(float)
+    x["_s"] = ((~x["chay"]).astype(float) * 2 - x["Dưới điểm vào"].astype(float) * 2 + (x["MACD"] == "confirmed").astype(float)
                + pd.to_numeric(x["KL/TB"], errors="coerce").rank(pct=True).fillna(0.5)
                + pd.to_numeric(x["R:R"], errors="coerce").rank(pct=True).fillna(0.5)
                - 0.2 * x["Báo cách (phiên)"].fillna(0))
@@ -88,7 +88,7 @@ def build_messages(t: pd.DataFrame, latest: pd.Timestamp, max_each: int = 15) ->
     fresh = t[t["Trạng thái"].isin(FRESH) & (t["Báo cách (phiên)"].fillna(99) <= 3)].copy()
     if len(fresh):
         fresh["chay"] = fresh["Đã chạy xa (%)"].fillna(0) > 5
-        sec.append(("Bùng nổ mới (báo trong 3 phiên)", [_line(r) + (" ⚠ đã chạy xa >5%, tránh đuổi" if r["chay"] else "")
+        sec.append(("Bùng nổ mới (báo trong 3 phiên)", [_line(r) + (" ⚠ đã chạy xa >5%, tránh đuổi" if r["chay"] else "") + (" ⏸ giá đang dưới điểm vào, chờ lấy lại" if r["Dưới điểm vào"] else "")
                                                        for _, r in _rank_fresh(fresh).head(max_each).iterrows()], len(fresh)))
     w = t[t["Trạng thái"] == "WATCH"]
     if len(w):
