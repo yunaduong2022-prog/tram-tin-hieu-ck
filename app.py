@@ -2146,7 +2146,7 @@ def _chart_name(code: str) -> str:
 
 
 def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
-    """Dòng dưới thương hiệu, bên phải mã: tên công ty (nhỏ hơn mã) · khung + O/H/L/C và thay đổi của nến cuối, kiểu TradingView."""
+    """Dòng nhỏ dưới tên công ty: khung + O/H/L/C và thay đổi của nến cuối, kiểu TradingView (tên công ty vẽ riêng, cỡ chữ bằng giá)."""
     if g is None or len(g) == 0:
         return ""
     r = g.iloc[-1]
@@ -2154,17 +2154,22 @@ def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
     o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
     up = (c >= prev) if pd.notna(prev) else (c >= o)
     col = "#2BD6A2" if up else "#F2506E"
-    name = htmllib.escape(_chart_name(code))
-    if len(name) > 42:
-        name = name[:41].rstrip() + "…"
-    head = (f'<span style="color:#E6EDF3;font-size:16px">{name}</span>' if name else "") \
-        + f'<span style="color:#8B95A5;font-size:14px">{" · " if name else ""}{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
+    head = f'<span style="color:#8B95A5;font-size:14px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
     pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
     chg = ""
     if pd.notna(pct) and pd.notna(prev):
         chg = f' {c - prev:+,.2f} ({f"{pct:+.2f}".replace(".", ",")}%)'
     ohlc = f'<span style="color:{col};font-size:14px">  O{o:,.2f} H{h:,.2f} L{l_:,.2f} C{c:,.2f}{chg}</span>'
     return head + ohlc
+
+
+_CODE_PX = {"I": 16, "J": 22, "L": 26, "M": 40, "W": 46, "Q": 34, "G": 32, "O": 33, "D": 32, "N": 32, "H": 32, "U": 31, "V": 30,
+            "A": 31, "C": 29, "B": 28, "S": 27, "R": 28, "E": 25, "F": 24, "P": 27, "T": 25, "K": 30, "X": 29, "Y": 29, "Z": 26}
+
+
+def _code_px(code: str) -> int:
+    """Chiều ngang ước lượng (px) của chữ mã ở cỡ 56 đậm, để đặt giá ngay bên phải mã."""
+    return int(sum(_CODE_PX.get(ch, 28) for ch in str(code).upper()))
 
 
 def _brand_tag() -> str:
@@ -2416,16 +2421,28 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_xaxes(tickformatstops=DATE_TICK_STOPS, tickangle=0, ticks="outside", ticklen=4, tickfont=dict(size=11))
     fig.update_xaxes(showticklabels=True, row=1, col=1)
     if metrics:
-        # 5 chỉ số (Giá, Vol vs MA10, Position %, Cảnh báo, Độ nghiêng) nằm ngay trên biểu đồ, dưới hàng chú thích
-        top, bot = 150, 10
-        ph = height - top - bot                       # chiều cao vùng vẽ (px) để đổi px -> toạ độ paper
-        code_w = 0.15                                  # phần bên trái dành cho tên mã
-        step = (1 - code_w) / len(metrics)
+        # Bên trái: MÃ + GIÁ cạnh nhau (bỏ nhãn "Giá"), dòng phụ của giá nằm dưới mã. Bên phải mã: tên công ty (cỡ chữ bằng giá, hiện
+        # đủ, tự xuống dòng) rồi O/H/L/C. Các chỉ số còn lại nằm ngay trên biểu đồ.
         import textwrap
+        price_m = next((m for m in metrics if m["label"] == "Giá"), None)
+        others = [m for m in metrics if m is not price_m]
+        NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
+        name_lines = textwrap.wrap(_chart_name(code) or "", 40)
+        top, bot = 150, 10
+        code_w = 0.20                                  # phần bên trái dành cho mã + giá
+        step = (1 - code_w) / max(1, len(others))
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34, showarrow=False,
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
+        if price_m:
+            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 18,
+                               yshift=40, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=NAME_PX),
+                               hovertext=price_m.get("tip"))
+            if price_m.get("sub"):
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32, showarrow=False,
+                                   align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 34)),
+                                   font=dict(size=11, color=price_m.get("color", "#8B95A5")), hovertext=price_m.get("tip"))
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
-        for i, m in enumerate(metrics):
+        for i, m in enumerate(others):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
             fig.add_annotation(**base, yanchor="bottom", yshift=66, text=m["label"], font=dict(size=12, color="#8B95A5"),
                                hovertext=m.get("tip"))
@@ -2434,14 +2451,20 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
-        BRAND_H = 80                                   # chừa thêm chỗ cho dòng thương hiệu: cách chữ mã bên dưới và hàng chú thích bên trên cho thoáng
+        # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
+        brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
+        BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
         top += BRAND_H
+        height += BRAND_H - 80                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
         ph = height - top - bot
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=122, showarrow=False,
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=brand_y, showarrow=False,
                            text=_brand_tag(), font=dict(size=22))
-        # tên công ty + O/H/L/C: bên phải mã, nằm giữa dòng thương hiệu và hàng chỉ số
-        fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=92, showarrow=False,
-                           align="left", text=_ohlc_header(code, tf, g), hovertext=_chart_name(code) or None)
+        if name_lines:
+            fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=106, showarrow=False,
+                               align="left", text="<br>".join(htmllib.escape(x_) for x_ in name_lines),
+                               font=dict(size=NAME_PX, color="#E6EDF3"))
+        fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
+                           align="left", text=_ohlc_header(code, tf, g))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
                           legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
     elif mobile:
@@ -2504,18 +2527,31 @@ def is_mobile() -> bool:
     return any(k in ua for k in ("iphone", "android", "mobile", "ipad"))
 
 
-def metrics_html(metrics, code="") -> str:
-    """Lưới chỉ số cho điện thoại (2 cột), thay cho hàng chỉ số vẽ trong biểu đồ trên máy tính."""
+def metrics_html(metrics, code="", name="") -> str:
+    """Điện thoại: mã + giá cạnh nhau, tên công ty (cỡ chữ bằng giá, hiện đủ) rồi lưới chỉ số 2 cột."""
+    price_m = next((m for m in metrics if m["label"] == "Giá"), None)
     cells = []
     for m in metrics:
+        if m is price_m:
+            continue
         sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"]))}</div>' if m.get("sub") else "")
         cells.append(f'<div class="cm-item"><div class="cm-lab">{htmllib.escape(m["label"])}</div>'
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
+    head = ""
+    if code:
+        price = f'<span class="cm-price">{htmllib.escape(str(price_m["value"]))}</span>' if price_m else ""
+        head = f'<div class="cm-head"><span class="cm-code">{htmllib.escape(str(code))}</span>{price}</div>'
+        if name:
+            head += f'<div class="cm-name">{htmllib.escape(str(name))}</div>'
+        if price_m and price_m.get("sub"):
+            head += f'<div class="cm-sub" style="color:{price_m.get("color", "#8B95A5")};margin-bottom:6px">{htmllib.escape(str(price_m["sub"]))}</div>'
     return ('<style>.cm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin:4px 0 6px}'
             '.cm-lab{font-size:12px;color:var(--muted)}.cm-val{font-size:24px;font-weight:800;line-height:1.25;color:var(--txt2)}'
-            '.cm-sub{font-size:11.5px;line-height:1.35}.cm-code{font-size:56px;font-weight:800;line-height:1.1;color:var(--txt2);margin:2px 0 4px}</style>'
-            + (f'<div class="cm-code">{htmllib.escape(str(code))}</div>' if code else "")
-            + '<div class="cm-grid">' + "".join(cells) + '</div>')
+            '.cm-sub{font-size:11.5px;line-height:1.35}.cm-code{font-size:56px;font-weight:800;line-height:1.1;color:var(--txt2)}'
+            '.cm-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:2px 0 2px}'
+            '.cm-price{font-size:24px;font-weight:800;color:var(--txt2)}'
+            '.cm-name{font-size:24px;line-height:1.3;color:var(--txt);margin:0 0 4px}</style>'
+            + head + '<div class="cm-grid">' + "".join(cells) + '</div>')
 
 
 def pick_layers():
@@ -2568,7 +2604,7 @@ def page_stock():
         _mob = is_mobile()
         _drag, _cfg, _bars = "pan", {"displayModeBar": True}, None
         if _mob:
-            st.markdown(metrics_html(chart_metrics, code), unsafe_allow_html=True)
+            st.markdown(metrics_html(chart_metrics, code, _chart_name(code)), unsafe_allow_html=True)
             _mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True, key="mob_chart_mode",
                              help="Cuộn trang: vuốt để cuộn trang bình thường, biểu đồ không bị kéo/zoom ngoài ý muốn. "
                                   "Kéo & zoom: kéo ngang để xem, dùng nút +/- và nút nhà (đặt lại) trên thanh công cụ; chạm đúp để đặt lại.")
