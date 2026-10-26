@@ -2401,7 +2401,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
-        BRAND_H = 64                                   # chừa thêm chỗ cho dòng thương hiệu: cách chữ mã bên dưới và hàng chú thích bên trên cho thoáng
+        BRAND_H = 80                                   # chừa thêm chỗ cho dòng thương hiệu: cách chữ mã bên dưới và hàng chú thích bên trên cho thoáng
         top += BRAND_H
         ph = height - top - bot
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=122, showarrow=False,
