@@ -222,7 +222,9 @@ Lớp **Dual Ichimoku** (bật mặc định trong "Lớp hiển thị", code �
 
 Khung bên phải trang Livestream đổi theo mã đang chọn: thẻ **Vốn hóa & định giá** (so với trung vị ngành và trung bình 3 năm), thẻ **Động lực tăng trưởng & yếu tố theo ngành** và thẻ **Cổ phiếu mạnh cùng ngành**.
 
+Mã nào có file `data/nhan_dinh_ma/<MÃ>.md` (ví dụ `DCL.md`) thì thẻ **Vốn hóa & định giá** được thay bằng thẻ **Nhận định** của mã đó: dòng đầu bắt đầu bằng `# ` là tiêu đề, các đoạn cách nhau một dòng trống, đoạn bắt đầu bằng `Vị thế doanh nghiệp:` được làm nổi bật. Mã không có file giữ nguyên thẻ định giá.
+
 Nội dung thẻ động lực nằm trong `data/dong_luc_nganh.csv` (cột: Phạm vi, Loại, Nội dung, Giá trị, Đơn vị, Thay đổi %, Cập nhật, Nguồn):
 - **Phạm vi** = tên ngành đúng như trong `watchlist.py` (ví dụ `Cao su`) hoặc mã cổ phiếu (ví dụ `GVR`) cho dòng chỉ riêng mã đó.
-- **Loại** = `Nhận định` (hiện đầu tiên, dùng cho câu tóm ý / vị thế của riêng một mã), `Động lực`, `Đầu vào`, `Đầu ra`, `Chỉ số theo dõi` hoặc `Rủi ro`.
+- **Loại** = `Động lực`, `Đầu vào`, `Đầu ra`, `Chỉ số theo dõi` hoặc `Rủi ro`.
 - Muốn hiện số (ví dụ giá cao su thế giới), điền cột **Giá trị**, **Thay đổi %**, **Cập nhật**, **Nguồn** của dòng đó; để trống thì chỉ hiện mô tả. App không tự lấy giá hàng hóa.

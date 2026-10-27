@@ -13,14 +13,16 @@ from __future__ import annotations
 
 import html
 import os
+import re
 
 import numpy as np
 import pandas as pd
 
 DRIVERS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dong_luc_nganh.csv")
-KINDS = ["Nhận định", "Động lực", "Đầu vào", "Đầu ra", "Chỉ số theo dõi", "Rủi ro"]
-KIND_TITLE = {"Nhận định": "Nhận định", "Động lực": "Động lực tăng trưởng", "Đầu vào": "Yếu tố đầu vào", "Đầu ra": "Yếu tố đầu ra",
+KINDS = ["Động lực", "Đầu vào", "Đầu ra", "Chỉ số theo dõi", "Rủi ro"]
+KIND_TITLE = {"Động lực": "Động lực tăng trưởng", "Đầu vào": "Yếu tố đầu vào", "Đầu ra": "Yếu tố đầu ra",
               "Chỉ số theo dõi": "Chỉ số theo dõi", "Rủi ro": "Rủi ro cần để ý"}
+COMMENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nhan_dinh_ma")
 NOT_SECTORS = {"VN30", "Danh mục cũ của bạn", "Họ Vingroup"}      # nhóm danh mục / tập đoàn, không phải ngành
 _cache: dict = {"sig": None, "df": None}
 
@@ -65,6 +67,46 @@ def load_drivers() -> pd.DataFrame:
 
 def _card(title: str, body: str) -> str:
     return f"<div class='live-card'><div class='live-card-title'>{title}</div>{body}</div>"
+
+
+# ---------------------------------------------------------------- nhận định riêng của mã
+def _inline(t: str) -> str:
+    """Escape HTML rồi đổi **chữ đậm** thành <b>."""
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", esc(t))
+
+
+def commentary_card(code: str) -> str | None:
+    """Thẻ nhận định riêng của mã, đọc từ data/nhan_dinh_ma/<MÃ>.md; trả None nếu chưa có file (trang sẽ hiện thẻ vốn hóa & định giá).
+
+    Quy ước file: dòng đầu bắt đầu bằng "# " là tiêu đề; các đoạn cách nhau bằng một dòng trống;
+    đoạn bắt đầu bằng "Vị thế doanh nghiệp:" được làm nổi bật ở cuối thẻ.
+    """
+    path = os.path.join(COMMENT_DIR, f"{str(code).upper()}.md")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            text = f.read()
+    except OSError:
+        return None
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip()) if b.strip()]
+    if not blocks:
+        return None
+    body = []
+    if blocks[0].startswith("#"):
+        body.append(f"<div style='font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.5;margin-bottom:2px'>{_inline(blocks[0].lstrip('#').strip())}</div>")
+        blocks = blocks[1:]
+    for b in blocks:
+        paras = _inline(" ".join(x.strip() for x in b.split("\n")))
+        if b.casefold().startswith("vị thế"):
+            head, _, rest = paras.partition(":")
+            body.append("<div style='margin-top:11px;background:#0b1422;border:1px solid #26364b;border-left:3px solid #43d6a1;border-radius:8px;"
+                        f"padding:9px 12px;color:#f1f5f9;font-size:13.5px;line-height:1.7'><b>{head}:</b>{rest}</div>")
+        else:
+            body.append(f"<div style='color:#dce5f0;font-size:13.5px;line-height:1.75;margin-top:9px'>{paras}</div>")
+    body.append(f"<div class='live-muted' style='margin-top:9px'>Nhận định do bạn tự cập nhật trong data/nhan_dinh_ma/{esc(str(code).upper())}.md; "
+                "số liệu trong đoạn là chữ cố định, không tự đổi theo dữ liệu của app; không phải khuyến nghị mua hay bán.</div>")
+    return _card(f"📝 NHẬN ĐỊNH · {esc(code)}", "".join(body))
 
 
 # ---------------------------------------------------------------- định giá
@@ -149,7 +191,7 @@ def drivers_card(code: str, sectors: list[str]) -> str:
     if mine.empty and sect.empty:
         txt = (f"Chưa có nội dung động lực cho {esc(code)}" + (f" / ngành {esc(', '.join(sectors))}" if sectors else "") +
                ". Thêm dòng vào <b>data/dong_luc_nganh.csv</b> với cột Phạm vi = tên ngành (hoặc mã cổ phiếu), "
-               "Loại = Nhận định / Động lực / Đầu vào / Đầu ra / Chỉ số theo dõi / Rủi ro.")
+               "Loại = Động lực / Đầu vào / Đầu ra / Chỉ số theo dõi / Rủi ro.")
         return _card(title, f"<div class='live-muted'>{txt}</div>")
     allr = pd.concat([mine, sect], ignore_index=True)
     body = []

@@ -3339,7 +3339,8 @@ def page_livestream():
             _secs = [_sec_main] + [x_ for x_ in _secs if x_ != _sec_main]
         try:
             _cap_map, _fund_map = _wb_meta_maps(WY_KEY)
-            st.markdown(SDV.valuation_card(code, _sec_main, _wb_meta(code) or {}, _fund_map, _cap_map, WL.GROUPS, _cap_rank_note(code)), unsafe_allow_html=True)
+            # Mã có file data/nhan_dinh_ma/<MÃ>.md thì hiện thẻ nhận định thay cho thẻ vốn hóa & định giá; mã khác giữ thẻ định giá.
+            st.markdown(SDV.commentary_card(code) or SDV.valuation_card(code, _sec_main, _wb_meta(code) or {}, _fund_map, _cap_map, WL.GROUPS, _cap_rank_note(code)), unsafe_allow_html=True)
             st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
             st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS), unsafe_allow_html=True)
         except Exception as exc:  # noqa: BLE001
