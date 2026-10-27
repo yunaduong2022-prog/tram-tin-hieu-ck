@@ -19,13 +19,13 @@ Vị thế doanh nghiệp: HDBank là ngân hàng có quy mô tài sản vượt
 
 Chiến lược đầu tư và vùng giá tham khảo
 Cổ phiếu đã trải qua đợt chia cổ tức bằng cổ phiếu 30%, làm tăng vốn điều lệ. Điều này có thể hỗ trợ năng lực mở rộng hoạt động, nhưng dư địa tăng trưởng tín dụng còn phụ thuộc vào hạn mức được cấp và các điều kiện quản lý.
-
 Các mốc giao dịch tham khảo theo hệ thống Min Trading:
 - **Biên độ tích lũy trung hạn:** Vùng hỗ trợ quanh **21.000–21.500 đồng**, vùng kháng cự ngắn hạn quanh **23.500–24.000 đồng**.
 - **Vùng mua tham khảo:** Có thể theo dõi các nhịp điều chỉnh về **20.800–21.600 đồng**, với điều kiện diễn biến giá và tín hiệu kỹ thuật xác nhận phù hợp.
 - **Mục tiêu ngắn hạn:** Hướng đến vùng **23.950 đồng**, tùy thuộc vào diễn biến thị trường và dòng tiền.
 
 Bạn dùng đan xen khi đang phân tích kỹ thuật và các chỉ số để thay đổi trạng thái tâm lý người xem, khiến họ sợ mất cơ hội hoặc bừng tỉnh:
+
 • Bẫy tâm lý "Sợ gãy nền" (Giúp khán giả bừng tỉnh khi thấy giá đỏ):
 "Nhiều anh chị cứ thấy HDB đỏ vài phiên, nằm dưới MA200 là sợ hãi mang hàng ra cắt lỗ đúng đáy. Nhưng anh chị có nhìn thấy thanh khoản không? Các phiên giảm von (khối lượng) cực kỳ nhỏ, nghĩa là dòng tiền lớn họ không hề thoát hàng. Đây thuần túy là nhịp ép bán để gom nốt lượng cổ tức trôi nổi của nhỏ lẻ thôi! Anh chị rớt hàng vùng này là dâng quà cho cá mập rồi."
 
