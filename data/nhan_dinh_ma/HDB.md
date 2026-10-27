@@ -1,6 +1,6 @@
 # HDB – Ngân hàng tăng trưởng cao, hiệu quả sinh lời nổi bật
 
-Xu hướng kỹ thuật tổng quan
+PHÂN TÍCH KỸ THUẬT 
 - Ngắn hạn, HDB đang giao dịch giằng co quanh vùng **21.500–22.500 đồng**, chịu áp lực điều chỉnh chung theo nhịp biến động của thị trường sau đợt chốt quyền chia cổ tức lớn.
 - Điểm cộng là áp lực bán có dấu hiệu suy yếu dần, thanh khoản ở mức trung bình thấp. Xu hướng trung hạn của cổ phiếu vẫn đang trong trạng thái tái tích lũy để hấp thụ lượng cổ phiếu phát hành thêm sau ngày chốt quyền 12/10 vừa qua. Nếu dòng tiền ngoại quay trở lại mua ròng, HDB có thể có cơ hội bứt phá và hướng về vùng đỉnh cũ.
 
@@ -24,7 +24,7 @@ Các mốc giao dịch tham khảo theo hệ thống Min Trading:
 - **Vùng mua tham khảo:** Có thể theo dõi các nhịp điều chỉnh về **20.800–21.600 đồng**, với điều kiện diễn biến giá và tín hiệu kỹ thuật xác nhận phù hợp.
 - **Mục tiêu ngắn hạn:** Hướng đến vùng **23.950 đồng**, tùy thuộc vào diễn biến thị trường và dòng tiền.
 
-Bạn dùng đan xen khi đang phân tích kỹ thuật và các chỉ số để thay đổi trạng thái tâm lý người xem, khiến họ sợ mất cơ hội hoặc bừng tỉnh:
+# DÙNG KHI PHÂN TÍCH KỸ THUẬT và các chỉ số để thay đổi trạng thái tâm lý người xem, khiến họ sợ mất cơ hội hoặc bừng tỉnh:
 
 • Bẫy tâm lý "Sợ gãy nền" (Giúp khán giả bừng tỉnh khi thấy giá đỏ):
 "Nhiều anh chị cứ thấy HDB đỏ vài phiên, nằm dưới MA200 là sợ hãi mang hàng ra cắt lỗ đúng đáy. Nhưng anh chị có nhìn thấy thanh khoản không? Các phiên giảm von (khối lượng) cực kỳ nhỏ, nghĩa là dòng tiền lớn họ không hề thoát hàng. Đây thuần túy là nhịp ép bán để gom nốt lượng cổ tức trôi nổi của nhỏ lẻ thôi! Anh chị rớt hàng vùng này là dâng quà cho cá mập rồi."
