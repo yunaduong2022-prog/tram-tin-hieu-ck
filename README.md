@@ -216,3 +216,13 @@ Lớp **Dual Ichimoku** (bật mặc định trong "Lớp hiển thị", code �
 - Không gửi trùng: tín hiệu đã gửi được nhớ trong `data/st_alert_state.json` (20 ngày gần nhất); `--force` để gửi lại, `--days 2` để gồm cả phiên trước.
 - Chạy thử: `python telegram_supertrend_alert.py --dry-run`. Gửi thật cần `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 - Tự động: workflow `.github/workflows/supertrend_alert.yml` chạy khi bạn đẩy `data/eod_prices.csv` mới lên `main`, hoặc khi workflow dữ liệu cuối phiên chạy xong, hoặc bấm tay ở tab Actions (có tùy chọn chạy thử).
+
+
+## Livestream · thông tin theo mã đang phát
+
+Khung bên phải trang Livestream đổi theo mã đang chọn: thẻ **Vốn hóa & định giá** (so với trung vị ngành và trung bình 3 năm), thẻ **Động lực tăng trưởng & yếu tố theo ngành** và thẻ **Cổ phiếu mạnh cùng ngành**.
+
+Nội dung thẻ động lực nằm trong `data/dong_luc_nganh.csv` (cột: Phạm vi, Loại, Nội dung, Giá trị, Đơn vị, Thay đổi %, Cập nhật, Nguồn):
+- **Phạm vi** = tên ngành đúng như trong `watchlist.py` (ví dụ `Cao su`) hoặc mã cổ phiếu (ví dụ `GVR`) cho dòng chỉ riêng mã đó.
+- **Loại** = `Động lực`, `Đầu vào`, `Đầu ra`, `Chỉ số theo dõi` hoặc `Rủi ro`.
+- Muốn hiện số (ví dụ giá cao su thế giới), điền cột **Giá trị**, **Thay đổi %**, **Cập nhật**, **Nguồn** của dòng đó; để trống thì chỉ hiện mô tả. App không tự lấy giá hàng hóa.

@@ -17,6 +17,7 @@ import fund_guard as FG
 import ichimoku_dual as IDU
 import setups as SU
 import supertrend as SPT
+import stock_drivers as SDV
 import hull_suite as HUL
 import watchlist as WL
 import wyckoff as WYK
@@ -3264,6 +3265,11 @@ def page_livestream():
     target = resistance if resistance is not None else (price * 1.15 if pd.notna(price) else None)
     stop = support if support is not None else (price * 0.92 if pd.notna(price) else None)
 
+    try:
+        _rs_v = float(info.get("RS20", float("nan")))
+    except (TypeError, ValueError):
+        _rs_v = float("nan")
+    _rs_txt = "—" if pd.isna(_rs_v) else f"{_rs_v:.2f}"
     left, right = st.columns([6, 4], gap="medium")
     with left:
         st.markdown("<div class='live-card-title'>📌 KHUNG NGÀY · DAILY</div>", unsafe_allow_html=True)
@@ -3309,51 +3315,24 @@ def page_livestream():
             f"<div class='live-kpi'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
             f"<div class='live-kpi'><span>MỤC TIÊU / KHÁNG CỰ</span><b>{_fmt_level(target)}</b></div>"
             f"<div class='live-kpi'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
-            f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{float(info.get('RS20', float('nan'))):.2f}</b></div>"
+            f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{_rs_txt}</b></div>"
             f"</div><div class='live-muted' style='margin-top:9px'>Vùng mua/cắt lỗ dự phòng là mức tham khảo nếu dữ liệu kỹ thuật không trả về hỗ trợ/kháng cự.</div></div>",
             unsafe_allow_html=True
         )
 
-        st.markdown("<div class='live-card'><div class='live-card-title'>🚀 ĐỘNG LỰC TĂNG TRƯỞNG & ĐỊNH GIÁ</div>", unsafe_allow_html=True)
-        meta = {}
+        # Ba thẻ dưới đây phụ thuộc vào MÃ ĐANG PHÁT (không còn gắn cứng ngành cao su): định giá, động lực/đầu vào/đầu ra của ngành, cổ phiếu cùng ngành.
+        # Ngành dùng để so sánh: ngành đang lọc ở ô "Ngành" nếu mã thuộc ngành đó, không thì ngành đầu tiên của mã trong watchlist.py.
+        _secs = SDV.sectors_of(code, MEMBER, WL.GROUPS)
+        _sec_main = sector if (sector != ALL_SECTORS and sector in _secs) else (_secs[0] if _secs else None)
+        if _sec_main:
+            _secs = [_sec_main] + [x_ for x_ in _secs if x_ != _sec_main]
         try:
-            meta = _wb_meta(code) or {}
-        except Exception:
-            pass
-        pb = meta.get("P/B", "—")
-        market_cap = meta.get("Vốn hóa", "—")
-        roe = meta.get("ROE", "—")
-        st.markdown(
-            f"<div style='color:#dce5f0;font-size:13px;line-height:1.8'>"
-            f"<div>• <b>Giá cao su thế giới:</b> cần cập nhật từ nguồn hàng hóa riêng; không giả lập dữ liệu thời gian thực.</div>"
-            f"<div>• <b>Định giá:</b> P/B <span class='live-positive'>{htmllib.escape(str(pb))}</span> "
-            f"· ROE <b>{htmllib.escape(str(roe))}</b></div>"
-            f"<div>• <b>Vốn hóa:</b> {htmllib.escape(str(market_cap))}</div>"
-            f"<div>• <b>Yếu tố theo dõi:</b> diễn biến giá cao su, biên lợi nhuận, sản lượng và chính sách cổ tức.</div>"
-            f"</div></div>", unsafe_allow_html=True
-        )
-
-        st.markdown("<div class='live-card'><div class='live-card-title'>🌳 TOP CỔ PHIẾU MẠNH CÙNG NGÀNH CAO SU</div>", unsafe_allow_html=True)
-        rubber_codes = [x for x in ("DPR", "GVR", "DRI") if x in set(res_df["Mã"].astype(str))]
-        if rubber_codes:
-            rows = []
-            for symbol in rubber_codes:
-                rr = res_df[res_df["Mã"].astype(str) == symbol].iloc[0]
-                rs_val = rr.get("RS vs VNI", float("nan"))
-                score = rr.get("Score", float("nan"))
-                trend = str(rr.get("MA align", "Chưa rõ"))
-                status = "Khỏe" if pd.notna(rs_val) and rs_val >= 1.05 else ("Theo dõi" if pd.notna(rs_val) and rs_val >= 0.95 else "Yếu / chờ")
-                trend_text = "📈 Tăng" if "Đã align" in trend else ("🔄 Tích lũy" if pd.notna(score) and score >= 4 else "↔ Trung tính")
-                rows.append((symbol, f"{float(rs_val):.2f}" if pd.notna(rs_val) else "—", trend_text, status))
-            html = "<table class='live-table'><thead><tr><th>Mã CP</th><th>RS</th><th>Xu hướng</th><th>Trạng thái</th></tr></thead><tbody>"
-            for symbol, rs_val, trend_text, status in rows:
-                html += f"<tr><td><b>{symbol}</b></td><td>{rs_val}</td><td>{trend_text}</td><td>{status}</td></tr>"
-            html += "</tbody></table>"
-            st.markdown(html, unsafe_allow_html=True)
-        else:
-            st.info("Chưa có đủ mã DPR/GVR/DRI trong nguồn dữ liệu hiện tại.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.caption("RS trong bảng là chỉ số tương đối theo dữ liệu ứng dụng; trạng thái được suy ra từ dữ liệu hiện có, không phải dữ liệu khuyến nghị.")
+            _cap_map, _fund_map = _wb_meta_maps(WY_KEY)
+            st.markdown(SDV.valuation_card(code, _sec_main, _wb_meta(code) or {}, _fund_map, _cap_map, WL.GROUPS, _cap_rank_note(code)), unsafe_allow_html=True)
+            st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
+            st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS), unsafe_allow_html=True)
+        except Exception as exc:  # noqa: BLE001
+            st.caption(f"Không dựng được thông tin theo mã: {exc}")
 
         # Kịch bản livestream gắn với mã đang phát; nội dung được lưu riêng trong data/kich_ban_livestream.
         with st.expander(f"🎤 KỊCH BẢN LIVESTREAM · {code}", expanded=False):

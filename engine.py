@@ -882,9 +882,9 @@ def market_series(raw: pd.DataFrame):
 def _rs(g, mkt, n):
     if len(g) <= n:
         return np.nan
-    m0, m1 = mkt.get(g["Ngày"].iat[-1 - n], np.nan), mkt.get(g["Ngày"].iat[-1], np.nan)
+    m0, m1 = mkt.asof(g["Ngày"].iat[-1 - n]), mkt.asof(g["Ngày"].iat[-1])      # asof: VN-Index trễ / thiếu 1 phiên thì lấy phiên gần nhất trước đó, không để RS thành NaN
     c0, c1 = g["Giá đóng cửa"].iat[-1 - n], g["Giá đóng cửa"].iat[-1]
-    return (c1 / c0) / (m1 / m0) if m0 and m1 and c0 else np.nan
+    return (c1 / c0) / (m1 / m0) if pd.notna(m0) and pd.notna(m1) and m0 and m1 and c0 else np.nan
 
 
 def osc_state(a, b):
