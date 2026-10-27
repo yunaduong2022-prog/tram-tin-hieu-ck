@@ -2858,7 +2858,7 @@ _STAR_CSS = """<style>
 
 
 def _chart_metrics(code, info) -> list[dict]:
-    """Các chỉ số ở đầu biểu đồ (Giá + % từ đáy / đỉnh, Vol vs MA10, P/B, ROE, Vốn hóa, % Freefloat). Dùng chung cho trang Cổ phiếu và Livestream."""
+    """Các chỉ số ở đầu biểu đồ (Giá + % từ đáy / đỉnh, Vol vs MA10, P/E, P/B, ROE, Vốn hóa, % Freefloat). Dùng chung cho trang Cổ phiếu và Livestream."""
     _sw_text, _, _sw_tip, _ = swing_view(info)
     _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
     chart_metrics = [
@@ -2866,11 +2866,12 @@ def _chart_metrics(code, info) -> list[dict]:
          **_price_change(code)},
         {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
     ]
-    # Cạnh Vol: P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
+    # Cạnh Vol: P/E, P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
     if str(code).upper() not in E.INDEX_CODES:
         _wm = _wb_meta(code)
         _na = lambda v: "-" if v in (None, "", "Chưa có") else v
         chart_metrics += [
+            {"label": "P/E", "value": _na(_wm.get("P/E"))},
             {"label": "P/B", "value": _na(_wm.get("P/B"))},
             {"label": "ROE", "value": _na(_wm.get("ROE")), "sub": _roe_rank_note(code), "color": "#25A879"},
             {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa")), "sub": _cap_rank_note(code), "color": "#25A879"},
