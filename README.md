@@ -224,5 +224,5 @@ Khung bên phải trang Livestream đổi theo mã đang chọn: thẻ **Vốn h
 
 Nội dung thẻ động lực nằm trong `data/dong_luc_nganh.csv` (cột: Phạm vi, Loại, Nội dung, Giá trị, Đơn vị, Thay đổi %, Cập nhật, Nguồn):
 - **Phạm vi** = tên ngành đúng như trong `watchlist.py` (ví dụ `Cao su`) hoặc mã cổ phiếu (ví dụ `GVR`) cho dòng chỉ riêng mã đó.
-- **Loại** = `Động lực`, `Đầu vào`, `Đầu ra`, `Chỉ số theo dõi` hoặc `Rủi ro`.
+- **Loại** = `Nhận định` (hiện đầu tiên, dùng cho câu tóm ý / vị thế của riêng một mã), `Động lực`, `Đầu vào`, `Đầu ra`, `Chỉ số theo dõi` hoặc `Rủi ro`.
 - Muốn hiện số (ví dụ giá cao su thế giới), điền cột **Giá trị**, **Thay đổi %**, **Cập nhật**, **Nguồn** của dòng đó; để trống thì chỉ hiện mô tả. App không tự lấy giá hàng hóa.

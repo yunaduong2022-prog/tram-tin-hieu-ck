@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 
 DRIVERS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dong_luc_nganh.csv")
-KINDS = ["Động lực", "Đầu vào", "Đầu ra", "Chỉ số theo dõi", "Rủi ro"]
-KIND_TITLE = {"Động lực": "Động lực tăng trưởng", "Đầu vào": "Yếu tố đầu vào", "Đầu ra": "Yếu tố đầu ra",
+KINDS = ["Nhận định", "Động lực", "Đầu vào", "Đầu ra", "Chỉ số theo dõi", "Rủi ro"]
+KIND_TITLE = {"Nhận định": "Nhận định", "Động lực": "Động lực tăng trưởng", "Đầu vào": "Yếu tố đầu vào", "Đầu ra": "Yếu tố đầu ra",
               "Chỉ số theo dõi": "Chỉ số theo dõi", "Rủi ro": "Rủi ro cần để ý"}
 NOT_SECTORS = {"VN30", "Danh mục cũ của bạn", "Họ Vingroup"}      # nhóm danh mục / tập đoàn, không phải ngành
 _cache: dict = {"sig": None, "df": None}
@@ -149,7 +149,7 @@ def drivers_card(code: str, sectors: list[str]) -> str:
     if mine.empty and sect.empty:
         txt = (f"Chưa có nội dung động lực cho {esc(code)}" + (f" / ngành {esc(', '.join(sectors))}" if sectors else "") +
                ". Thêm dòng vào <b>data/dong_luc_nganh.csv</b> với cột Phạm vi = tên ngành (hoặc mã cổ phiếu), "
-               "Loại = Động lực / Đầu vào / Đầu ra / Chỉ số theo dõi / Rủi ro.")
+               "Loại = Nhận định / Động lực / Đầu vào / Đầu ra / Chỉ số theo dõi / Rủi ro.")
         return _card(title, f"<div class='live-muted'>{txt}</div>")
     allr = pd.concat([mine, sect], ignore_index=True)
     body = []
