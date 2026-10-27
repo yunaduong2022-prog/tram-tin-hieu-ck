@@ -1205,8 +1205,11 @@ def _wb_meta(code: str) -> dict:
                          if pd.notna(fd.get("Xếp hạng")) and pd.notna(fd.get("Xếp hạng tài chính")) and pd.notna(fd.get("Xếp hạng kinh doanh")) else "")}
 
 
+TOP_NGANH_N = 5       # ghi chú "TOP n NGÀNH" dưới Vốn hóa và ROE chỉ hiện khi mã nằm trong n mã đầu của ngành
+
+
 def _cap_rank_note(code: str) -> str:
-    """Dưới ô Vốn hóa của biểu đồ: hai dòng "TOP 1 NGÀNH CAO SU." / "Chiếm 89.7% vốn hóa toàn ngành." nếu vốn hóa của mã thuộc 3 mã lớn nhất ngành.
+    """Dưới ô Vốn hóa của biểu đồ: hai dòng "TOP 1 NGÀNH CAO SU." / "Chiếm 89.7% vốn hóa toàn ngành." nếu vốn hóa của mã thuộc 5 mã lớn nhất ngành.
     Ngành = nhóm ngành trong watchlist.py (không tính VN30 / nhóm cũ). Mã thuộc nhiều ngành thì lấy ngành mà mã có thứ hạng cao nhất.
     Ngành phải có ít nhất 3 mã có vốn hóa. Tỷ trọng chỉ hiện khi MỌI mã trong ngành đều có số vốn hóa (thiếu số thì tỷ trọng sai nên bỏ)."""
     code = str(code).upper()
@@ -1233,12 +1236,44 @@ def _cap_rank_note(code: str) -> str:
         share = mine / sum(known.values()) * 100 if len(known) == len(members) else None
         if best is None or rank < best[0]:
             best = (rank, share, sec)
-    if best is None or best[0] > 3:
+    if best is None or best[0] > TOP_NGANH_N:
         return ""
     txt = f"TOP {best[0]} NGÀNH {str(best[2]).upper()}."
     if best[1] is not None:
         txt += f"\nChiếm {best[1]:.1f}% vốn hóa toàn ngành."
     return txt
+
+
+def _roe_rank_note(code: str) -> str:
+    """Dưới ô ROE của biểu đồ: "TOP 1 NGÀNH CAO SU." nếu ROE của mã thuộc 5 mã cao nhất ngành.
+    Chỉ xếp hạng khi MỌI mã của ngành có trong app đều đã có ROE (thiếu số của vài mã thì thứ hạng không đáng tin, nên không ghi).
+    Ngành phải có ít nhất 3 mã; không tính VN30 / nhóm cũ / Họ Vingroup. Mã thuộc nhiều ngành thì lấy ngành có thứ hạng cao nhất."""
+    code = str(code).upper()
+    _, fund_map = _wb_meta_maps(WY_KEY)
+    def roe_of(c):
+        try:
+            v = float((fund_map.get(str(c).upper()) or {}).get("ROE"))
+            return None if pd.isna(v) else v
+        except (TypeError, ValueError):
+            return None
+    mine = roe_of(code)
+    if mine is None:
+        return ""
+    universe = set(res_df["Mã"].astype(str).str.upper())
+    best = None
+    for sec in MEMBER.get(code, []):
+        if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:
+            continue
+        members = ({str(x).upper() for x in WL.GROUPS[sec]} & universe) | {code}
+        vals = {m: roe_of(m) for m in members}
+        if len(members) < 3 or any(v is None for v in vals.values()):
+            continue
+        rank = 1 + sum(1 for m, v in vals.items() if m != code and v > mine)
+        if best is None or rank < best[0]:
+            best = (rank, sec)
+    if best is None or best[0] > TOP_NGANH_N:
+        return ""
+    return f"TOP {best[0]} NGÀNH {str(best[1]).upper()}."
 
 
 def _wb_ma_of(code: str) -> dict:
@@ -2835,7 +2870,7 @@ def _chart_metrics(code, info) -> list[dict]:
         _na = lambda v: "-" if v in (None, "", "Chưa có") else v
         chart_metrics += [
             {"label": "P/B", "value": _na(_wm.get("P/B"))},
-            {"label": "ROE", "value": _na(_wm.get("ROE"))},
+            {"label": "ROE", "value": _na(_wm.get("ROE")), "sub": _roe_rank_note(code), "color": "#25A879"},
             {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa")), "sub": _cap_rank_note(code), "color": "#25A879"},
         ]
         try:
