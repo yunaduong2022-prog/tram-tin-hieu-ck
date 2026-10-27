@@ -1,19 +1,10 @@
 # HDB – Ngân hàng tăng trưởng cao, hiệu quả sinh lời nổi bật
 
-PHÂN TÍCH KỸ THUẬT 
-- Ngắn hạn, HDB đang giao dịch giằng co quanh vùng **21.500–22.500 đồng**, chịu áp lực điều chỉnh chung theo nhịp biến động của thị trường sau đợt chốt quyền chia cổ tức lớn.
-- Điểm cộng là áp lực bán có dấu hiệu suy yếu dần, thanh khoản ở mức trung bình thấp. Xu hướng trung hạn của cổ phiếu vẫn đang trong trạng thái tái tích lũy để hấp thụ lượng cổ phiếu phát hành thêm sau ngày chốt quyền 12/10 vừa qua. Nếu dòng tiền ngoại quay trở lại mua ròng, HDB có thể có cơ hội bứt phá và hướng về vùng đỉnh cũ.
-
-PHÂN TÍCH CƠ BẢN – Điểm sáng vận hành
-- **Hiệu suất ROE nổi bật:** ROE trượt của HDB đạt **25,4%**, thuộc nhóm ngân hàng có hiệu quả sử dụng vốn của cổ đông cao trong hệ thống.
-- **NIM duy trì mức cao:** Biên lãi ròng **NIM đạt 4,25–4,3%**. Đây là mức tương đối cao, nhờ chiến lược tập trung vào phân khúc bán lẻ, doanh nghiệp vừa và nhỏ (SME) và tài chính tiêu dùng HD Saison, những mảng có khả năng mang lại biên lợi nhuận tốt.
-- **CASA đang cải thiện:** Tỷ lệ tiền gửi không kỳ hạn **CASA đạt khoảng 10,8%**. Ngân hàng đang đẩy mạnh ngân hàng số và khai thác hệ sinh thái hàng không nhằm gia tăng nguồn tiền gửi chi phí thấp.
-- **Tối ưu chi phí hoạt động:** Chỉ số **CIR dao động khoảng 24–26,8%**. Đây là mức tương đối thấp trong ngành, phản ánh khả năng kiểm soát chi phí và nâng cao hiệu quả vận hành của HDB.
-
-CHẤT LƯỢNG TÀI SẢN & ĐỘNG LỰC TĂNG TRƯỞNG
-- **Yếu tố rủi ro cần theo dõi – NPL và LLR:** Tỷ lệ nợ xấu **NPL ở mức khoảng 2,12–2,3%**, trong khi tỷ lệ bao phủ nợ xấu **LLR giảm về khoảng 50–51%**. Đây là những chỉ số cần theo dõi sát khi ngân hàng đẩy mạnh tăng trưởng tín dụng. Ban lãnh đạo đặt mục tiêu kiểm soát tỷ lệ nợ xấu hợp nhất cuối năm dưới 2%; nhà đầu tư cần theo dõi khả năng thực hiện mục tiêu này và chất lượng xử lý nợ thực tế.
-- **Động lực tăng trưởng cốt lõi:** Lợi nhuận trước thuế 6 tháng đầu năm đạt **13.202 tỷ đồng, tăng 31%** so với cùng kỳ. Kết quả quý III được kỳ vọng tiếp tục tích cực, nhưng cần đối chiếu với báo cáo tài chính chính thức khi công bố.
-- **Kế hoạch IPO Chứng khoán HD (HDS):** Đây là một trong những yếu tố được thị trường quan tâm trong quý IV. Nếu thương vụ được triển khai thuận lợi, HDB có thể có thêm nguồn lực tài chính và cơ hội phát triển hệ sinh thái. Tuy nhiên, mức thặng dư vốn hay tác động cụ thể đến lợi nhuận vẫn phụ thuộc vào điều kiện và kết quả thực tế của thương vụ.
+Chào anh chị cổ đông HDB! AD đánh giá nhanh siêu cổ phiếu bank triệu tỷ này dựa trên các tiêu chí ngành hiển thị trên màn hình nhé:
+• Về kỹ thuật: HDB ngắn hạn đang giằng co vùng 21.500 - 22.500 sau chia cổ tức 30%, áp lực bán đã cạn kiệt với vol thấp và nến rút chân rất đẹp. Xu hướng trung hạn vẫn đang tái tích lũy tốt.
+• Về động lực ngành: HDB có tốc độ tăng trưởng tín dụng thuộc top đầu hệ thống nhờ room cấp khủng 37%. Biên lãi ròng NIM duy trì mức cao 4,25%, tỷ lệ vốn rẻ CASA đạt 10,8%. Thu nhập ngoài lãi bứt phá mạnh từ phí dịch vụ, xử lý nợ và Bancassurance.
+• Về chi phí vốn & Rủi ro: Yếu tố đầu vào cần theo dõi là lãi suất huy động và lãi suất liên ngân hàng ngắn hạn đang có xu hướng tăng làm co hẹp biên lãi. Đặc biệt, cần để ý rủi ro nợ xấu từ bất động sản và trái phiếu doanh nghiệp, hiện tỷ lệ nợ xấu NPL của HDB đang quanh 2,1% - 2,3%, cần bám sát báo cáo Q3 xem ban lãnh đạo đưa NPL về dưới 2% như thế nào. Kỳ vọng lớn cuối năm là game IPO Chứng khoán HDS trong Quý IV.
+• Chiến lược từ hệ thống: P/E cực rẻ chỉ 4.9 lần. Biên trung hạn hỗ trợ mạnh 21.0 - 21.5. Vùng mua tham khảo an toàn là quanh 20.80 – 21.60, Mục tiêu ngắn hạn hướng về mốc 23.95. Cứ tự tin gom hàng khi chỉnh anh chị nhé!
 
 Vị thế doanh nghiệp: HDBank là ngân hàng có quy mô tài sản vượt một triệu tỷ đồng, hiệu quả sinh lời thuộc nhóm cao của ngành và hệ sinh thái gồm ngân hàng, tài chính tiêu dùng và chứng khoán. Đây là nền tảng hỗ trợ tăng trưởng dài hạn, nhưng triển vọng cổ phiếu vẫn phụ thuộc vào chất lượng tài sản và khả năng chuyển hóa tăng trưởng thành lợi nhuận bền vững.
 
