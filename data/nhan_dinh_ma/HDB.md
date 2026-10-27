@@ -1,6 +1,7 @@
 # HDB – Ngân hàng tăng trưởng cao, hiệu quả sinh lời nổi bật
 
 Chào anh chị cổ đông HDB! AD đánh giá nhanh siêu cổ phiếu bank triệu tỷ này dựa trên các tiêu chí ngành hiển thị trên màn hình nhé:
+
 • Về kỹ thuật: HDB ngắn hạn đang giằng co vùng 21.500 - 22.500 sau chia cổ tức 30%, áp lực bán đã cạn kiệt với vol thấp và nến rút chân rất đẹp. Xu hướng trung hạn vẫn đang tái tích lũy tốt.
 • Về động lực ngành: HDB có tốc độ tăng trưởng tín dụng thuộc top đầu hệ thống nhờ room cấp khủng 37%. Biên lãi ròng NIM duy trì mức cao 4,25%, tỷ lệ vốn rẻ CASA đạt 10,8%. Thu nhập ngoài lãi bứt phá mạnh từ phí dịch vụ, xử lý nợ và Bancassurance.
 • Về chi phí vốn & Rủi ro: Yếu tố đầu vào cần theo dõi là lãi suất huy động và lãi suất liên ngân hàng ngắn hạn đang có xu hướng tăng làm co hẹp biên lãi. Đặc biệt, cần để ý rủi ro nợ xấu từ bất động sản và trái phiếu doanh nghiệp, hiện tỷ lệ nợ xấu NPL của HDB đang quanh 2,1% - 2,3%, cần bám sát báo cáo Q3 xem ban lãnh đạo đưa NPL về dưới 2% như thế nào. Kỳ vọng lớn cuối năm là game IPO Chứng khoán HDS trong Quý IV.
