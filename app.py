@@ -144,6 +144,7 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
+CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "MA20 / W-MA20", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
 LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "MA20 / W-MA20", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
@@ -2310,8 +2311,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             for d_, o_, h_, l_, c_, v_ in zip(x, t["Giá mở cửa"], t["Giá cao nhất"], t["Giá thấp nhất"], t["Giá đóng cửa"], _kl)]
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
                                  close=t["Giá đóng cửa"], name=code, whiskerwidth=0, text=_tip, hoverinfo="text",      # thân nến đặc, cùng màu với biểu đồ VNINDEX
-                                 increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
-                                 decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=1, col=1)
+                                 increasing=dict(line=dict(color=CANDLE_UP, width=1), fillcolor=CANDLE_UP),
+                                 decreasing=dict(line=dict(color=CANDLE_DN, width=1), fillcolor=CANDLE_DN)), row=1, col=1)
 
     def line(col, name, color, w=1.2, dash=None):
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
@@ -2444,8 +2445,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                      for d_, o_, h_, l_, c_ in zip(_vi["Ngày"], _vi["Giá mở cửa"], _vi["Giá cao nhất"], _vi["Giá thấp nhất"], _vi["Giá đóng cửa"])]
             fig.add_trace(go.Candlestick(x=_vi["Ngày"], open=_vi["Giá mở cửa"], high=_vi["Giá cao nhất"], low=_vi["Giá thấp nhất"],
                                          close=_vi["Giá đóng cửa"], name="VNINDEX", whiskerwidth=0, text=_vtip, hoverinfo="text", showlegend=False,
-                                         increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
-                                         decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=r, col=1)
+                                         increasing=dict(line=dict(color=CANDLE_UP, width=1), fillcolor=CANDLE_UP),
+                                         decreasing=dict(line=dict(color=CANDLE_DN, width=1), fillcolor=CANDLE_DN)), row=r, col=1)
             _vc = _vi["Giá đóng cửa"]
             _vlast = float(_vc.iloc[-1])
             _vchg = (_vlast / float(_vc.iloc[-2]) - 1) * 100 if len(_vc) > 1 else 0.0

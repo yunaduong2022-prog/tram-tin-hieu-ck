@@ -25,7 +25,7 @@ DRAW_JS = r"""
 
   var NS = 'http://www.w3.org/2000/svg', DAY = 86400000;
   var FONT = '"Source Sans Pro","Open Sans",Arial,sans-serif';
-  var UPC = '#2BD6A2', DNC = '#F2506E', INK = '#0E1C18';
+  var UPC = '#089981', DNC = '#F23645', INK = '#0E1C18';
   var LSK = 'vn_draw_v1:' + KEY, LSB = 'vn_draw_bar_v1', LSC = 'vn_draw_cfg_v1';
 
   function lsGet(k) { try { return JSON.parse(P.localStorage.getItem(k)); } catch (e) { return null; } }
