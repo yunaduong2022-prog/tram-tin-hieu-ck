@@ -6,7 +6,10 @@ Nhìn vào DHG, doanh nghiệp vẫn duy trì nền tảng kinh doanh tương đ
 
 **Động lực tăng trưởng:** Động lực đáng chú ý là mở rộng kênh đấu thầu thuốc tại bệnh viện. Việc sở hữu các sản phẩm đạt tiêu chuẩn EU-GMP và Japan-GMP tạo cơ hội để DHG tham gia những gói thầu có yêu cầu chất lượng cao. Nếu giành thêm các gói thầu và nâng được tỷ trọng doanh thu từ kênh bệnh viện, doanh nghiệp có thể cải thiện doanh thu và lợi nhuận trong thời gian tới. Tuy nhiên, cần theo dõi kết quả trúng thầu thực tế và mức đóng góp vào hiệu quả kinh doanh.
 
-**Điểm cần theo dõi:** Thứ nhất, lợi nhuận có phục hồi sau mức giảm mạnh trong quý III hay không. Thứ hai, doanh số kênh nhà thuốc có cải thiện không. Thứ ba, kết quả đấu thầu bệnh viện và khả năng chuyển lợi thế tiêu chuẩn sản xuất thành doanh thu, lợi nhuận. Ngoài ra, cần theo dõi chi phí bán hàng để đánh giá khả năng phục hồi biên lợi nhuận.
+**Điểm cần theo dõi:** Thứ nhất, lợi nhuận có phục hồi sau mức giảm mạnh trong quý III hay không. 
+Thứ hai, doanh số kênh nhà thuốc có cải thiện không. 
+Thứ ba, kết quả đấu thầu bệnh viện và khả năng chuyển lợi thế tiêu chuẩn sản xuất thành doanh thu, lợi nhuận. 
+Ngoài ra, cần theo dõi chi phí bán hàng để đánh giá khả năng phục hồi biên lợi nhuận.
 
 **Góc nhìn đầu tư:** DHG phù hợp với nhà đầu tư ưu tiên tính phòng thủ, nền tảng tài chính và cổ tức tiền mặt hơn là kỳ vọng tăng trưởng đột biến trong ngắn hạn. Triển vọng sẽ tích cực hơn nếu lợi nhuận phục hồi và kênh đấu thầu bệnh viện đóng góp rõ rệt hơn vào kết quả kinh doanh.
 
