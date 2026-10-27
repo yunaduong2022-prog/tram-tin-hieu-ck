@@ -163,6 +163,8 @@ def build_sector_frame(symbols: list[str], res_df: pd.DataFrame, wait_df: pd.Dat
     d["RS vs ngành"] = d[f"Chênh {period}"]          # điểm %, so với trung bình đều của ngành cùng kỳ
     sector_ret = d["Hiệu suất (%)"].mean()
     d["ROE (%)"] = d["Mã"].map(lambda c: _num((fund_map.get(c) or {}).get("ROE")))
+    d["P/E"] = d["Mã"].map(lambda c: _num((fund_map.get(c) or {}).get("P/E")))
+    d["P/B"] = d["Mã"].map(lambda c: _num((fund_map.get(c) or {}).get("P/B")))
 
     price, ma20 = pd.to_numeric(d["Giá"], errors="coerce"), pd.to_numeric(d["MA20"], errors="coerce")
     above_ma20 = price > ma20
@@ -399,7 +401,7 @@ def _rank_table_html(show: pd.DataFrame, period: str) -> str:
     esc = _html.escape
     rank_cols = [f"Hạng RS ({period})", *[f"Hạng {p}" for p in PERIODS]]
     fmt = {"Giá": "{:.2f}", "% phiên": "{:+.2f}%", f"Biên độ {period} (%)": "{:.1f}%", "Score": "{:.1f}", f"RS {period}": "{:.2f}",
-           "RS so với ngành (điểm %)": "{:+.1f}", f"Hiệu suất {period}": "{:+.1f}%", "GTGD 5p / TB20": "{:.2f}x", "ROE (%)": "{:.1f}%"}
+           "RS so với ngành (điểm %)": "{:+.1f}", f"Hiệu suất {period}": "{:+.1f}%", "GTGD 5p / TB20": "{:.2f}x", "ROE (%)": "{:.1f}%", "P/E": "{:.1f}", "P/B": "{:.2f}"}
     signed = {"% phiên", "RS so với ngành (điểm %)", f"Hiệu suất {period}"}
     head = "".join(f"<th>{esc(str(c)).replace(' (', '<br>(')}</th>" for c in show.columns)   # phần trong ngoặc xuống dòng riêng
     rows = []
@@ -491,15 +493,15 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     st.caption("Cột Hạng Ngày / Tuần / Tháng / 3 Tháng cho thấy mã mạnh bền (hạng cao ở mọi khung) hay chỉ bật vài phiên gần đây.")
     rank_cols = [f"Hạng {p}" for p in PERIODS]
     show = d[["Hạng RS", "Mã", *rank_cols, "Giá", "Chg_%", "Biên độ giá", "Biên độ (%)", "Score", "RS", "RS vs ngành", "Hiệu suất (%)",
-              "Thanh khoản 5p/TB20", "ROE (%)", "Xu hướng", "Trạng thái + Wyckoff", "Vị thế"]].rename(columns={
+              "Thanh khoản 5p/TB20", "P/E", "P/B", "ROE (%)", "Xu hướng", "Trạng thái + Wyckoff", "Vị thế"]].rename(columns={
         "Trạng thái + Wyckoff": "Trạng thái",
         "Hạng RS": f"Hạng RS ({period})", "Chg_%": "% phiên",
         "Biên độ giá": f"Thấp nhất – Cao nhất ({period})", "Biên độ (%)": f"Biên độ {period} (%)", "RS": f"RS {period}",
         "RS vs ngành": "RS so với ngành (điểm %)", "Hiệu suất (%)": f"Hiệu suất {period}",
         "Thanh khoản 5p/TB20": "GTGD 5p / TB20"})
     st.markdown(_rank_table_html(show, period), unsafe_allow_html=True)
-    if d["ROE (%)"].isna().all():
-        st.caption("Chưa có dữ liệu ROE cho ngành này (data/fundamentals.csv hoặc data/nhap_tay.csv).")
+    if d["ROE (%)"].isna().all() and d["P/B"].isna().all() and d["P/E"].isna().all():
+        st.caption("Chưa có dữ liệu P/E, P/B, ROE cho ngành này (data/fundamentals.csv hoặc data/nhap_tay.csv).")
 
     # --- Tăng trưởng LNST công ty mẹ theo quý (YoY)
     st.subheader("Tăng trưởng LNST công ty mẹ (YoY)")
