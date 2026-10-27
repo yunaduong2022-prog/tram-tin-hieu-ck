@@ -17,7 +17,7 @@ CHẤT LƯỢNG TÀI SẢN & ĐỘNG LỰC TĂNG TRƯỞNG
 
 Vị thế doanh nghiệp: HDBank là ngân hàng có quy mô tài sản vượt một triệu tỷ đồng, hiệu quả sinh lời thuộc nhóm cao của ngành và hệ sinh thái gồm ngân hàng, tài chính tiêu dùng và chứng khoán. Đây là nền tảng hỗ trợ tăng trưởng dài hạn, nhưng triển vọng cổ phiếu vẫn phụ thuộc vào chất lượng tài sản và khả năng chuyển hóa tăng trưởng thành lợi nhuận bền vững.
 
-Chiến lược đầu tư và vùng giá tham khảo
+CHIẾN LƯỢC ĐẦU TƯ
 Cổ phiếu đã trải qua đợt chia cổ tức bằng cổ phiếu 30%, làm tăng vốn điều lệ. Điều này có thể hỗ trợ năng lực mở rộng hoạt động, nhưng dư địa tăng trưởng tín dụng còn phụ thuộc vào hạn mức được cấp và các điều kiện quản lý.
 Các mốc giao dịch tham khảo theo hệ thống Min Trading:
 - **Biên độ tích lũy trung hạn:** Vùng hỗ trợ quanh **21.000–21.500 đồng**, vùng kháng cự ngắn hạn quanh **23.500–24.000 đồng**.
