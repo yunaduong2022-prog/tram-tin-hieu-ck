@@ -148,7 +148,7 @@ MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GI�
 CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", MA_LAYER, "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
