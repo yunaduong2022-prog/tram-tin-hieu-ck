@@ -20,7 +20,8 @@ DRAW_JS = r"""
   var P = window;
   try { if (window.frameElement) P = window.parent; } catch (e) {}
   var D = P.document;
-  try { if (P.__vnDraw) P.__vnDraw(); } catch (e) {}                 // gỡ bản cũ (Streamlit chạy lại script / đổi mã)
+  var SLOT = '__vnDraw_' + TF;
+  try { if (P[SLOT]) P[SLOT](); } catch (e) {}                       // gỡ bản cũ của cùng khung (Streamlit chạy lại script / đổi mã)
   if (!P.matchMedia || !P.matchMedia('(hover: hover) and (pointer: fine)').matches) return;   // cảm ứng: không dùng
 
   var NS = 'http://www.w3.org/2000/svg', DAY = 86400000;
@@ -76,7 +77,12 @@ DRAW_JS = r"""
   function pushUndo() { S.undo.push(JSON.stringify(S.shapes)); if (S.undo.length > 60) S.undo.shift(); }
   function byId(id) { for (var i = 0; i < S.shapes.length; i++) if (S.shapes[i].id === id) return S.shapes[i]; return null; }
   function axName(id, letter) { id = id || letter; return letter + 'axis' + (id.length > 1 ? id.slice(1) : ''); }
+  function tfOk(gd) {                                               // biểu đồ do app.py gắn meta.vn_tf; không có meta thì coi là khớp
+    var m = (gd.layout && gd.layout.meta) || (gd._fullLayout && gd._fullLayout.meta);
+    return !m || !m.vn_tf || m.vn_tf === TF;
+  }
   function candleOf(gd) {
+    if (!tfOk(gd)) return null;
     var d = gd.data || [];
     for (var i = 0; i < d.length; i++) if (d[i] && d[i].type === 'candlestick' && d[i].name === CODE) return d[i];
     return null;
@@ -351,7 +357,7 @@ DRAW_JS = r"""
       if (t.act === 'color') {
         b = html('div', 'vnd-b');
         var inp = html('input', 'vnd-col');
-        inp.type = 'color'; inp.value = S.color; inp.id = 'vnd-color';
+        inp.type = 'color'; inp.value = S.color; inp.id = 'vnd-color-' + TF;
         inp.addEventListener('input', function () {
           S.color = inp.value;
           var s = byId(S.sel);
@@ -398,7 +404,7 @@ DRAW_JS = r"""
       else if (id === 'clear') off = !S.shapes.length;
       bs[i].classList.toggle('on', on); bs[i].classList.toggle('off', off);
     }
-    var ci = D.getElementById('vnd-color'); if (ci) ci.value = S.color;
+    var ci = D.getElementById('vnd-color-' + TF); if (ci) ci.value = S.color;
     I.svg.style.display = S.hidden ? 'none' : 'block';
     I.cap.style.pointerEvents = S.tool && !S.hidden ? 'auto' : 'none';
     I.cap.style.cursor = 'crosshair';
@@ -556,7 +562,7 @@ DRAW_JS = r"""
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
     if (e.key === 'Escape') { if (S.draft || S.tool || S.sel) { S.draft = null; S.tool = null; S.sel = null; render(); } }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { e.preventDefault(); delSel(); }
-    else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && S.undo.length) { e.preventDefault(); doUndo(); }
+    else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && S.undo.length && (!P.__vnAct || P.__vnAct === TF)) { e.preventDefault(); doUndo(); }
   }
   function onDocDown(e) {                                           // bấm ra ngoài nét vẽ: bỏ chọn
     if (!S.sel || S.tool) return;
@@ -590,6 +596,7 @@ DRAW_JS = r"""
     I = { gd: gd, box: box, svg: svg, cap: cap, bar: null, hint: html('div', 'vnd-hint', 'display:none'), xs: null, xsKey: null, sig: '' };
     I.bar = buildBar();
     I.tab = buildTab(); I.tip = html('div', 'vnd-tip', 'display:none');
+    [I.bar, I.tab, cap, svg].forEach(function (el) { el.addEventListener('pointerdown', function () { P.__vnAct = TF; }, true); });
     cap.addEventListener('pointerdown', onCapDown);
     cap.addEventListener('pointermove', onCapMove);
     cap.addEventListener('pointerup', onCapUp);
@@ -600,7 +607,7 @@ DRAW_JS = r"""
     var sched = function () { if (I && I.gd === gd) { var ok = layout(); if (ok) { I.sig = sigOf(); render(); } } };
     try { gd.on('plotly_afterplot', sched); gd.on('plotly_relayout', sched); gd.on('plotly_relayouting', sched); } catch (e) {}
     I.timer = P.setInterval(function () {
-      if (!gd.isConnected) { teardown(); return; }
+      if (!gd.isConnected || !tfOk(gd)) { teardown(); return; }       // biểu đồ bị thay / đổi sang khung khác: nhả ra cho bản đúng khung gắn
       var g = geo(gd);
       if (!g) return;
       G = g;
@@ -629,7 +636,7 @@ DRAW_JS = r"""
   }
   scan();
   var timer = P.setInterval(scan, 800);                             // biểu đồ vẽ sau / vẽ lại khi đổi mã, khung thời gian
-  P.__vnDraw = function () { P.clearInterval(timer); teardown(); P.__vnDraw = null; };
+  P[SLOT] = function () { P.clearInterval(timer); teardown(); P[SLOT] = null; };
 })();
 """
 

@@ -2710,6 +2710,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=(50 if hide_legend else 96), b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
+    fig.update_layout(meta=dict(vn_code=str(code), vn_tf=tf))      # draw_tools.py dựa vào đây để gắn thanh vẽ đúng biểu đồ (Livestream có cả Ngày và Tuần)
     if hide_legend:
         fig.update_layout(showlegend=False)
     if "Dual Ichimoku" in layers:
@@ -2804,27 +2805,32 @@ def _range_opts(tf: str, n_total: int) -> list:
     return [lb for lb, n in RANGE_OPTS[tf] if n is None or n <= n_total]
 
 
-def _range_key(tf: str, n_total: int) -> str:
-    return f"rng_{tf}_{len(_range_opts(tf, n_total))}"        # khoá đổi theo danh sách mốc để không giữ lại lựa chọn không còn tồn tại
+def _range_key(tf: str, n_total: int, ns: str = "") -> str:
+    return f"{ns}rng_{tf}_{len(_range_opts(tf, n_total))}"        # khoá đổi theo danh sách mốc để không giữ lại lựa chọn không còn tồn tại
 
 
-def range_bars(tf: str, n_total: int) -> int:
+def _range_default(tf: str, opts: list, dflt=None) -> str:
+    d = dflt or RANGE_DEFAULT[tf]
+    return d if d in opts else "Tất cả"
+
+
+def range_bars(tf: str, n_total: int, ns: str = "", dflt=None) -> int:
     """Số nến theo mốc đang chọn (đọc từ session_state nên dùng được trước khi thanh chọn được vẽ ở dưới biểu đồ)."""
     opts = _range_opts(tf, n_total)
-    sel = st.session_state.get(_range_key(tf, n_total))
+    sel = st.session_state.get(_range_key(tf, n_total, ns))
     if sel not in opts:
-        sel = RANGE_DEFAULT[tf] if RANGE_DEFAULT[tf] in opts else "Tất cả"
+        sel = _range_default(tf, opts, dflt)
     n = dict(RANGE_OPTS[tf]).get(sel)
     return max(2, min(n or n_total, n_total))
 
 
-def range_bar_ui(tf: str, n_total: int):
+def range_bar_ui(tf: str, n_total: int, ns: str = "", dflt=None):
     opts = _range_opts(tf, n_total)
-    dflt = RANGE_DEFAULT[tf] if RANGE_DEFAULT[tf] in opts else "Tất cả"
+    d_ = _range_default(tf, opts, dflt)
     if hasattr(st, "pills"):
-        st.pills("Khoảng thời gian", opts, selection_mode="single", default=dflt, key=_range_key(tf, n_total), label_visibility="collapsed")
+        st.pills("Khoảng thời gian", opts, selection_mode="single", default=d_, key=_range_key(tf, n_total, ns), label_visibility="collapsed")
     else:
-        st.radio("Khoảng thời gian", opts, index=opts.index(dflt), horizontal=True, key=_range_key(tf, n_total), label_visibility="collapsed")
+        st.radio("Khoảng thời gian", opts, index=opts.index(d_), horizontal=True, key=_range_key(tf, n_total, ns), label_visibility="collapsed")
 
 
 def pick_layers():
@@ -3290,18 +3296,23 @@ def page_livestream():
             key="live_chart_layers",
             help="Chọn hoặc bỏ chọn chỉ báo. Mặc định chỉ hiển thị Khối lượng và Dual Ichimoku."
         )
+        _nD, _nW = len(A["D"]["g"]), len(A["W"]["g"])
         try:
-            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, min(150, len(A["D"]["g"])), "pan", name_suffix=" - D",
+            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, range_bars("D", _nD, "live_", "6M"), "pan", name_suffix=" - D",
                                       height_px=LIVE_DAILY_H, hide_legend=True, code_w=LIVE_CODE_W, hdr_right=True),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ ngày: {exc}")
+        range_bar_ui("D", _nD, "live_", "6M")          # thanh chọn khoảng thời gian dưới biểu đồ Ngày (giống trang Cổ phiếu)
         try:
-            st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, min(90, len(A["W"]["g"])), "pan",
+            st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, range_bars("W", _nW, "live_", "2Y"), "pan",
                                       height_px=LIVE_WEEKLY_H, hide_legend=True, title_text="KHUNG TUẦN", hdr_right=True),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ tuần: {exc}")
+        range_bar_ui("W", _nW, "live_", "2Y")
+        DT.inject(code, "D")                           # thanh công cụ vẽ bên trái, gắn cho cả biểu đồ Ngày và biểu đồ Tuần (lưu nét vẽ riêng theo mã + khung)
+        DT.inject(code, "W")
         st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
 
     with right:
