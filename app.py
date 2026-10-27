@@ -1206,7 +1206,7 @@ def _wb_meta(code: str) -> dict:
 
 
 def _cap_rank_note(code: str) -> str:
-    """Dưới ô Vốn hóa của biểu đồ: "(TOP 1 NGÀNH, chiếm 21,3% vốn hóa ngành)" nếu vốn hóa của mã thuộc 3 mã lớn nhất ngành.
+    """Dưới ô Vốn hóa của biểu đồ: hai dòng "TOP 1 NGÀNH CAO SU." / "Chiếm 89.7% vốn hóa toàn ngành." nếu vốn hóa của mã thuộc 3 mã lớn nhất ngành.
     Ngành = nhóm ngành trong watchlist.py (không tính VN30 / nhóm cũ). Mã thuộc nhiều ngành thì lấy ngành mà mã có thứ hạng cao nhất.
     Ngành phải có ít nhất 3 mã có vốn hóa. Tỷ trọng chỉ hiện khi MỌI mã trong ngành đều có số vốn hóa (thiếu số thì tỷ trọng sai nên bỏ)."""
     code = str(code).upper()
@@ -1220,7 +1220,7 @@ def _cap_rank_note(code: str) -> str:
     mine = cap_of(code)
     if mine is None:
         return ""
-    best = None                                   # (thứ hạng, tỷ trọng hoặc None)
+    best = None                                   # (thứ hạng, tỷ trọng hoặc None, tên ngành)
     for sec in MEMBER.get(code, []):
         if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:     # Họ Vingroup là nhóm tập đoàn, không phải ngành
             continue
@@ -1232,13 +1232,13 @@ def _cap_rank_note(code: str) -> str:
         rank = 1 + sum(1 for m, v in known.items() if m != code and v > mine)
         share = mine / sum(known.values()) * 100 if len(known) == len(members) else None
         if best is None or rank < best[0]:
-            best = (rank, share)
+            best = (rank, share, sec)
     if best is None or best[0] > 3:
         return ""
-    txt = f"TOP {best[0]} NGÀNH"
+    txt = f"TOP {best[0]} NGÀNH {str(best[2]).upper()}."
     if best[1] is not None:
-        txt += f", chiếm {best[1]:.1f}% vốn hóa ngành".replace(".", ",")
-    return f"({txt})"
+        txt += f"\nChiếm {best[1]:.1f}% vốn hóa toàn ngành."
+    return txt
 
 
 def _wb_ma_of(code: str) -> dict:
@@ -2631,7 +2631,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
                                hovertext=m.get("tip"))
             if m.get("sub"):
-                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
+                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
         # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
         brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
@@ -2732,7 +2732,7 @@ def metrics_html(metrics, code="", name="") -> str:
     for m in metrics:
         if m is price_m:
             continue
-        sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"]))}</div>' if m.get("sub") else "")
+        sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"])).replace(chr(10), "<br>")}</div>' if m.get("sub") else "")
         cells.append(f'<div class="cm-item"><div class="cm-lab">{htmllib.escape(m["label"])}</div>'
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
     head = ""
