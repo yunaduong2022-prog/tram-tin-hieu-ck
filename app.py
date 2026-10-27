@@ -2216,7 +2216,7 @@ DATE_TICK_STOPS = [
     dict(dtickrange=[31000000000, None], value="%Y"),
 ]
 
-PX_UP, PX_DOWN, PX_FLAT = "#2BD6A2", "#F2506E", "#F5C84C"     # giá tăng xanh / giảm đỏ / không đổi vàng
+PX_UP, PX_DOWN, PX_FLAT = "#089981", "#F23645", "#F5C84C"     # giá tăng xanh / giảm đỏ / không đổi vàng
 
 
 def _price_change(code: str) -> dict:
@@ -2256,7 +2256,7 @@ def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
     prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else float("nan")
     o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
     up = (c >= prev) if pd.notna(prev) else (c >= o)
-    col = "#2BD6A2" if up else "#F2506E"
+    col = "#089981" if up else "#F23645"
     head = f'<span style="color:#8B95A5;font-size:14px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
     pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
     chg = ""
@@ -2340,9 +2340,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         for z in a["zones"]:
             red = z["kind"] == "Kháng cự"
             fig.add_hrect(y0=z["lo"], y1=z["hi"], row=1, col=1, line_width=0,
-                          fillcolor="rgba(242,80,110,.10)" if red else "rgba(43,214,162,.12)",
+                          fillcolor="rgba(242,54,69,.10)" if red else "rgba(8,153,129,.12)",
                           annotation_text=f'{z["kind"]} {z["n"]}x', annotation_position="top left",
-                          annotation_font=dict(size=9, color="#F2506E" if red else "#2BD6A2"))
+                          annotation_font=dict(size=9, color="#F23645" if red else "#089981"))
     if enough and "Elliott" in layers and a["elliott"]["points"]:
         pts = a["elliott"]["points"]
         fig.add_trace(go.Scatter(x=[g["Ngày"].iat[i] for i, _, _ in pts], y=[p for _, p, _ in pts],
@@ -2351,7 +2351,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     wy = a.get("wy") if enough and "Wyckoff" in layers else None
     if wy and wy["tr"]["e_date"] >= x.iloc[0]:
         tr_ = wy["tr"]
-        wc = {"acc": "43,214,162", "dist": "242,80,110"}.get(wy["kind"], "107,114,128")
+        wc = {"acc": "8,153,129", "dist": "242,54,69"}.get(wy["kind"], "107,114,128")
         xs0 = max(tr_["s_date"], x.iloc[0])
         fig.add_shape(type="rect", x0=xs0, x1=tr_["e_date"], y0=tr_["bot"], y1=tr_["top"], row=1, col=1,
                       line=dict(width=1.3, color=f"rgb({wc})"), fillcolor=f"rgba({wc},0.07)", layer="below")
@@ -2369,8 +2369,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                      marker=dict(symbol="diamond", size=8, color=f"rgb({wc})"),
                                      hovertext=[f'{e["label"]}: {e["txt"]}' for e in evs], hoverinfo="text+x"), row=1, col=1)
     if "Tín hiệu quá khứ" in layers:
-        for d, sym, color, col, off, nm in ((1, "triangle-up", "#2BD6A2", "Giá thấp nhất", 0.985, "Mua"),
-                                            (-1, "triangle-down", "#F2506E", "Giá cao nhất", 1.015, "Bán")):
+        for d, sym, color, col, off, nm in ((1, "triangle-up", "#089981", "Giá thấp nhất", 0.985, "Mua"),
+                                            (-1, "triangle-down", "#F23645", "Giá cao nhất", 1.015, "Bán")):
             s_ = t[t["PV_signal"] == d]
             if not s_.empty:
                 fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers", name=nm,
@@ -2379,9 +2379,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                                     for c, v in zip(s_["PV_code"], s_["Vol_vs_MA10"])],
                                          hoverinfo="text+x"), row=1, col=1)
     if fc:
-        lx, col_ = x.iloc[-1], ("#F2506E" if fc["dir"] < 0 else "#2BD6A2")
-        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#F2506E", "dash"),
-                                     ("Mục tiêu 1", fc["t1"], "#2BD6A2", "dash"), ("Mục tiêu 2", fc["t2"], "#2BD6A2", "dot")):
+        lx, col_ = x.iloc[-1], ("#F23645" if fc["dir"] < 0 else "#089981")
+        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#F23645", "dash"),
+                                     ("Mục tiêu 1", fc["t1"], "#089981", "dash"), ("Mục tiêu 2", fc["t2"], "#089981", "dot")):
             fig.add_trace(go.Scatter(x=[lx, fx], y=[y, y], mode="lines+text", text=["", f"{name} {y:,.2f}"],
                                      textposition="top left", textfont=dict(size=9, color=color),
                                      line=dict(width=1, dash=dash, color=color), showlegend=False, hoverinfo="skip"),
@@ -2431,7 +2431,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         vol = vol_all.loc[t.index]
         up_ = (t["Giá đóng cửa"] >= t["Giá mở cửa"]).to_numpy()
         fig.add_trace(go.Bar(x=x, y=vol, name="Khối lượng", showlegend=False,
-                             marker_color=np.where(up_, "#2BD6A2", "#F2506E")), row=r, col=1)
+                             marker_color=np.where(up_, "rgba(8,153,129,.5)", "rgba(242,54,69,.5)")), row=r, col=1)
         fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
         fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
         r += 1
@@ -2466,7 +2466,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         rs_t, rs_ma = rs_t / _base * 100, rs_ma / _base * 100
         _above = (rs_t >= rs_ma).to_numpy()
         fig.add_hline(y=100, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
-        fig.add_trace(go.Scatter(x=x, y=rs_t, name="RS vs VNINDEX", line=dict(width=1.6, color="#2BD6A2" if _above[-1] else "#F2506E"),
+        fig.add_trace(go.Scatter(x=x, y=rs_t, name="RS vs VNINDEX", line=dict(width=1.6, color="#089981" if _above[-1] else "#F23645"),
                                  hovertemplate="RS %{y:.1f}<extra></extra>"), row=r, col=1)
         fig.add_trace(go.Scatter(x=x, y=rs_ma, name="MA20 RS", line=dict(width=1.2, color="#F59E0B"),
                                  hovertemplate="MA20 RS %{y:.1f}<extra></extra>"), row=r, col=1)
@@ -2474,7 +2474,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         r += 1
     if "MACD" in subs:
         fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
-                             marker_color=np.where(t["MACD_hist"] >= 0, "#2BD6A2", "#F2506E")), row=r, col=1)
+                             marker_color=np.where(t["MACD_hist"] >= 0, "#089981", "#F23645")), row=r, col=1)
         fig.add_trace(line("MACD", "MACD", "#3B82F6", 1), row=r, col=1)
         fig.add_trace(line("MACD_sig", "Tín hiệu", "#F59E0B", 1), row=r, col=1)
         fig.update_yaxes(title_text="MACD 12-26-9", title_font_size=10, row=r, col=1)
@@ -2490,7 +2490,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             for s_ in DV.detect(g, tf):
                 if pd.Timestamp(s_["d2"]) < x.iloc[0]:
                     continue
-                cl_ = "#2BD6A2" if s_["dir"] == "up" else "#F2506E"
+                cl_ = "#089981" if s_["dir"] == "up" else "#F23645"
                 fig.add_trace(go.Scatter(x=[s_["d1"], s_["d2"]], y=[s_["r1"], s_["r2"]], mode="lines+markers", showlegend=False,
                                          line=dict(width=1.6, color=cl_), marker=dict(size=6, color=cl_),
                                          hovertext=s_["name"], hoverinfo="text"), row=r, col=1)
@@ -2513,7 +2513,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_yaxes(side="right", title_text=None)
     last_c = float(t["Giá đóng cửa"].iloc[-1])
     prev_c = float(t["Giá đóng cửa"].iloc[-2]) if len(t) > 1 else last_c
-    tag_col = "#2BD6A2" if last_c >= prev_c else "#F2506E"
+    tag_col = "#089981" if last_c >= prev_c else "#F23645"
     fig.add_hline(y=last_c, line_dash="dot", line_color=tag_col, line_width=1, row=1, col=1)
     fig.add_annotation(xref="paper", yref="y", x=1, y=last_c, xanchor="left", yanchor="middle", showarrow=False,
                        text=f"<b>{last_c:,.2f}</b>", font=dict(size=11, color="#FFFFFF"), bgcolor=tag_col, borderpad=3)
@@ -2534,7 +2534,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
     if "VNINDEX" in subs:
-        _vcol = "#2BD6A2" if _vchg >= 0 else "#F2506E"
+        _vcol = "#089981" if _vchg >= 0 else "#F23645"
         _hdr("VNINDEX", f'<span style="font-size:22px"><b style="color:#CBD2DC">VNINDEX</b></span>  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
              else "VNINDEX: chưa có dữ liệu trong vùng đang xem")
     if "RS vs VNINDEX" in subs:

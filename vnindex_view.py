@@ -31,7 +31,7 @@ INDEX_CODES = getattr(E, "INDEX_CODES", {"VNINDEX", "VN-INDEX", "VNI", "VN INDEX
 TF_LABEL = {"D": "Phiên", "W": "Tuần", "M": "Tháng", "Q": "Quý"}
 TF_NOUN = {"D": "phiên", "W": "tuần", "M": "tháng", "Q": "quý"}
 MA_SET = {"D": (20, 50, 200), "W": (10, 30, 52), "M": (6, 12, 24), "Q": (4, 8, 12)}      # đường MA theo khung
-UP, DN = "#2BD6A2", "#F2506E"
+UP, DN = "#089981", "#F23645"
 MA_COLORS = ["#F5A623", "#6EA8FF", "#C792EA"]
 BAR_CHOICES = {"D": [60, 120, 250, 500], "W": [26, 52, 104, 260], "M": [24, 60, 120], "Q": [20, 40, 80]}      # số nến cho chọn, theo khung
 BAR_DEFAULT = {"D": 120, "W": 104, "M": 60, "Q": 40}          # số nến mặc định theo khung
@@ -158,7 +158,7 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
             fig.add_trace(_tr, row=1, col=1)
         for _an in SPT.annotations(x, _stv):
             fig.add_annotation(**_an, row=1, col=1)
-    fig.add_trace(go.Bar(x=x, y=g[V], marker=dict(color=np.where(up, UP, DN), line=dict(width=0)), showlegend=False,
+    fig.add_trace(go.Bar(x=x, y=g[V], marker=dict(color=np.where(up, "rgba(8,153,129,.5)", "rgba(242,54,69,.5)"), line=dict(width=0)), showlegend=False,
                          hovertext=hover, hoverinfo="text"), row=2, col=1)
 
     last_c = float(g[C].iloc[-1])
