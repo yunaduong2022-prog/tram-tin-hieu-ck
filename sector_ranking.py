@@ -378,6 +378,70 @@ def lnst_sector_html(df: pd.DataFrame, sector: str) -> str:
     return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
+BCTC_PATH = "data/bctc.csv"
+_BCTC_COLS = [("Kỳ BCTC", "{}"), ("DT thuần TTM (tỷ)", "{:,.0f}"), ("Tăng trưởng DT thuần (%)", "{:+.1f}%"),
+              ("LN sau thuế TTM (tỷ)", "{:,.0f}"), ("Tăng trưởng LN sau thuế (%)", "{:+.1f}%"), ("Biên LN ròng TTM (%)", "{:.1f}%")]
+
+
+def bctc_sector_html(symbols: list[str], path: str = BCTC_PATH) -> str:
+    """Bảng doanh thu, lợi nhuận 4 quý gần nhất (TTM) của các mã trong ngành từ data/bctc.csv. Rỗng nếu chưa có số nào."""
+    try:
+        d = pd.read_csv(path, encoding="utf-8-sig")
+    except (OSError, ValueError, pd.errors.ParserError):
+        return ""
+    if "Mã" not in d.columns:
+        return ""
+    d["Mã"] = d["Mã"].astype(str).str.upper().str.strip()
+    d = d[d["Mã"].isin({str(x).upper() for x in symbols})]
+    num = [c for c, _ in _BCTC_COLS if c != "Kỳ BCTC" and c in d.columns]
+    if d.empty or not num:
+        return ""
+    for c in num:
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+    d = d[d[num].notna().any(axis=1)]
+    if d.empty:
+        return ""
+    d = d.sort_values("LN sau thuế TTM (tỷ)", ascending=False, na_position="last") if "LN sau thuế TTM (tỷ)" in d.columns else d
+    esc = _html.escape
+    cols = [(c, f) for c, f in _BCTC_COLS if c in d.columns]
+    head = "<th>Mã CP</th>" + "".join(f"<th>{esc(c).replace(' (', '<br>(')}</th>" for c, _ in cols)
+    rows = []
+    for _, r in d.iterrows():
+        tds = [f'<td class="code">{esc(r["Mã"])}</td>']
+        for c, f in cols:
+            v = r[c]
+            if pd.isna(v):
+                tds.append('<td class="num na">-</td>')
+            elif c == "Kỳ BCTC":
+                tds.append(f'<td class="num">{esc(str(v))}</td>')
+            elif c.startswith("Tăng trưởng"):
+                tds.append(f'<td class="num heat" style="{_heat_bg(float(v))}">{f.format(float(v))}</td>')
+            else:
+                tds.append(f'<td class="num">{f.format(float(v))}</td>')
+        rows.append("<tr>" + "".join(tds) + "</tr>")
+    return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+
+
+def _profit_section(sector: str, symbols: list[str]) -> None:
+    """Nội dung trang Vị thế cổ phiếu ngành: doanh thu và lợi nhuận của các cổ phiếu trong ngành."""
+    st.subheader("Tăng trưởng LNST công ty mẹ (YoY)")
+    lnst_html = lnst_sector_html(_lnst_cached(os.path.getmtime(LNST_PATH) if os.path.exists(LNST_PATH) else 0.0), sector)
+    if lnst_html:
+        st.caption("So với cùng quý năm trước. Xanh = lãi tăng, đỏ = lãi giảm hoặc lỗ; càng đậm càng lệch xa 0. "
+                   "Ô \"-\" là chưa có số liệu. Khi lãi cùng kỳ rất nhỏ hoặc âm, % tăng trưởng có thể rất lớn hoặc đảo dấu nên cần xem cùng giá trị tuyệt đối.")
+        st.markdown(lnst_html, unsafe_allow_html=True)
+    else:
+        st.caption(f"Chưa có dữ liệu LNST theo quý cho ngành {sector}. Thêm các dòng có cột Ngành = \"{sector}\" vào {LNST_PATH}.")
+
+    st.subheader("Doanh thu và lợi nhuận 4 quý gần nhất (TTM)")
+    bctc_html = bctc_sector_html(symbols)
+    if bctc_html:
+        st.caption("Doanh thu thuần và lợi nhuận sau thuế cộng 4 quý gần nhất (tỷ đồng); tăng trưởng so với 4 quý liền trước đó. Nguồn: data/bctc.csv.")
+        st.markdown(bctc_html, unsafe_allow_html=True)
+    else:
+        st.caption(f"Chưa có số doanh thu, lợi nhuận TTM cho ngành {sector} trong {BCTC_PATH} (các cột DT thuần TTM, LN sau thuế TTM và tăng trưởng đang để trống).")
+
+
 # ------------------------------------------------------------------ GIAO DIỆN
 @st.cache_data(show_spinner=False)
 def _sector_metrics(_raw: pd.DataFrame, key: str):
@@ -428,13 +492,20 @@ def _rank_table_html(show: pd.DataFrame, period: str) -> str:
 
 
 def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.DataFrame, groups: dict,
-           fund_map: dict, card_renderer, mkt: pd.Series | None = None):
-    """card_renderer(row_chờ_mua, ctx_html, view_key) vẽ một thẻ (do app.py cung cấp để dùng đúng thẻ MUA / CHỜ MUA)."""
-    st.title("🏆 Vị thế cổ phiếu trong ngành")
-    st.caption("Tìm mã dẫn đầu, không chỉ tìm ngành mạnh. RS = hiệu suất của mã chia hiệu suất VN-Index (hoặc proxy thị trường) cùng kỳ; "
-               "\"so với ngành\" là chênh lệch hiệu suất của mã với trung bình đều của ngành cùng kỳ. "
-               "Chọn khung Ngày / Tuần / Tháng / 3 Tháng để đổi cách xếp hạng. "
-               "Chỉ để tham khảo, không phải khuyến nghị đầu tư.")
+           fund_map: dict, card_renderer, mkt: pd.Series | None = None, mode: str = "rank"):
+    """card_renderer(row_chờ_mua, ctx_html, view_key) vẽ một thẻ (do app.py cung cấp để dùng đúng thẻ MUA / CHỜ MUA).
+    mode = "rank": Ngành > Xếp hạng cổ phiếu (bảng xếp hạng cơ bản ngành, bảng RS kèm P/E, P/B, ROE, bốn góc nhìn dạng thẻ);
+    mode = "profit": Ngành > Vị thế cổ phiếu ngành (doanh thu và lợi nhuận của các cổ phiếu trong ngành)."""
+    profit = mode == "profit"
+    st.title("💰 Vị thế cổ phiếu ngành · Doanh thu & lợi nhuận" if profit else "📋 Xếp hạng cổ phiếu trong ngành")
+    if profit:
+        st.caption("Doanh thu và lợi nhuận của từng cổ phiếu trong ngành: tăng trưởng LNST công ty mẹ theo quý (so cùng kỳ năm trước) "
+                   "và doanh thu, lợi nhuận 4 quý gần nhất (TTM) từ data/bctc.csv. Chỉ để tham khảo, không phải khuyến nghị đầu tư.")
+    else:
+        st.caption("Tìm mã dẫn đầu, không chỉ tìm ngành mạnh. RS = hiệu suất của mã chia hiệu suất VN-Index (hoặc proxy thị trường) cùng kỳ; "
+                   "\"so với ngành\" là chênh lệch hiệu suất của mã với trung bình đều của ngành cùng kỳ. "
+                   "Chọn khung Ngày / Tuần / Tháng / 3 Tháng để đổi cách xếp hạng. "
+                   "Chỉ để tham khảo, không phải khuyến nghị đầu tư.")
     st.markdown(CSS, unsafe_allow_html=True)
 
     metrics, info = _sector_metrics(raw, data_key)
@@ -454,6 +525,10 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
         st.session_state["sr_sector"] = pre if pre in sectors else sectors[0]
     sector = st.selectbox("Chọn ngành", sectors, key="sr_sector",
                           help="Sắp theo RS 1 tháng của ngành, ngành mạnh nhất ở đầu danh sách.")
+
+    if profit:
+        _profit_section(sector, groups[sector])
+        return
 
     st.session_state.setdefault("sr_period", DEFAULT_PERIOD)
     period = st.segmented_control("Khung xếp hạng", list(PERIODS), key="sr_period",
@@ -502,16 +577,6 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     st.markdown(_rank_table_html(show, period), unsafe_allow_html=True)
     if d["ROE (%)"].isna().all() and d["P/B"].isna().all() and d["P/E"].isna().all():
         st.caption("Chưa có dữ liệu P/E, P/B, ROE cho ngành này (data/fundamentals.csv hoặc data/nhap_tay.csv).")
-
-    # --- Tăng trưởng LNST công ty mẹ theo quý (YoY)
-    st.subheader("Tăng trưởng LNST công ty mẹ (YoY)")
-    lnst_html = lnst_sector_html(_lnst_cached(os.path.getmtime(LNST_PATH) if os.path.exists(LNST_PATH) else 0.0), sector)
-    if lnst_html:
-        st.caption("So với cùng quý năm trước. Xanh = lãi tăng, đỏ = lãi giảm hoặc lỗ; càng đậm càng lệch xa 0. "
-                   "Ô \"-\" là chưa có số liệu. Khi lãi cùng kỳ rất nhỏ hoặc âm, % tăng trưởng có thể rất lớn hoặc đảo dấu nên cần xem cùng giá trị tuyệt đối.")
-        st.markdown(lnst_html, unsafe_allow_html=True)
-    else:
-        st.caption(f"Chưa có dữ liệu LNST theo quý cho ngành {sector}. Thêm các dòng có cột Ngành = \"{sector}\" vào {LNST_PATH}.")
 
     # --- Bốn góc nhìn
     st.subheader("Cổ phiếu theo vị thế")

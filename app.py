@@ -1464,8 +1464,9 @@ def page_buy_now():
     _rt_focus_scroll()
 
 
-def page_sector_ranking():
-    """Ngành > Vị thế cổ phiếu ngành: dùng đúng thẻ MUA / CHỜ MUA, thêm khối Vị thế trong ngành."""
+def page_sector_ranking(mode: str = "rank"):
+    """Ngành > Xếp hạng cổ phiếu (mode="rank"): bảng xếp hạng cơ bản ngành, bảng RS kèm P/E, P/B, ROE, bốn góc nhìn dạng thẻ MUA / CHỜ MUA.
+    Ngành > Vị thế cổ phiếu ngành (mode="profit"): doanh thu và lợi nhuận của các cổ phiếu trong ngành."""
     header()
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
@@ -1487,7 +1488,7 @@ def page_sector_ranking():
                     st.session_state[_k] = code
                 NAV.goto("Cổ phiếu", "Biểu đồ")
 
-    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt)
+    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt, mode=mode)
 
 
 def _wl_card(r, u, ver):
@@ -2385,12 +2386,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                      marker=dict(symbol="diamond", size=8, color=f"rgb({wc})"),
                                      hovertext=[f'{e["label"]}: {e["txt"]}' for e in evs], hoverinfo="text+x"), row=1, col=1)
     if "Tín hiệu quá khứ" in layers:
-        for d, sym, color, col, off, nm in ((1, "triangle-up", "#089981", "Giá thấp nhất", 0.985, "Mua"),
-                                            (-1, "triangle-down", "#F23645", "Giá cao nhất", 1.015, "Bán")):
+        for d, sym, color, col, off, nm in ((1, "triangle-up", "#089981", "Giá thấp nhất", 0.985, "Mua T+"),
+                                            (-1, "triangle-down", "#F23645", "Giá cao nhất", 1.015, "Bán T+")):
             s_ = t[t["PV_signal"] == d]
             if not s_.empty:
-                fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers", name=nm,
+                fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers+text", name=nm,
                                          marker=dict(symbol=sym, size=11, color=color),
+                                         text=[nm] * len(s_), textposition="bottom center" if d > 0 else "top center",   # chữ ngay cạnh mũi tên: Mua T+ ở dưới, Bán T+ ở trên
+                                         textfont=dict(size=11, color=color),
                                          hovertext=[f"{nm}: {E.PV_LABEL[c]}<br>Vol {v:.1f}x MA10"
                                                     for c, v in zip(s_["PV_code"], s_["Vol_vs_MA10"])],
                                          hoverinfo="text+x"), row=1, col=1)
@@ -3074,7 +3077,9 @@ def _route_inner():
         header()
         return SRT.render(raw, mkt, WL.GROUPS, mkt_src)
     if main == "Ngành" and sub == "Vị thế cổ phiếu ngành":
-        return page_sector_ranking()
+        return page_sector_ranking("profit")
+    if main == "Ngành" and sub == "Xếp hạng cổ phiếu":
+        return page_sector_ranking("rank")
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Lọc tất cả CP": return page_filter()
