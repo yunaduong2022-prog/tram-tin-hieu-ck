@@ -1,6 +1,5 @@
 """Mega Navigation Bar (Top-Down) + Dark Theme cho Trạm Tín Hiệu Chứng Khoán VN."""
 import streamlit as st
-import streamlit.components.v1 as components
 
 # Menu chính -> danh sách tab phụ (rỗng = không có sub-menu)
 MENU = {
@@ -8,15 +7,15 @@ MENU = {
     "Thị trường": ["Tổng quan", "Góc nhìn thị trường", "Nhận định VNINDEX", "Nhóm vốn hóa", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
                    "Nhóm ngành", "Kết quả kinh doanh"],
     "Ngành": ["Tổng quan ngành", "Cảnh báo luân chuyển dòng tiền", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
-    "Cổ phiếu": ["Biểu đồ", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
-                 "Thanh khoản", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
+    "Cổ phiếu": ["Tổng quát", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
+                 "Thanh khoản", "Chỉ báo kỹ thuật", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Mua ngay", "Chờ mua", "Tăng mạnh", "Lọc tất cả CP", "Bộ lọc Realtime", "Giảm mạnh", "Cạn cung", "Đang phục hồi",
-                          "Watchlist", "Cổ phiếu của tôi", "Danh sách cảnh báo",
+                          "Watchlist", "Cổ phiếu của tôi", "Khuyến nghị khách hàng", "Danh sách cảnh báo",
                           "Bán / Chốt lời", "Backtest chiến lược"],
-    "Livestream": [],
+    "Biểu đồ": [],
 }
 DEFAULT_MAIN = "Thị trường"   # trang mở đầu khi vào app (muốn như cũ thì đổi thành "Bộ lọc & Backtest")
-ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Livestream": "🎥"}
+ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Biểu đồ": "📈"}
 
 # Mô tả nội dung từng tab phụ của mục "Thị trường" (hiển thị ở trang chờ cho tới khi có nội dung thật)
 MARKET_DESC = {
@@ -53,21 +52,6 @@ DARK_CSS = """
 """
 
 
-# Cuộn lên đầu trang sau khi chuyển trang bằng code; thử lại vài lần vì nội dung trang mới hiện ra sau
-_SCROLL_TOP_JS = """<script>
-(function(){
-  var d = window.parent.document;
-  function go(){
-    [d.querySelector('section[data-testid="stMain"]'), d.querySelector('section.main'),
-     d.querySelector('[data-testid="stAppViewContainer"]'), d.documentElement, d.body].forEach(function(e){
-      if (e && e.scrollTo) e.scrollTo(0, 0);
-    });
-  }
-  go(); setTimeout(go, 150); setTimeout(go, 500);
-})();
-</script>"""
-
-
 def _reset_sub():
     st.session_state["nav_sub"] = (MENU[st.session_state["nav_main"]] or [None])[0]
 
@@ -89,8 +73,6 @@ def render_nav():
     pending = st.session_state.pop("_nav_pending", None)  # áp dụng yêu cầu goto() trước khi tạo widget
     if pending:
         st.session_state["nav_main"], st.session_state["nav_sub"] = pending
-        if "rt_focus" not in st.session_state:       # chuyển trang bằng nút (vd. "Xem biểu đồ"): trang mới mở ở đầu trang, không giữ vị trí cuộn cũ
-            st.session_state["_scroll_top"] = True   # (có rt_focus thì trang đích tự cuộn tới đúng thẻ)
     st.session_state.setdefault("nav_main", DEFAULT_MAIN)
     if st.session_state.get("nav_main") not in MENU:
         st.session_state["nav_main"] = DEFAULT_MAIN
@@ -111,8 +93,6 @@ def render_nav():
                     st.session_state["nav_sub"] = subs[0]
                 sub = st.segmented_control("Tab phụ", subs, key="nav_sub", label_visibility="collapsed")
                 sub = sub or subs[0]
-    if st.session_state.pop("_scroll_top", False):
-        components.html(_SCROLL_TOP_JS, height=0)
     return main, sub
 
 
