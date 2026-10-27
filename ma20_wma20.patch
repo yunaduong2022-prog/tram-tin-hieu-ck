@@ -1,0 +1,68 @@
+--- /home/claude/app.py.orig	2026-10-27 05:56:12.376126848 +0000
++++ app.py	2026-10-27 05:56:12.483777942 +0000
+@@ -144,9 +144,9 @@
+                else {"use_container_width": True})
+ TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
+ BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
+-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
++LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "MA20 / W-MA20", "Bollinger",
+               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
+-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
++LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "MA20 / W-MA20", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+ 
+ 
+ # ------------------------------------------------------------------ DỮ LIỆU
+@@ -2403,6 +2403,27 @@
+         for _an in SPT.annotations(x, _stv):
+             fig.add_annotation(**_an, row=1, col=1)
+ 
++    # MA20 ngày + MA20 tuần (W-MA20) trên khung Ngày: MA20 tuần = TB 20 giá đóng cửa TUẦN, giữ nguyên giá trị trong cả tuần (đường bậc thang)
++    _ma_tags = []
++    if "MA20 / W-MA20" in layers and tf == "D":
++        try:
++            _wk = E.resample_ohlcv(g[[c_ for c_ in ["Mã", "Ngày"] + list(E.NUMERIC_COLS) if c_ in g.columns]], "W")
++            _wk["_ma20"] = _wk["Giá đóng cửa"].rolling(20).mean()
++            _wmap = pd.Series(_wk["_ma20"].to_numpy(), index=pd.PeriodIndex(_wk["Ngày"], freq="W-FRI"))
++            _w20 = pd.Series(pd.PeriodIndex(t["Ngày"], freq="W-FRI").map(_wmap), index=t.index).astype(float)
++            _d20 = t["MA20"].astype(float)
++            fig.add_trace(go.Scatter(x=x, y=_w20, name="W-MA20", line=dict(width=1.6, color="#FF7A1A", shape="hv"),
++                                     hovertemplate="W-MA20 %{y:,.2f}<extra></extra>"), row=1, col=1)
++            fig.add_trace(go.Scatter(x=x, y=_d20, name="MA20", line=dict(width=1.4, color="#F5A623"),
++                                     hovertemplate="MA20 %{y:,.2f}<extra></extra>"), row=1, col=1)
++            for _nm, _s, _col in (("W-MA20", _w20, "#FF7A1A"), ("MA20", _d20, "#F5A623")):
++                _v = _s.dropna()
++                if len(_v):
++                    _ma_tags.append((float(_v.iloc[-1]), _nm, _col))
++                    ys.append(float(_v.min())); ys.append(float(_v.max()))
++        except Exception:  # noqa: BLE001
++            _ma_tags = []
++
+     r = 2
+     if "Khối lượng" in subs:
+         vol_all = pd.to_numeric(g["Khối lượng khớp lệnh"], errors="coerce")
+@@ -2607,6 +2628,25 @@
+     TH.style_fig(fig)
+     if hide_legend:
+         fig.update_layout(showlegend=False)
++    if _ma_tags:
++        # Nhãn "W-MA20 20.26" / "MA20 19.65" ở cột giá bên phải (nền cùng màu đường); nới lề phải để đủ chỗ chữ, đẩy lệch (px) nếu 2 nhãn / nhãn giá gần nhau
++        fig.update_layout(margin=dict(r=max(int(fig.layout.margin.r or 0), 120)))
++        _yr = fig.layout.yaxis.range
++        _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
++        _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
++        if _ppu > 0:
++            _cur, _gap = last_c * _ppu, 16.0
++            _pos = [[v_ * _ppu, v_, nm_, col_] for v_, nm_, col_ in _ma_tags if _yr[0] <= v_ <= _yr[1]]
++            _prev = _cur
++            for _r in sorted((r_ for r_ in _pos if r_[0] >= _cur), key=lambda r_: r_[0]):
++                _r[0] = _prev = max(_r[0], _prev + _gap)
++            _prev = _cur
++            for _r in sorted((r_ for r_ in _pos if r_[0] < _cur), key=lambda r_: -r_[0]):
++                _r[0] = _prev = min(_r[0], _prev - _gap)
++            for _p, _v, _nm, _col in _pos:
++                fig.add_annotation(xref="paper", yref="y", x=1, y=_v, xanchor="left", yanchor="middle", showarrow=False,
++                                   yshift=_p - _v * _ppu, text=f"<b>{_nm}  {_v:,.2f}</b>", font=dict(size=11, color="#1A1205"),
++                                   bgcolor=_col, borderpad=3)
+     if "Dual Ichimoku" in layers:
+         # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
+         _yr = fig.layout.yaxis.range
