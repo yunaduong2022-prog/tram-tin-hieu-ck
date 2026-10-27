@@ -8,6 +8,8 @@ Mục tiêu: tìm MÃ DẪN ĐẦU, không chỉ tìm ngành mạnh. Với ngàn
        - Đang tích lũy, gần điểm mua hoặc đã vượt nền
        - Yếu hơn ngành hoặc có tín hiệu suy yếu
     3) Dưới bảng xếp hạng: bảng nhiệt tăng trưởng LNST công ty mẹ (YoY) theo quý của ngành (data/lnst_quy.csv).
+    4) Bảng xếp hạng cơ bản của ngành theo snapshot nguồn (data/xep_hang_nganh.csv): hạng tổng / tài chính / kinh doanh, định giá,
+       ROE, ROA, doanh thu, lợi nhuận. Một file cho nhiều ngành; ngành nào có dòng trong file thì tự hiện bảng.
     Thẻ chỉ bổ sung một khối "Vị thế trong ngành" (hạng RS, RS so với ngành, thanh khoản), không thêm chỉ báo mới.
 
 Mọi nhãn theo quy tắc ở CFG bên dưới. Phần tính (build_sector_frame) không phụ thuộc Streamlit.
@@ -84,6 +86,25 @@ CSS = """
 .sr-sec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:6px 0 16px}
 .sr-sec b{color:var(--txt2)}
 .sr-sec span{display:inline-block;margin-right:18px;font-size:13.5px;color:var(--muted)}
+.snap-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 10px}
+.snap-title{font-size:17px;font-weight:800;color:var(--txt2);letter-spacing:.2px;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.snap-title:before{content:"";display:inline-block;width:5px;height:22px;border-radius:3px;background:#6A3FD1}
+.snap-upd{font-size:12.5px;color:var(--muted);white-space:nowrap}
+.snap-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:8px}
+.snap{border-collapse:collapse;width:100%;font-size:13.5px;color:var(--txt)}
+.snap thead th{background:#6A3FD1;color:#fff;font-weight:700;text-align:center;padding:11px 8px;line-height:1.3;vertical-align:middle;
+  border-right:1px solid rgba(255,255,255,.18);white-space:normal}
+.snap thead th:last-child{border-right:0}
+.snap thead th small{display:block;font-weight:500;font-size:11px;opacity:.85}
+.snap td{padding:9px 10px;border-bottom:1px solid var(--line2);text-align:center;vertical-align:middle;white-space:nowrap;font-variant-numeric:tabular-nums}
+.snap tbody tr:nth-child(even) td{background:var(--card2)}
+.snap tbody tr:hover td{background:var(--line2)}
+.snap td.stt{font-weight:800;color:var(--txt2)}
+.snap td.code{font-weight:800;color:var(--txt2)}
+.snap td.rk{font-weight:700;color:#8F6BFF}
+.snap td.n{text-align:right;padding-right:14px}
+.snap td.n.b{font-weight:600;color:var(--txt2)}
+.snap td.pos{color:var(--green);font-weight:600}.snap td.neg{color:var(--red);font-weight:600}
 </style>
 """
 
@@ -316,6 +337,106 @@ def rubber_rank_html(path: str = RUBBER_RANK_PATH) -> tuple[str, int]:
             cells.append(f'<td class="{cls}">{rendered}</td>')
         rows.append("<tr>" + "".join(cells) + "</tr>")
     return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>', len(d)
+
+
+# ------------------------------------------------------------------ BẢNG XẾP HẠNG CƠ BẢN NGÀNH (SNAPSHOT NGUỒN)
+SNAP_PATH = "data/xep_hang_nganh.csv"
+SNAP_ID = ["Ngành", "Nhóm trong app", "Kỳ", "Cập nhật", "STT", "Mã CP"]
+# (cột trong file, tiêu đề, đơn vị nhỏ dưới tiêu đề, kiểu hiển thị): rk = hạng, n = số, b = số đậm, pct = %, g = tăng trưởng tô xanh/đỏ, int = số nguyên
+SNAP_RANK = [("Xếp hạng", "Xếp hạng", "", "rk"), ("Xếp hạng tài chính", "Xếp hạng tài chính", "", "rk0"),
+             ("Xếp hạng kinh doanh", "Xếp hạng kinh doanh", "", "rk0"), ("Vốn hóa (tỷ đồng)", "Vốn hóa", "", "n"),
+             ("KLGD MA20 (CP)", "KLGD MA20", "(CP)", "n")]
+SNAP_VIEWS = {
+    "Định giá & hiệu quả": SNAP_RANK + [("EPS (đồng/CP)", "EPS", "(Đồng/CP)", "n"), ("P/E", "P/E", "", "n"), ("P/B", "P/B", "", "n"),
+                                       ("Giá trị sổ sách (đồng/CP)", "Giá trị sổ sách", "(Đồng/CP)", "n"), ("ROE (%)", "ROE", "", "pct"),
+                                       ("ROA (%)", "ROA", "", "pct")],
+    "Doanh thu & lợi nhuận": SNAP_RANK + [("Số CP lưu hành (CP)", "Số CP lưu hành", "(CP)", "int"), ("DTT", "DTT", "", "n"),
+                                         ("LNST công ty mẹ", "LNST", "công ty mẹ", "n"),
+                                         ("Tăng trưởng DTT (YoY %)", "Tăng trưởng DTT", "(YoY)", "g"),
+                                         ("Tăng trưởng LNST công ty mẹ (YoY %)", "Tăng trưởng LNST", "công ty mẹ (YoY)", "g")],
+}
+SNAP_DEFAULT_VIEW = "Định giá & hiệu quả"
+SNAP_MIN_CAP = 900          # chỉ hiện mã có vốn hóa TRÊN ngưỡng này (tỷ đồng); đặt 0 để hiện tất cả
+
+
+def _sig3(v: float) -> str:
+    """3 chữ số có nghĩa như bảng nguồn: >=100 -> 0 số lẻ, >=10 -> 1, còn lại 2. Dấu trừ dùng ký tự '−'."""
+    a = abs(v)
+    t = f"{a:,.0f}" if a >= 100 else f"{a:.1f}" if a >= 10 else f"{a:.2f}"
+    return ("−" if v < 0 and float(t.replace(",", "")) != 0 else "") + t
+
+
+@st.cache_data(show_spinner=False)
+def load_snapshots(path: str = SNAP_PATH, mtime: float = 0.0) -> pd.DataFrame:
+    """data/xep_hang_nganh.csv: mỗi dòng một mã của một ngành ở một kỳ. Thiếu file hoặc sai định dạng thì trả bảng rỗng."""
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    try:
+        d = pd.read_csv(path, encoding="utf-8-sig")
+    except (OSError, pd.errors.ParserError, UnicodeDecodeError):
+        return pd.DataFrame()
+    d.columns = [str(c).strip() for c in d.columns]
+    if not {"Ngành", "Mã CP"} <= set(d.columns):
+        return pd.DataFrame()
+    for c in d.columns:
+        if c not in ("Ngành", "Nhóm trong app", "Kỳ", "Cập nhật", "Mã CP"):
+            d[c] = pd.to_numeric(d[c].astype(str).str.replace(",", "").str.replace("−", "-").str.replace("%", "").str.strip(), errors="coerce")
+    d["Mã CP"] = d["Mã CP"].astype(str).str.upper().str.strip()
+    for c in ("Nhóm trong app", "Kỳ", "Cập nhật"):
+        if c not in d.columns:
+            d[c] = ""
+        d[c] = d[c].fillna("").astype(str).str.strip()
+    return d
+
+
+def snapshot_for(d: pd.DataFrame, sector: str) -> pd.DataFrame:
+    """Dòng của ngành đang chọn: khớp tên ngành trong app (cột 'Nhóm trong app') hoặc tên ngành theo nguồn. Nhiều kỳ thì lấy bản cập nhật mới nhất."""
+    if d is None or d.empty:
+        return pd.DataFrame()
+    key = str(sector).strip().casefold()
+    m = (d["Nhóm trong app"].str.casefold() == key) | (d["Ngành"].astype(str).str.strip().str.casefold() == key)
+    x = d[m].copy()
+    if x.empty:
+        return x
+    x["_dt"] = pd.to_datetime(x["Cập nhật"], dayfirst=True, errors="coerce")
+    best = x.sort_values("_dt", ascending=False, kind="stable").iloc[0]
+    x = x[(x["Ngành"] == best["Ngành"]) & (x["Kỳ"] == best["Kỳ"]) & (x["Cập nhật"] == best["Cập nhật"])]
+    sort_key = "STT" if "STT" in x.columns and x["STT"].notna().any() else "Vốn hóa (tỷ đồng)"
+    return x.sort_values(sort_key, ascending=(sort_key == "STT"), kind="stable").drop(columns="_dt").reset_index(drop=True)
+
+
+def snapshot_html(x: pd.DataFrame, view: str) -> str:
+    """Bảng kiểu nguồn: tiêu đề tím, STT, mã, hạng, rồi các chỉ tiêu của nhóm đang chọn. Ô trống hiện '-'."""
+    esc = _html.escape
+    cols = SNAP_VIEWS[view]
+    first = x.iloc[0]
+    head = ('<tr><th>STT</th><th>Mã CP</th>'
+            + "".join(f"<th>{esc(t)}" + (f"<small>{esc(u)}</small>" if u else "") + "</th>" for _, t, u, _ in cols) + "</tr>")
+    rows = []
+    for i, r in x.iterrows():
+        stt = r.get("STT")
+        cells = [f'<td class="stt">{int(stt) if pd.notna(stt) else i + 1}</td>', f'<td class="code">{esc(str(r["Mã CP"]))}</td>']
+        for c, _, _, kind in cols:
+            v = r.get(c)
+            if v is None or pd.isna(v):
+                cells.append('<td class="n">-</td>' if kind not in ("rk", "rk0") else "<td>-</td>")
+            elif kind in ("rk", "rk0"):
+                cells.append(f'<td class="{"rk" if kind == "rk" else ""}">{int(v)}</td>')
+            elif kind == "int":
+                cells.append(f'<td class="n b">{v:,.0f}</td>')
+            elif kind == "pct":
+                cells.append(f'<td class="n">{_sig3(float(v))}%</td>')
+            elif kind == "g":
+                cells.append(f'<td class="n {"pos" if v > 0 else "neg" if v < 0 else ""}">{_sig3(float(v))}%</td>')
+            elif c in ("Vốn hóa (tỷ đồng)", "KLGD MA20 (CP)", "Giá trị sổ sách (đồng/CP)", "EPS (đồng/CP)"):
+                cells.append(f'<td class="n b">{("−" if v < 0 else "") + f"{abs(v):,.0f}"}</td>')
+            else:
+                cells.append(f'<td class="n b">{_sig3(float(v))}</td>')
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    title = f"BẢNG XẾP HẠNG NGÀNH {esc(str(first['Ngành']).upper())}" + (f" - {esc(first['Kỳ'])}" if first["Kỳ"] else "")
+    upd = f'<div class="snap-upd">Cập nhật: {esc(first["Cập nhật"])}</div>' if first["Cập nhật"] else ""
+    return (f'<div class="snap-head"><div class="snap-title">{title}</div>{upd}</div>'
+            f'<div class="snap-wrap"><table class="snap"><thead>{head}</thead><tbody>{"".join(rows)}</tbody></table></div>')
 
 
 LNST_PATH = "data/lnst_quy.csv"     # cột: Ngành, Mã, Vốn hóa, Thanh khoản (CP), Q3/24, ..., Tổng hợp (1 = dòng tổng cả ngành); số %, để trống nếu chưa có
@@ -582,6 +703,7 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
         st.warning(f"Ngành này chỉ có {n} mã có dữ liệu, thứ hạng chỉ mang tính tham khảo.")
 
     # --- Snapshot xếp hạng cơ bản ngành cao su từ bảng Q3/26 người dùng cung cấp
+    rubber_n = 0
     if str(sector).strip().casefold() == "cao su":
         st.subheader("Bảng xếp hạng ngành cao su · Q3/26")
         st.caption("Dữ liệu snapshot cập nhật 06/06/2026. Đã loại các mã có vốn hóa dưới 1.000 tỷ đồng; thứ hạng giữ theo bảng nguồn.")
@@ -591,6 +713,22 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
             st.caption(f"Còn {rubber_n} mã sau khi lọc vốn hóa ≥ 1.000 tỷ đồng. Số liệu được giữ theo bảng nguồn.")
         else:
             st.info("Chưa có dữ liệu xếp hạng cơ bản ngành cao su trong data/cao_su_q3_2026.csv.")
+
+    # --- Bảng xếp hạng cơ bản ngành theo snapshot nguồn (data/xep_hang_nganh.csv)
+    snap = snapshot_for(load_snapshots(SNAP_PATH, os.path.getmtime(SNAP_PATH) if os.path.exists(SNAP_PATH) else 0.0), sector)
+    if str(sector).strip().casefold() == "cao su" and rubber_n:
+        snap = pd.DataFrame()                      # cao su đã có bảng riêng ở trên, tránh hiện hai bảng trùng nội dung
+    n_all = len(snap)
+    if not snap.empty and SNAP_MIN_CAP and "Vốn hóa (tỷ đồng)" in snap.columns:
+        snap = snap[snap["Vốn hóa (tỷ đồng)"] > SNAP_MIN_CAP].reset_index(drop=True)      # áp ngưỡng lúc hiển thị, kể cả khi file có mã nhỏ hơn
+    if not snap.empty:
+        st.session_state.setdefault("sr_snap_view", SNAP_DEFAULT_VIEW)
+        sview = st.segmented_control("Nhóm chỉ tiêu", list(SNAP_VIEWS), key="sr_snap_view") or SNAP_DEFAULT_VIEW
+        st.markdown(snapshot_html(snap, sview), unsafe_allow_html=True)
+        st.caption(f"{len(snap)} mã" + (f" (đã loại {n_all - len(snap)} mã vốn hóa ≤ {SNAP_MIN_CAP:,} tỷ đồng)" if n_all > len(snap) else f" vốn hóa trên {SNAP_MIN_CAP:,} tỷ đồng")
+                   + " theo bảng nguồn, thứ hạng (tổng, tài chính, kinh doanh) giữ nguyên như nguồn, không tính lại trong app. "
+                   "DTT và LNST theo đơn vị của bảng nguồn. Ô \"-\" là nguồn chưa có số liệu. Sửa hoặc thêm mã trong "
+                   f"{SNAP_PATH} (một file cho nhiều ngành).")
 
     # --- Bảng xếp hạng
     st.subheader(f"Bảng xếp hạng theo RS · {period}")

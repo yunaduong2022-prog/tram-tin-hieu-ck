@@ -35,6 +35,7 @@ import sector_rotation as SRT
 import market_view as MV
 import vnindex_view as VV
 import cap_groups as CG
+import cap_filter as CF
 import market_overview as MO
 import my_watchlist as MW
 import my_portfolio as MP
@@ -213,7 +214,7 @@ def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap
             cap_map[code] = cap
 
 
-MIN_CAP_BN = 1000      # chỉ giữ cổ phiếu vốn hóa từ mức này (tỷ đồng) trở lên; mã chưa biết vốn hóa vẫn giữ. Đặt 0 để tắt bộ lọc.
+MIN_CAP_BN = CF.MIN_CAP_BN   # ngưỡng vốn hóa (tỷ đồng) đặt MỘT chỗ ở cap_filter.py; mã chưa biết vốn hóa vẫn giữ. Đặt 0 ở đó để tắt bộ lọc.
 
 
 def market_cap_map(prices: dict) -> dict:
