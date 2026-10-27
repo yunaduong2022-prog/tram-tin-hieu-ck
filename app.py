@@ -2404,9 +2404,12 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                           row=1, col=1)
             ys.append(y)
         fig.add_annotation(x=fx, y=fc["t1"], ax=lx, ay=fc["entry"], axref="x", ayref="y", xref="x", yref="y",
-                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=col_,
-                           text="Dự báo " + ("tăng" if fc["dir"] > 0 else "giảm"), font=dict(size=11, color="#fff"),
-                           bgcolor=col_)
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=col_, text="")
+        # Nhãn đặt ở vùng trống bên phải nến cuối, ngay cạnh mũi tên (dưới mũi tên khi tăng, trên mũi tên khi giảm), 2 dòng cho hẹp, không đè lên nến
+        _up = fc["dir"] > 0
+        fig.add_annotation(x=lx + (fx - lx) * 0.55, y=fc["entry"] + (fc["t1"] - fc["entry"]) * 0.55, xref="x", yref="y",
+                           xanchor="center", yanchor="top" if _up else "bottom", yshift=-10 if _up else 10, showarrow=False,
+                           text="Dự báo<br>" + ("tăng" if _up else "giảm"), font=dict(size=11, color="#fff"), bgcolor=col_, borderpad=3)
 
     # Hull Suite + Supertrend vẽ SAU các lớp giá khác để nằm trên cùng, không bị mây / vùng giá che; tính trên toàn bộ lịch sử rồi cắt phần hiển thị
     if "Hull Suite" in layers:
