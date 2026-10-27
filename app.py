@@ -17,6 +17,7 @@ import fund_guard as FG
 import ichimoku_dual as IDU
 import setups as SU
 import supertrend as SPT
+import stock_drivers as SDV
 import hull_suite as HUL
 import watchlist as WL
 import wyckoff as WYK
@@ -35,17 +36,17 @@ import sector_rotation as SRT
 import market_view as MV
 import vnindex_view as VV
 import cap_groups as CG
+import cap_filter as CF
 import market_overview as MO
 import my_watchlist as MW
 import my_portfolio as MP
-import vip_picks as VP
 import sell_card
 import dry_supply as DS
 import stock_map as SM
 import crosshair as CH
 import draw_tools as DT
 
-st.set_page_config(page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon(), layout="wide")
+st.set_page_config(layout="wide", page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon())
 
 TH.inject()
 st.markdown(WYK.CSS, unsafe_allow_html=True)      # CSS khối ghi chú Wyckoff trong thẻ (wy-*)
@@ -145,9 +146,11 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "Bollinger",
+MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GIÁ TRỊ MA20/MA50 ngày + tuần dưới dòng chỉ số, không vẽ đường
+CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "Wyckoff", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", MA_LAYER, "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -173,13 +176,96 @@ def read_eod_meta() -> dict:
         return {}
 
 
+def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap_tay.csv") -> None:
+    """Số nhập tay trong data/nhap_tay.csv (Mã, Tên công ty, Vốn hóa TT, P/B, ROE) ưu tiên hơn dữ liệu tự động.
+    Ô để trống thì dùng dữ liệu tự động. Số thập phân dùng dấu chấm (dấu phẩy cũng được chấp nhận)."""
+    if not os.path.exists(path):
+        return
+    try:
+        mt = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
+    except Exception:
+        return
+    mt.columns = [str(c).strip() for c in mt.columns]
+
+    def num(v):
+        if not isinstance(v, str) or not v.strip():
+            return None
+        try:
+            return float(v.replace("%", "").replace(" ", "").replace(",", "."))
+        except ValueError:
+            return None
+
+    for _, row in mt.iterrows():
+        code = str(row.get("Mã", "")).strip().upper()
+        if not code or code == "NAN":
+            continue
+        name = row.get("Tên công ty")
+        if isinstance(name, str) and name.strip():
+            fund_map.setdefault(code, {})["Tên công ty"] = name.strip()
+        txt = row.get("Bảng xếp hạng")
+        if isinstance(txt, str) and txt.strip():
+            fund_map.setdefault(code, {})["Bảng xếp hạng"] = txt.strip()
+        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N", "EPS", "Giá trị sổ sách", "KLGD MA20",
+                    "Xếp hạng", "Xếp hạng tài chính", "Xếp hạng kinh doanh"):
+            v = num(row.get(col))
+            if v is not None:
+                fund_map.setdefault(code, {})[col] = v
+        cap = num(row.get("Vốn hóa TT"))
+        if cap is not None:
+            cap_map[code] = cap
+
+
+MIN_CAP_BN = CF.MIN_CAP_BN   # ngưỡng vốn hóa (tỷ đồng) đặt MỘT chỗ ở cap_filter.py; mã chưa biết vốn hóa vẫn giữ. Đặt 0 ở đó để tắt bộ lọc.
+
+
+def market_cap_map(prices: dict) -> dict:
+    """{mã: vốn hóa tỷ đồng}. Ưu tiên tăng dần: data/stock_metadata.csv -> giá đóng cửa x SLCP lưu hành (thong_tin_chung.csv, thiếu thì
+    shares_outstanding.csv) -> ô "Vốn hóa TT" nhập tay trong nhap_tay.csv. prices: {mã: giá đóng cửa mới nhất, đơn vị nghìn đồng}."""
+    cap_map: dict = {}
+    if os.path.exists("data/stock_metadata.csv"):
+        try:
+            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
+            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns):
+                cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        _info = ST._read_csv_by_code(ST.INFO_PATH)
+        _sh = ST._read_csv_by_code(ST.SHARES_PATH)
+        for _c, _p in prices.items():
+            _n = pd.to_numeric(_info.at[_c, "SLCP lưu hành (cp)"], errors="coerce") if (_c in _info.index and "SLCP lưu hành (cp)" in _info.columns) else float("nan")
+            if pd.isna(_n) and _c in _sh.index and "Số CP lưu hành" in _sh.columns:
+                _n = pd.to_numeric(_sh.at[_c, "Số CP lưu hành"], errors="coerce")
+            if pd.notna(_n) and pd.notna(_p) and _n > 0:
+                cap_map[_c] = round(float(_p) * float(_n) / 1e6)
+    except Exception:  # noqa: BLE001
+        pass
+    apply_manual_overrides({}, cap_map)
+    return cap_map
+
+
+def drop_small_caps(raw: pd.DataFrame, min_bn: float = MIN_CAP_BN) -> pd.DataFrame:
+    """Bỏ các mã vốn hóa dưới min_bn tỷ đồng khỏi dữ liệu giá ngay từ đầu (đỡ tốn RAM). Chỉ số (VNINDEX...) và mã chưa có vốn hóa được giữ."""
+    if not min_bn or raw.empty:
+        return raw
+    last = raw.sort_values("Ngày").groupby("Mã")["Giá đóng cửa"].last()
+    caps = market_cap_map({str(c).upper(): float(p) for c, p in last.items() if pd.notna(p)})
+    small = {c for c in last.index
+             if str(c).upper() not in E.INDEX_CODES and pd.notna(caps.get(str(c).upper())) and float(caps[str(c).upper()]) < min_bn}
+    return raw[~raw["Mã"].isin(small)] if small else raw
+
+
+DAILY_KEEP = 750       # số phiên gần nhất của khung Ngày được giữ trong bộ nhớ (khoảng 3 năm). Tuần / Tháng vẫn giữ toàn bộ lịch sử. 0 = giữ hết.
+
+
 @st.cache_data(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...")
 def build_frames(raw: pd.DataFrame, ver: str = "") -> dict:
     parts = {"D": [], "W": [], "M": []}
     for _, g in raw.groupby("Mã"):
         base = g[["Mã", "Ngày"] + E.NUMERIC_COLS]
         for tf in parts:
-            parts[tf].append(E.add_indicators(E.resample_ohlcv(base, tf)))
+            f_ = E.add_indicators(E.resample_ohlcv(base, tf))      # chỉ báo luôn tính trên TOÀN BỘ lịch sử (EMA200, Ichimoku... không đổi giá trị)
+            parts[tf].append(f_.tail(DAILY_KEEP) if tf == "D" and DAILY_KEEP else f_)   # rồi chỉ giữ lại phần đuôi của khung Ngày để đỡ tốn RAM
     frames = {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
     frames["D"] = E.mask_chg_gaps(frames["D"])     # % thay đổi chỉ tính so với phiên kề trước, thiếu phiên thì hiện "—"
     return frames
@@ -307,7 +393,7 @@ else:
         st.stop()
 
 try:
-    raw = E.clean_raw(raw)
+    raw = drop_small_caps(E.clean_raw(raw))        # bỏ mã vốn hóa dưới MIN_CAP_BN tỷ để đỡ tốn RAM
     frames = build_frames(raw, E.ENGINE_VERSION)
 except Exception as e:
     st.error(f"Lỗi khi xử lý dữ liệu: {e}")
@@ -391,16 +477,15 @@ def _wb_rows(key: str) -> dict:
     return t.drop_duplicates("Mã", keep="first").set_index("Mã")[cols].to_dict("index")
 
 
-def _action_ctx(code):
-    """Ngữ cảnh của khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
-    hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py.
-    Hàm này chỉ dựng ctx (dict) để AS.html / AS.plan dùng chung; trả None nếu chưa có giá."""
+def _action_html(code) -> str:
+    """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
+    hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py."""
     try:
         code = str(code)
         g = df[df["Mã"] == code].sort_values("Ngày")
         c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce")
         if c.empty:
-            return None
+            return ""
         ma = {n: (float(c.rolling(n).mean().iloc[-1]) if len(c) >= n else None) for n in (20, 50, 200)}
         w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb12").get(code, {})
         state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
@@ -414,16 +499,7 @@ def _action_ctx(code):
                    div=divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"),
                    wy=WY_TABLE.get(code), sup=d.get("sup") if d.get("ok") else None, res=d.get("res") if d.get("ok") else None,
                    zone=(w.get("Vùng mua từ"), w.get("Vùng mua đến")) if state in WB.STATE_GROUP and WB.STATE_GROUP[state] in WB.BUY_GROUPS else None)
-        return ctx
-    except Exception:
-        return None
-
-
-def _action_html(code) -> str:
-    """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ (quy tắc ở action_summary.py)."""
-    try:
-        ctx = _action_ctx(code)
-        return AS.html(ctx) if ctx else ""
+        return AS.html(ctx)
     except Exception:
         return ""
 
@@ -437,7 +513,7 @@ FLOW_OPTS = {"Vol tăng 3 phiên liên tiếp": "VolStep", "Dòng tiền sớm (
 MA_OPTS = ["Tất cả", "Ngắn hạn - TĂNG (MA10 > MA20)", "Trung hạn - TĂNG (MA20 > MA50 > MA100)",
            "Dài hạn - TĂNG (MA50 > MA100 > MA200)"]
 MA_COL = {MA_OPTS[1]: "Trend_NganHan", MA_OPTS[2]: "Trend_TrungHan", MA_OPTS[3]: "Trend_DaiHan"}
-WY_OPTS = ["Tích lũy", "Phân phối", "Pha A", "Pha B", "Pha C", "Pha D", "Pha E"]
+WY_OPTS = ["Tích lũy", "Phân phối", "Pha C", "Pha D", "Pha E"]
 
 
 def header():
@@ -476,7 +552,7 @@ def filter_panel():
         groups = c1.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
                                 help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
         wy = c2.multiselect("Wyckoff (pha / cấu trúc)", WY_OPTS, default=[], placeholder="Tất cả",
-                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha A/B = mới dừng đà / đang xây nền (chỉ quan sát), Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
+                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
         flow = c3.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), default=[],
                               help="Chọn nhiều mục = phải thoả tất cả")
         search = c4.text_input("Tìm mã", "").upper()
@@ -775,46 +851,9 @@ def _forecast(states: dict) -> str:
     return "Chưa rõ xu hướng"
 
 
-def apply_manual_overrides(fund_map: dict, cap_map: dict, path: str = "data/nhap_tay.csv") -> None:
-    """Số nhập tay trong data/nhap_tay.csv (Mã, Tên công ty, Vốn hóa TT, P/B, ROE) ưu tiên hơn dữ liệu tự động.
-    Ô để trống thì dùng dữ liệu tự động. Số thập phân dùng dấu chấm (dấu phẩy cũng được chấp nhận)."""
-    if not os.path.exists(path):
-        return
-    try:
-        mt = pd.read_csv(path, dtype=str, encoding="utf-8-sig")
-    except Exception:
-        return
-    mt.columns = [str(c).strip() for c in mt.columns]
-
-    def num(v):
-        if not isinstance(v, str) or not v.strip():
-            return None
-        try:
-            return float(v.replace("%", "").replace(" ", "").replace(",", "."))
-        except ValueError:
-            return None
-
-    for _, row in mt.iterrows():
-        code = str(row.get("Mã", "")).strip().upper()
-        if not code or code == "NAN":
-            continue
-        name = row.get("Tên công ty")
-        if isinstance(name, str) and name.strip():
-            fund_map.setdefault(code, {})["Tên công ty"] = name.strip()
-        txt = row.get("Bảng xếp hạng")
-        if isinstance(txt, str) and txt.strip():
-            fund_map.setdefault(code, {})["Bảng xếp hạng"] = txt.strip()
-        for col in ("P/B", "ROE", "P/E", "P/B TB 3N", "P/E TB 3N", "EPS", "Giá trị sổ sách", "KLGD MA20",
-                    "Xếp hạng", "Xếp hạng tài chính", "Xếp hạng kinh doanh"):
-            v = num(row.get(col))
-            if v is not None:
-                fund_map.setdefault(code, {})[col] = v
-        cap = num(row.get("Vốn hóa TT"))
-        if cap is not None:
-            cap_map[code] = cap
-
-
 _TF_HEAD = {"D": ("📅 D (Ngày)", "#10B981"), "W": ("🗓️ W (Tuần)", "#3B82F6"), "M": ("🏛️ M (Tháng)", "#8B5CF6")}
+
+
 
 
 def sup_text(r):
@@ -1106,7 +1145,7 @@ def page_filter():
                         # các selectbox có key riêng giữ giá trị cũ -> đồng bộ luôn để mở đúng mã vừa bấm
                         for _k in ("mtf_code", "tab_code"):
                             st.session_state[_k] = code
-                        NAV.goto("Cổ phiếu", "Tổng quát")
+                        NAV.goto("Cổ phiếu", "Biểu đồ")
 
 # ------------------------------------------------------------------ TRANG: CỔ PHIẾU CHỜ MUA TRONG TUẦN
 @st.cache_data(show_spinner="Đang nhận diện trạng thái chờ mua cho cả rổ...")
@@ -1143,25 +1182,8 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
 @st.cache_data(show_spinner=False)
 def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     """Vốn hóa (data/stock_metadata.csv), tên/P/B/ROE (data/fundamentals.csv) và số nhập tay - cùng nguồn với thẻ ở Bộ lọc."""
-    cap_map, fund_map = {}, {}
-    if os.path.exists("data/stock_metadata.csv"):
-        try:
-            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
-            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
-        except Exception: pass
-    # Vốn hóa = giá đóng cửa mới nhất x số CP lưu hành (giá nghìn đồng x số CP / 1e6 = tỷ đồng); số CP lấy ở thong_tin_chung.csv, thiếu thì shares_outstanding.csv
-    try:
-        _info = ST._read_csv_by_code(ST.INFO_PATH)
-        _sh = ST._read_csv_by_code(ST.SHARES_PATH)
-        _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
-        for _c, _p in _px.items():
-            _n = pd.to_numeric(_info.at[_c, "SLCP lưu hành (cp)"], errors="coerce") if (_c in _info.index and "SLCP lưu hành (cp)" in _info.columns) else float("nan")
-            if pd.isna(_n) and _c in _sh.index and "Số CP lưu hành" in _sh.columns:
-                _n = pd.to_numeric(_sh.at[_c, "Số CP lưu hành"], errors="coerce")
-            if pd.notna(_n) and pd.notna(_p) and _n > 0:
-                cap_map[_c] = round(float(_p) * float(_n) / 1e6)
-    except Exception:  # noqa: BLE001
-        pass
+    _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
+    cap_map = market_cap_map(_px)
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
     return cap_map, fund_map
@@ -1183,6 +1205,77 @@ def _wb_meta(code: str) -> dict:
             "BVPS": fmt(fd.get("Giá trị sổ sách"), "{:,.0f}"), "KLGD MA20": fmt(fd.get("KLGD MA20"), "{:,.0f}"),
             "Xếp hạng": (f"{int(fd['Xếp hạng'])} (TC {int(fd['Xếp hạng tài chính'])} · KD {int(fd['Xếp hạng kinh doanh'])}) · {fd.get('Bảng xếp hạng', '')}"
                          if pd.notna(fd.get("Xếp hạng")) and pd.notna(fd.get("Xếp hạng tài chính")) and pd.notna(fd.get("Xếp hạng kinh doanh")) else "")}
+
+
+TOP_NGANH_N = 5       # ghi chú "TOP n NGÀNH" dưới Vốn hóa và ROE chỉ hiện khi mã nằm trong n mã đầu của ngành
+
+
+def _cap_rank_note(code: str) -> str:
+    """Dưới ô Vốn hóa của biểu đồ: hai dòng "TOP 1 NGÀNH CAO SU." / "Chiếm 89.7% vốn hóa toàn ngành." nếu vốn hóa của mã thuộc 5 mã lớn nhất ngành.
+    Ngành = nhóm ngành trong watchlist.py (không tính VN30 / nhóm cũ). Mã thuộc nhiều ngành thì lấy ngành mà mã có thứ hạng cao nhất.
+    Ngành phải có ít nhất 3 mã có vốn hóa. Tỷ trọng chỉ hiện khi MỌI mã trong ngành đều có số vốn hóa (thiếu số thì tỷ trọng sai nên bỏ)."""
+    code = str(code).upper()
+    cap_map, _ = _wb_meta_maps(WY_KEY)
+    def cap_of(c):
+        try:
+            v = float(cap_map.get(str(c).upper()))
+            return v if v > 0 else None
+        except (TypeError, ValueError):
+            return None
+    mine = cap_of(code)
+    if mine is None:
+        return ""
+    best = None                                   # (thứ hạng, tỷ trọng hoặc None, tên ngành)
+    for sec in MEMBER.get(code, []):
+        if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:     # Họ Vingroup là nhóm tập đoàn, không phải ngành
+            continue
+        members = {str(x).upper() for x in WL.GROUPS[sec]} | {code}
+        caps = {m: cap_of(m) for m in members}
+        known = {m: v for m, v in caps.items() if v is not None}
+        if len(known) < 3:                        # ngành chỉ 1-2 mã có số thì "TOP 1 NGÀNH" vô nghĩa
+            continue
+        rank = 1 + sum(1 for m, v in known.items() if m != code and v > mine)
+        share = mine / sum(known.values()) * 100 if len(known) == len(members) else None
+        if best is None or rank < best[0]:
+            best = (rank, share, sec)
+    if best is None or best[0] > TOP_NGANH_N:
+        return ""
+    txt = f"TOP {best[0]} NGÀNH {str(best[2]).upper()}."
+    if best[1] is not None:
+        txt += f"\nChiếm {best[1]:.1f}% vốn hóa toàn ngành."
+    return txt
+
+
+def _roe_rank_note(code: str) -> str:
+    """Dưới ô ROE của biểu đồ: "TOP 1 NGÀNH CAO SU." nếu ROE của mã thuộc 5 mã cao nhất ngành.
+    Chỉ xếp hạng khi MỌI mã của ngành có trong app đều đã có ROE (thiếu số của vài mã thì thứ hạng không đáng tin, nên không ghi).
+    Ngành phải có ít nhất 3 mã; không tính VN30 / nhóm cũ / Họ Vingroup. Mã thuộc nhiều ngành thì lấy ngành có thứ hạng cao nhất."""
+    code = str(code).upper()
+    _, fund_map = _wb_meta_maps(WY_KEY)
+    def roe_of(c):
+        try:
+            v = float((fund_map.get(str(c).upper()) or {}).get("ROE"))
+            return None if pd.isna(v) else v
+        except (TypeError, ValueError):
+            return None
+    mine = roe_of(code)
+    if mine is None:
+        return ""
+    universe = set(res_df["Mã"].astype(str).str.upper())
+    best = None
+    for sec in MEMBER.get(code, []):
+        if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:
+            continue
+        members = ({str(x).upper() for x in WL.GROUPS[sec]} & universe) | {code}
+        vals = {m: roe_of(m) for m in members}
+        if len(members) < 3 or any(v is None for v in vals.values()):
+            continue
+        rank = 1 + sum(1 for m, v in vals.items() if m != code and v > mine)
+        if best is None or rank < best[0]:
+            best = (rank, sec)
+    if best is None or best[0] > TOP_NGANH_N:
+        return ""
+    return f"TOP {best[0]} NGÀNH {str(best[1]).upper()}."
 
 
 def _wb_ma_of(code: str) -> dict:
@@ -1221,7 +1314,7 @@ def _wb_card(r, group):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = r["Mã"]
-            NAV.goto("Cổ phiếu", "Tổng quát")
+            NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
 # ------------------------------------------------------------------ THẺ DÙNG CHUNG CHO CÁC TRANG DANH SÁCH
@@ -1243,7 +1336,7 @@ def _open_chart_of(code: str):
     st.session_state["selected_code"] = code
     for _k in ("mtf_code", "tab_code"):
         st.session_state[_k] = code
-    NAV.goto("Cổ phiếu", "Tổng quát")
+    NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
 def _tone_card(r, tone: str, key: str):
@@ -1444,8 +1537,9 @@ def page_buy_now():
     _rt_focus_scroll()
 
 
-def page_sector_ranking():
-    """Ngành > Vị thế cổ phiếu ngành: dùng đúng thẻ MUA / CHỜ MUA, thêm khối Vị thế trong ngành."""
+def page_sector_ranking(mode: str = "rank"):
+    """Ngành > Xếp hạng cổ phiếu (mode="rank"): bảng xếp hạng cơ bản ngành, bảng RS kèm P/E, P/B, ROE, bốn góc nhìn dạng thẻ MUA / CHỜ MUA.
+    Ngành > Vị thế cổ phiếu ngành (mode="profit"): doanh thu và lợi nhuận của các cổ phiếu trong ngành."""
     header()
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     t = _wb_table()
@@ -1465,9 +1559,9 @@ def page_sector_ranking():
                 st.session_state["selected_code"] = code
                 for _k in ("mtf_code", "tab_code"):
                     st.session_state[_k] = code
-                NAV.goto("Cổ phiếu", "Tổng quát")
+                NAV.goto("Cổ phiếu", "Biểu đồ")
 
-    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt)
+    SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt, mode=mode)
 
 
 def _wl_card(r, u, ver):
@@ -1484,7 +1578,7 @@ def _wl_card(r, u, ver):
             st.session_state["selected_code"] = code
             for _k in ("mtf_code", "tab_code"):
                 st.session_state[_k] = code
-            NAV.goto("Cổ phiếu", "Tổng quát")
+            NAV.goto("Cổ phiếu", "Biểu đồ")
         if b2.button("🗑 Bỏ theo dõi", key=f"wl_rm_{code}", use_container_width=True):
             MW.remove_code(code)
             st.session_state["wl_ver"] = ver + 1
@@ -1500,32 +1594,10 @@ def page_watchlist():
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
+        NAV.goto("Cổ phiếu", "Biểu đồ")
 
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
     _rt_focus_scroll()
-
-
-def page_vip_picks():
-    st.title("🔥 Khuyến nghị khách hàng")
-    header()
-
-    def _open_chart(code: str):
-        st.session_state["selected_code"] = code
-        for _k in ("mtf_code", "tab_code"):
-            st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
-
-    def _open_filter():
-        NAV.goto("Bộ lọc & Backtest", "Lọc tất cả CP")
-
-    def _meta(code: str):
-        m = _wb_meta(code)
-        sec = str(m.get("Ngành", ""))
-        return m.get("Tên", ""), ("" if sec.startswith("Khác") else sec.split(",")[0].strip())
-
-    cap_map, fund_map = _wb_meta_maps(WY_KEY)
-    VP.render(res_df, frames["D"], _wb_table(), fund_map, _meta, _action_ctx, _open_chart, _open_filter)
 
 
 def page_my_portfolio():
@@ -1536,7 +1608,7 @@ def page_my_portfolio():
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
+        NAV.goto("Cổ phiếu", "Biểu đồ")
 
     MP.render(_wb_table(), res_df, _open_chart, latest_date)
 
@@ -1560,7 +1632,7 @@ def page_realtime_filter():
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        NAV.goto("Cổ phiếu", "Tổng quát")
+        NAV.goto("Cổ phiếu", "Biểu đồ")
 
     def _mtf(code: str):
         try:
@@ -2030,6 +2102,8 @@ def setup_card(g_day):
                         f'Trong backtest giá chạm mốc này trong 40 phiên khoảng {_tg["prob"]}% số lần, nhưng mốc chỉ cách giá vài % trong khi cắt lỗ xa hơn, '
                         'nên chốt hết ở đó không có lãi; chốt một nửa còn làm giảm lãi trung bình (+1,4% so với +2,6% khi kéo theo Supertrend). '
                         'Coi đây là mốc cản để tự quyết chốt bớt; cách thoát chính vẫn là đóng cửa dưới Supertrend.</div>')
+        if p.get("below_entry"):
+            html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đang dưới điểm vào {abs(p["ext"]) * 100:.1f}%: chưa mua, chờ đóng cửa lấy lại trên {fp(p["entry"])}.</div>')
         if s_ in ("BOTTOM", "BASE_HL", "BREAKOUT") and p["ext"] is not None and p["ext"] > 0.05:
             html.append(f'<div class="muted" style="margin-top:6px;color:#F5B942">Giá hiện tại đã cao hơn điểm vào {p["ext"] * 100:.1f}%: đã chạy xa, tránh đuổi; chờ nhịp lùi về gần đỉnh nền.</div>')
     elif s_ == "RANGE":
@@ -2218,7 +2292,7 @@ DATE_TICK_STOPS = [
     dict(dtickrange=[31000000000, None], value="%Y"),
 ]
 
-PX_UP, PX_DOWN, PX_FLAT = "#2BD6A2", "#F2506E", "#F5C84C"     # giá tăng xanh / giảm đỏ / không đổi vàng
+PX_UP, PX_DOWN, PX_FLAT = "#089981", "#F23645", "#F5C84C"     # giá tăng xanh / giảm đỏ / không đổi vàng
 
 
 def _price_change(code: str) -> dict:
@@ -2258,7 +2332,7 @@ def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
     prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else float("nan")
     o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
     up = (c >= prev) if pd.notna(prev) else (c >= o)
-    col = "#2BD6A2" if up else "#F2506E"
+    col = "#089981" if up else "#F23645"
     head = f'<span style="color:#8B95A5;font-size:14px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
     pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
     chg = ""
@@ -2283,7 +2357,28 @@ def _brand_tag() -> str:
             f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
 
 
-def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan"):
+def _ma_row_html(code) -> str:
+    """Dòng giá trị MA20(D) · MA20(W) · MA50(D) · MA50(W): lấy MA cuối của khung Ngày / Tuần (tính trên toàn lịch sử, nến tuần cuối là tuần đang chạy)."""
+    parts = []
+    for col, tf_, nm, color in (("MA20", "D", "MA20(D)", "#F5A623"), ("MA20", "W", "MA20(W)", "#FF7A1A"),
+                                ("MA50", "D", "MA50(D)", "#3B82F6"), ("MA50", "W", "MA50(W)", "#A78BFA")):
+        try:
+            f_ = frames[tf_]
+            v = pd.to_numeric(f_.loc[f_["Mã"] == code, col], errors="coerce").iloc[-1]
+        except Exception:  # noqa: BLE001
+            v = float("nan")
+        parts.append(f'<span style="color:{color}">{nm}</span> <b style="color:#E6EDF3">{"-" if pd.isna(v) else f"{v:,.2f}"}</b>')
+    return "&nbsp;&nbsp;&nbsp;".join(parts)
+
+
+def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix="",
+               height_px=None, hide_legend=False, title_text=None, code_w=0.20, hdr_right=False):
+    """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D").
+    height_px: chiều cao nền (px) thay cho mặc định, mỗi khung chỉ báo phụ thứ 2 trở đi cộng thêm 100px (Livestream dùng để hai biểu đồ vừa một màn hình).
+    hide_legend: ẩn dòng chú giải các đường (và thu gọn khoảng trống phía trên).
+    hdr_right: dòng giá trị của các khung chỉ báo phụ (VOL / MA20, MACD, RSI...) đặt ở góc dưới bên phải khung thay vì góc trên trái (Livestream).
+    code_w: phần bề ngang (0-1) dành cho mã + giá ở đầu biểu đồ; tên công ty, O/H/L/C và các chỉ số bắt đầu từ mốc này (cột hẹp như Livestream cần số lớn hơn).
+    title_text: không có metrics thì thay dòng thương hiệu TRẠM TÍN HIỆU | MIN TRADING bằng chữ này (Livestream ghi KHUNG TUẦN)."""
     g = a["g"]
     t = g.tail(bars or BARS_SHOWN[tf])
     x = t["Ngày"]
@@ -2295,6 +2390,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
+    if height_px:
+        height = height_px + 100 * max(0, len(subs) - 1)
     # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
     # hộp thông tin khi rê chuột vào nến: "T6, 24/10/2026" + Mở / Cao / Thấp / Đóng (giống biểu đồ VNINDEX)
@@ -2303,8 +2400,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             for d_, o_, h_, l_, c_, v_ in zip(x, t["Giá mở cửa"], t["Giá cao nhất"], t["Giá thấp nhất"], t["Giá đóng cửa"], _kl)]
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
                                  close=t["Giá đóng cửa"], name=code, whiskerwidth=0, text=_tip, hoverinfo="text",      # thân nến đặc, cùng màu với biểu đồ VNINDEX
-                                 increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
-                                 decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=1, col=1)
+                                 increasing=dict(line=dict(color=CANDLE_UP, width=1), fillcolor=CANDLE_UP),
+                                 decreasing=dict(line=dict(color=CANDLE_DN, width=1), fillcolor=CANDLE_DN)), row=1, col=1)
 
     def line(col, name, color, w=1.2, dash=None):
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
@@ -2333,9 +2430,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         for z in a["zones"]:
             red = z["kind"] == "Kháng cự"
             fig.add_hrect(y0=z["lo"], y1=z["hi"], row=1, col=1, line_width=0,
-                          fillcolor="rgba(242,80,110,.10)" if red else "rgba(43,214,162,.12)",
+                          fillcolor="rgba(242,54,69,.10)" if red else "rgba(8,153,129,.12)",
                           annotation_text=f'{z["kind"]} {z["n"]}x', annotation_position="top left",
-                          annotation_font=dict(size=9, color="#F2506E" if red else "#2BD6A2"))
+                          annotation_font=dict(size=9, color="#F23645" if red else "#089981"))
     if enough and "Elliott" in layers and a["elliott"]["points"]:
         pts = a["elliott"]["points"]
         fig.add_trace(go.Scatter(x=[g["Ngày"].iat[i] for i, _, _ in pts], y=[p for _, p, _ in pts],
@@ -2344,7 +2441,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     wy = a.get("wy") if enough and "Wyckoff" in layers else None
     if wy and wy["tr"]["e_date"] >= x.iloc[0]:
         tr_ = wy["tr"]
-        wc = {"acc": "43,214,162", "dist": "242,80,110"}.get(wy["kind"], "107,114,128")
+        wc = {"acc": "8,153,129", "dist": "242,54,69"}.get(wy["kind"], "107,114,128")
         xs0 = max(tr_["s_date"], x.iloc[0])
         fig.add_shape(type="rect", x0=xs0, x1=tr_["e_date"], y0=tr_["bot"], y1=tr_["top"], row=1, col=1,
                       line=dict(width=1.3, color=f"rgb({wc})"), fillcolor=f"rgba({wc},0.07)", layer="below")
@@ -2362,28 +2459,33 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                      marker=dict(symbol="diamond", size=8, color=f"rgb({wc})"),
                                      hovertext=[f'{e["label"]}: {e["txt"]}' for e in evs], hoverinfo="text+x"), row=1, col=1)
     if "Tín hiệu quá khứ" in layers:
-        for d, sym, color, col, off, nm in ((1, "triangle-up", "#2BD6A2", "Giá thấp nhất", 0.985, "Mua"),
-                                            (-1, "triangle-down", "#F2506E", "Giá cao nhất", 1.015, "Bán")):
+        for d, sym, color, col, off, nm in ((1, "triangle-up", "#089981", "Giá thấp nhất", 0.985, "Mua T+"),
+                                            (-1, "triangle-down", "#F23645", "Giá cao nhất", 1.015, "Bán T+")):
             s_ = t[t["PV_signal"] == d]
             if not s_.empty:
-                fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers", name=nm,
+                fig.add_trace(go.Scatter(x=s_["Ngày"], y=s_[col] * off, mode="markers+text", name=nm,
                                          marker=dict(symbol=sym, size=11, color=color),
+                                         text=[nm] * len(s_), textposition="bottom center" if d > 0 else "top center",   # chữ ngay cạnh mũi tên: Mua T+ ở dưới, Bán T+ ở trên
+                                         textfont=dict(size=11, color=color),
                                          hovertext=[f"{nm}: {E.PV_LABEL[c]}<br>Vol {v:.1f}x MA10"
                                                     for c, v in zip(s_["PV_code"], s_["Vol_vs_MA10"])],
                                          hoverinfo="text+x"), row=1, col=1)
     if fc:
-        lx, col_ = x.iloc[-1], ("#F2506E" if fc["dir"] < 0 else "#2BD6A2")
-        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#F2506E", "dash"),
-                                     ("Mục tiêu 1", fc["t1"], "#2BD6A2", "dash"), ("Mục tiêu 2", fc["t2"], "#2BD6A2", "dot")):
+        lx, col_ = x.iloc[-1], ("#F23645" if fc["dir"] < 0 else "#089981")
+        for name, y, color, dash in (("Vào lệnh", fc["entry"], "#6B7280", "dot"), ("Cắt lỗ", fc["sl"], "#F23645", "dash"),
+                                     ("Mục tiêu 1", fc["t1"], "#089981", "dash"), ("Mục tiêu 2", fc["t2"], "#089981", "dot")):
             fig.add_trace(go.Scatter(x=[lx, fx], y=[y, y], mode="lines+text", text=["", f"{name} {y:,.2f}"],
                                      textposition="top left", textfont=dict(size=9, color=color),
                                      line=dict(width=1, dash=dash, color=color), showlegend=False, hoverinfo="skip"),
                           row=1, col=1)
             ys.append(y)
         fig.add_annotation(x=fx, y=fc["t1"], ax=lx, ay=fc["entry"], axref="x", ayref="y", xref="x", yref="y",
-                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=col_,
-                           text="Dự báo " + ("tăng" if fc["dir"] > 0 else "giảm"), font=dict(size=11, color="#fff"),
-                           bgcolor=col_)
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=col_, text="")
+        # Nhãn đặt ở vùng trống bên phải nến cuối, ngay cạnh mũi tên (dưới mũi tên khi tăng, trên mũi tên khi giảm), 2 dòng cho hẹp, không đè lên nến
+        _up = fc["dir"] > 0
+        fig.add_annotation(x=lx + (fx - lx) * 0.55, y=fc["entry"] + (fc["t1"] - fc["entry"]) * 0.55, xref="x", yref="y",
+                           xanchor="center", yanchor="top" if _up else "bottom", yshift=-10 if _up else 10, showarrow=False,
+                           text="Dự báo<br>" + ("tăng" if _up else "giảm"), font=dict(size=11, color="#fff"), bgcolor=col_, borderpad=3)
 
     # Hull Suite + Supertrend vẽ SAU các lớp giá khác để nằm trên cùng, không bị mây / vùng giá che; tính trên toàn bộ lịch sử rồi cắt phần hiển thị
     if "Hull Suite" in layers:
@@ -2403,7 +2505,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         vol = vol_all.loc[t.index]
         up_ = (t["Giá đóng cửa"] >= t["Giá mở cửa"]).to_numpy()
         fig.add_trace(go.Bar(x=x, y=vol, name="Khối lượng", showlegend=False,
-                             marker_color=np.where(up_, "#2BD6A2", "#F2506E")), row=r, col=1)
+                             marker_color=np.where(up_, "rgba(8,153,129,.5)", "rgba(242,54,69,.5)")), row=r, col=1)
         fig.add_trace(go.Scatter(x=x, y=vol_ma20, name="MA20 KL", line=dict(width=1.4, color="#F59E0B")), row=r, col=1)
         fig.update_yaxes(title_text="Khối lượng · MA20", title_font_size=10, row=r, col=1)
         r += 1
@@ -2416,8 +2518,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                      for d_, o_, h_, l_, c_ in zip(_vi["Ngày"], _vi["Giá mở cửa"], _vi["Giá cao nhất"], _vi["Giá thấp nhất"], _vi["Giá đóng cửa"])]
             fig.add_trace(go.Candlestick(x=_vi["Ngày"], open=_vi["Giá mở cửa"], high=_vi["Giá cao nhất"], low=_vi["Giá thấp nhất"],
                                          close=_vi["Giá đóng cửa"], name="VNINDEX", whiskerwidth=0, text=_vtip, hoverinfo="text", showlegend=False,
-                                         increasing=dict(line=dict(color=VV.UP, width=1), fillcolor=VV.UP),
-                                         decreasing=dict(line=dict(color=VV.DN, width=1), fillcolor=VV.DN)), row=r, col=1)
+                                         increasing=dict(line=dict(color=CANDLE_UP, width=1), fillcolor=CANDLE_UP),
+                                         decreasing=dict(line=dict(color=CANDLE_DN, width=1), fillcolor=CANDLE_DN)), row=r, col=1)
             _vc = _vi["Giá đóng cửa"]
             _vlast = float(_vc.iloc[-1])
             _vchg = (_vlast / float(_vc.iloc[-2]) - 1) * 100 if len(_vc) > 1 else 0.0
@@ -2438,7 +2540,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         rs_t, rs_ma = rs_t / _base * 100, rs_ma / _base * 100
         _above = (rs_t >= rs_ma).to_numpy()
         fig.add_hline(y=100, line_dash="dot", line_color="#9CA3AF", line_width=1, row=r, col=1)
-        fig.add_trace(go.Scatter(x=x, y=rs_t, name="RS vs VNINDEX", line=dict(width=1.6, color="#2BD6A2" if _above[-1] else "#F2506E"),
+        fig.add_trace(go.Scatter(x=x, y=rs_t, name="RS vs VNINDEX", line=dict(width=1.6, color="#089981" if _above[-1] else "#F23645"),
                                  hovertemplate="RS %{y:.1f}<extra></extra>"), row=r, col=1)
         fig.add_trace(go.Scatter(x=x, y=rs_ma, name="MA20 RS", line=dict(width=1.2, color="#F59E0B"),
                                  hovertemplate="MA20 RS %{y:.1f}<extra></extra>"), row=r, col=1)
@@ -2446,7 +2548,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         r += 1
     if "MACD" in subs:
         fig.add_trace(go.Bar(x=x, y=t["MACD_hist"], name="Hist", showlegend=False,
-                             marker_color=np.where(t["MACD_hist"] >= 0, "#2BD6A2", "#F2506E")), row=r, col=1)
+                             marker_color=np.where(t["MACD_hist"] >= 0, "#089981", "#F23645")), row=r, col=1)
         fig.add_trace(line("MACD", "MACD", "#3B82F6", 1), row=r, col=1)
         fig.add_trace(line("MACD_sig", "Tín hiệu", "#F59E0B", 1), row=r, col=1)
         fig.update_yaxes(title_text="MACD 12-26-9", title_font_size=10, row=r, col=1)
@@ -2462,7 +2564,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             for s_ in DV.detect(g, tf):
                 if pd.Timestamp(s_["d2"]) < x.iloc[0]:
                     continue
-                cl_ = "#2BD6A2" if s_["dir"] == "up" else "#F2506E"
+                cl_ = "#089981" if s_["dir"] == "up" else "#F23645"
                 fig.add_trace(go.Scatter(x=[s_["d1"], s_["d2"]], y=[s_["r1"], s_["r2"]], mode="lines+markers", showlegend=False,
                                          line=dict(width=1.6, color=cl_), marker=dict(size=6, color=cl_),
                                          hovertext=s_["name"], hoverinfo="text"), row=r, col=1)
@@ -2485,7 +2587,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_yaxes(side="right", title_text=None)
     last_c = float(t["Giá đóng cửa"].iloc[-1])
     prev_c = float(t["Giá đóng cửa"].iloc[-2]) if len(t) > 1 else last_c
-    tag_col = "#2BD6A2" if last_c >= prev_c else "#F2506E"
+    tag_col = "#089981" if last_c >= prev_c else "#F23645"
     fig.add_hline(y=last_c, line_dash="dot", line_color=tag_col, line_width=1, row=1, col=1)
     fig.add_annotation(xref="paper", yref="y", x=1, y=last_c, xanchor="left", yanchor="middle", showarrow=False,
                        text=f"<b>{last_c:,.2f}</b>", font=dict(size=11, color="#FFFFFF"), bgcolor=tag_col, borderpad=3)
@@ -2493,16 +2595,20 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     def _fv(v):                                   # 8.97M / 125K / 950
         return "-" if pd.isna(v) else (f"{v / 1e6:,.2f}M" if abs(v) >= 1e6 else f"{v / 1e3:,.1f}K" if abs(v) >= 1e4 else f"{v:,.0f}")
 
-    def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo
+    def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo (hdr_right: góc dưới bên phải)
         if sub in subs:
             dom = fig.get_subplot(2 + subs.index(sub), 1).yaxis.domain
-            fig.add_annotation(xref="paper", yref="paper", x=0.004, y=dom[1], xanchor="left", yanchor="top", showarrow=False,
-                               align="left", text=html_, font=dict(size=11, color="#8B95A5"))
+            if hdr_right:
+                fig.add_annotation(xref="paper", yref="paper", x=0.996, y=dom[0], xanchor="right", yanchor="bottom", yshift=4, showarrow=False,
+                                   align="right", text=html_, font=dict(size=11, color="#8B95A5"))
+            else:
+                fig.add_annotation(xref="paper", yref="paper", x=0.004, y=dom[1], xanchor="left", yanchor="top", showarrow=False,
+                                   align="left", text=html_, font=dict(size=11, color="#8B95A5"))
     lr = t.iloc[-1]
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
     if "VNINDEX" in subs:
-        _vcol = "#2BD6A2" if _vchg >= 0 else "#F2506E"
+        _vcol = "#089981" if _vchg >= 0 else "#F23645"
         _hdr("VNINDEX", f'<span style="font-size:22px"><b style="color:#CBD2DC">VNINDEX</b></span>  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
              else "VNINDEX: chưa có dữ liệu trong vùng đang xem")
     if "RS vs VNINDEX" in subs:
@@ -2533,9 +2639,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         others = [m for m in metrics if m is not price_m]
         NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
         NAME_WRAP = 90                                  # tên công ty hiện trên 1 hàng ngang (tên dài nhất ~63 ký tự); chỉ xuống dòng khi dài bất thường
-        name_lines = textwrap.wrap(_chart_name(code) or "", NAME_WRAP)
+        _nm = _chart_name(code) or ""
+        name_lines = textwrap.wrap(_nm + name_suffix if _nm else "", NAME_WRAP)
         top, bot = 150, 10
-        code_w = 0.20                                  # phần bên trái dành cho mã + giá
         # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
         # nằm ngang hàng đáy chỉ số); tên nhiều dòng thì mã nâng thêm theo để vẫn thẳng hàng với dòng tên đầu tiên.
         _dy = 33 + NAME_LH * (max(1, len(name_lines)) - 1)
@@ -2562,13 +2668,20 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
                                hovertext=m.get("tip"))
             if m.get("sub"):
-                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join(textwrap.wrap(str(m["sub"]), 34)),
+                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
         # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
         brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
         BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
         top += BRAND_H
-        height += BRAND_H - 80                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
+        height += BRAND_H - 80
+        _ma_row = _ma_row_html(code) if MA_LAYER in layers else ""
+        _ex = 26 if _ma_row else 0                    # chừa thêm 26px cho dòng MA ngay dưới dòng chỉ số
+        top += _ex
+        height += _ex                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
+        if hide_legend:                                # không có dòng chú giải thì bỏ phần lề trên dành cho nó (thương hiệu cao nhất ở brand_y + ~34px)
+            top -= 72
+            height -= 72
         ph = height - top - bot
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=brand_y, showarrow=False,
                            text=_brand_tag(), font=dict(size=22))
@@ -2578,25 +2691,35 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                font=dict(size=NAME_PX, color="#E6EDF3"))
         fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
                            align="left", text=_ohlc_header(code, tf, g))
+        if _ma_row:
+            for _an in fig.layout.annotations:           # đẩy cụm chỉ số phía trên lên 26px, nhường chỗ cho dòng MA sát mép trên biểu đồ
+                if _an.xref == "paper" and _an.yref == "paper" and _an.y == 1:
+                    _an.yshift = (_an.yshift or 0) + _ex
+            fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=4, showarrow=False,
+                               align="left", text=_ma_row, font=dict(size=13))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
-                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H + _ex) / ph, font=dict(size=10)))
     elif mobile:
         # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=58, showarrow=False,
-                           text=_brand_tag(), font=dict(size=22))
-        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=96, b=10),
+        _title = (f'<b style="color:#E6EDF3">{htmllib.escape(title_text)}</b>' if title_text else _brand_tag())
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=(12 if hide_legend else 58), showarrow=False,
+                           text=_title, font=dict(size=22))
+        fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=(50 if hide_legend else 96), b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
+    fig.update_layout(meta=dict(vn_code=str(code), vn_tf=tf))      # draw_tools.py dựa vào đây để gắn thanh vẽ đúng biểu đồ (Livestream có cả Ngày và Tuần)
+    if hide_legend:
+        fig.update_layout(showlegend=False)
     if "Dual Ichimoku" in layers:
         # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
         _yr = fig.layout.yaxis.range
         _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
         _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
         if _ppu > 0:
-            _cur, _gap = last_c * _ppu, 15.0
+            _cur, _gap = last_c * _ppu, 23.0
             _pos = []
             for _v, _bg, _fg in IDU.price_tags(g, len(t), lambda k_: future_date(_last, tf, k_)):
                 if _yr[0] <= _v <= _yr[1]:
@@ -2647,7 +2770,7 @@ def metrics_html(metrics, code="", name="") -> str:
     for m in metrics:
         if m is price_m:
             continue
-        sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"]))}</div>' if m.get("sub") else "")
+        sub = (f'<div class="cm-sub" style="color:{m.get("color", "#8B95A5")}">{htmllib.escape(str(m["sub"])).replace(chr(10), "<br>")}</div>' if m.get("sub") else "")
         cells.append(f'<div class="cm-item"><div class="cm-lab">{htmllib.escape(m["label"])}</div>'
                      f'<div class="cm-val">{htmllib.escape(str(m["value"]))}</div>{sub}</div>')
     head = ""
@@ -2670,6 +2793,46 @@ def metrics_html(metrics, code="", name="") -> str:
             + head + '<div class="cm-grid">' + "".join(cells) + '</div>')
 
 
+# Thanh chọn khoảng thời gian dưới biểu đồ (kiểu TradingView): mỗi mốc = số nến hiển thị gần nhất; trục giá tự co giãn theo vùng chọn
+RANGE_OPTS = {"D": [("5D", 5), ("1M", 22), ("3M", 65), ("6M", 130), ("1Y", 250), ("2Y", 500), ("3Y", 750), ("Tất cả", None)],
+              "W": [("3M", 13), ("6M", 26), ("1Y", 52), ("2Y", 104), ("3Y", 156), ("5Y", 260), ("Tất cả", None)],
+              "M": [("1Y", 12), ("2Y", 24), ("3Y", 36), ("5Y", 60), ("10Y", 120), ("Tất cả", None)]}
+RANGE_DEFAULT = {"D": "1Y", "W": "3Y", "M": "10Y"}
+
+
+def _range_opts(tf: str, n_total: int) -> list:
+    """Chỉ giữ các mốc không dài hơn số nến thật sự có của mã (mã / khung ngắn hơn 10 năm thì không hiện 10Y); luôn có 'Tất cả'."""
+    return [lb for lb, n in RANGE_OPTS[tf] if n is None or n <= n_total]
+
+
+def _range_key(tf: str, n_total: int, ns: str = "") -> str:
+    return f"{ns}rng_{tf}_{len(_range_opts(tf, n_total))}"        # khoá đổi theo danh sách mốc để không giữ lại lựa chọn không còn tồn tại
+
+
+def _range_default(tf: str, opts: list, dflt=None) -> str:
+    d = dflt or RANGE_DEFAULT[tf]
+    return d if d in opts else "Tất cả"
+
+
+def range_bars(tf: str, n_total: int, ns: str = "", dflt=None) -> int:
+    """Số nến theo mốc đang chọn (đọc từ session_state nên dùng được trước khi thanh chọn được vẽ ở dưới biểu đồ)."""
+    opts = _range_opts(tf, n_total)
+    sel = st.session_state.get(_range_key(tf, n_total, ns))
+    if sel not in opts:
+        sel = _range_default(tf, opts, dflt)
+    n = dict(RANGE_OPTS[tf]).get(sel)
+    return max(2, min(n or n_total, n_total))
+
+
+def range_bar_ui(tf: str, n_total: int, ns: str = "", dflt=None):
+    opts = _range_opts(tf, n_total)
+    d_ = _range_default(tf, opts, dflt)
+    if hasattr(st, "pills"):
+        st.pills("Khoảng thời gian", opts, selection_mode="single", default=d_, key=_range_key(tf, n_total, ns), label_visibility="collapsed")
+    else:
+        st.radio("Khoảng thời gian", opts, index=opts.index(d_), horizontal=True, key=_range_key(tf, n_total, ns), label_visibility="collapsed")
+
+
 def pick_layers():
     if hasattr(st, "pills"):
         sel = st.pills("Lớp hiển thị", LAYER_OPTS, selection_mode="multi", default=LAYER_DEFAULT,
@@ -2679,15 +2842,79 @@ def pick_layers():
 
 
 # ------------------------------------------------------------------ TRANG 2: CỔ PHIẾU
+def _toggle_watch(code: str):
+    """Bấm ngôi sao: thêm / bỏ mã khỏi Watchlist (data/watchlist_cua_toi.csv, cùng nguồn với mục ⭐ Watchlist)."""
+    try:
+        w = MW.load()
+        if code in set(w["Mã"]):
+            err, msg = MW.save(w[w["Mã"] != code]), f"Đã bỏ {code} khỏi Watchlist"
+        else:
+            err, msg = MW.save(MW.add_codes(w, [code])), f"Đã thêm {code} vào Watchlist ⭐"
+    except Exception as e:  # noqa: BLE001
+        err, msg = str(e), ""
+    st.session_state["wl_ver"] = st.session_state.get("wl_ver", 0) + 1          # để trang Watchlist nạp lại danh sách
+    st.session_state["_star_msg"] = ("error", f"Không lưu được Watchlist: {err}") if err else ("ok", msg)
+
+
+_STAR_CSS = """<style>
+.st-key-wl_star button{border-color:rgba(245,197,66,.5);padding:.1rem .8rem}
+.st-key-wl_star button p{font-size:28px;line-height:1.1;color:#F5C542}
+.st-key-wl_star button:hover{border-color:#F5C542;background:rgba(245,197,66,.12)}
+</style>"""
+
+
+def _chart_metrics(code, info) -> list[dict]:
+    """Các chỉ số ở đầu biểu đồ (Giá + % từ đáy / đỉnh, Vol vs MA10, P/E, P/B, ROE, Vốn hóa, % Freefloat). Dùng chung cho trang Cổ phiếu và Livestream."""
+    _sw_text, _, _sw_tip, _ = swing_view(info)
+    _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
+    chart_metrics = [
+        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip,
+         **_price_change(code)},
+        {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
+    ]
+    # Cạnh Vol: P/E, P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
+    if str(code).upper() not in E.INDEX_CODES:
+        _wm = _wb_meta(code)
+        _na = lambda v: "-" if v in (None, "", "Chưa có") else v
+        chart_metrics += [
+            {"label": "P/E", "value": _na(_wm.get("P/E"))},
+            {"label": "P/B", "value": _na(_wm.get("P/B"))},
+            {"label": "ROE", "value": _na(_wm.get("ROE")), "sub": _roe_rank_note(code), "color": "#25A879"},
+            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa")), "sub": _cap_rank_note(code), "color": "#25A879"},
+        ]
+        try:
+            _ff = pd.to_numeric(ST._read_csv_by_code(ST.INFO_PATH).at[str(code).upper(), "%freefloat"], errors="coerce")
+        except Exception:  # noqa: BLE001
+            _ff = float("nan")
+        if pd.notna(_ff):
+            chart_metrics.append({"label": "% Freefloat", "value": f"{float(_ff):.1f}%"})
+
+    return chart_metrics
+
+
 def page_stock():
     st.title("📊 Cổ phiếu")
     header()
 
     codes = sorted(list(res_df["Mã"].unique()) + INDEX_LIST)      # gồm cả VNINDEX
     saved = st.session_state.get("selected_code")
-    c1, c2, c3 = st.columns([1.2, 2, 1.8])
+    c1, c_star, c2, c3 = st.columns([1.2, 0.42, 1.9, 1.8])
     code = c1.selectbox("Mã cổ phiếu", codes, index=codes.index(saved) if saved in codes else 0)
     st.session_state["selected_code"] = code
+    with c_star:                                    # ngôi sao: bấm để thêm / bỏ mã khỏi Watchlist
+        st.markdown(_STAR_CSS + '<div style="height:1.7rem"></div>', unsafe_allow_html=True)
+        if code in INDEX_LIST:
+            st.caption("")
+        else:
+            try:
+                _watched = code in set(MW.load()["Mã"])
+            except Exception:  # noqa: BLE001
+                _watched = False
+            st.button("★" if _watched else "☆", key="wl_star", on_click=_toggle_watch, args=(code,),
+                      help=("Đang trong Watchlist. Bấm để bỏ theo dõi." if _watched else "Bấm để thêm mã này vào Watchlist."))
+    _sm = st.session_state.pop("_star_msg", None)
+    if _sm:
+        (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
     tf = c2.radio("Khung thời gian", ["D", "W", "M"], format_func=TF_LABEL.get, horizontal=True)
     include_short = c3.toggle("Mô phỏng cả lệnh Bán (short)", value=False,
                               help="Thị trường VN không bán khống được, mặc định chỉ tính lệnh Mua.")
@@ -2701,28 +2928,7 @@ def page_stock():
     a = A[tf]
 
     d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
-    _sw_text, _, _sw_tip, _ = swing_view(info)
-    _sw_col = "#E5586A" if info.get("Swing_kind") == "down" else ("#8B95A5" if info.get("Swing_bear", False) else "#25A879")
-    chart_metrics = [
-        {"label": "Giá", "value": f"{info['Giá']:,.2f}", "sub": (_sw_text if _sw_text != "—" else ""), "color": _sw_col, "tip": _sw_tip,
-         **_price_change(code)},
-        {"label": "Vol vs MA10", "value": f"{info['Vol/Avg10']:.1f}x" if pd.notna(info["Vol/Avg10"]) else "-"},
-    ]
-    # Cạnh Vol: P/B, ROE, Vốn hóa (cùng nguồn với thẻ ở Bộ lọc) và % freefloat (chỉ hiện khi đã có số trong data/thong_tin_chung.csv)
-    if str(code).upper() not in E.INDEX_CODES:
-        _wm = _wb_meta(code)
-        _na = lambda v: "-" if v in (None, "", "Chưa có") else v
-        chart_metrics += [
-            {"label": "P/B", "value": _na(_wm.get("P/B"))},
-            {"label": "ROE", "value": _na(_wm.get("ROE"))},
-            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa"))},
-        ]
-        try:
-            _ff = pd.to_numeric(ST._read_csv_by_code(ST.INFO_PATH).at[str(code).upper(), "%freefloat"], errors="coerce")
-        except Exception:  # noqa: BLE001
-            _ff = float("nan")
-        if pd.notna(_ff):
-            chart_metrics.append({"label": "% Freefloat", "value": f"{float(_ff):.1f}%"})
+    chart_metrics = _chart_metrics(code, info)
 
     alert_banner(a, tf)
     col_main, col_side = st.columns([2.2, 1])
@@ -2734,6 +2940,8 @@ def page_stock():
         _drag, _cfg, _bars = "pan", {"displayModeBar": True}, None
         if _mob:
             st.markdown(metrics_html(chart_metrics, code, _chart_name(code)), unsafe_allow_html=True)
+            if MA_LAYER in layers:
+                st.markdown(f'<div style="font-size:13px;margin:-4px 0 6px">{_ma_row_html(code)}</div>', unsafe_allow_html=True)
             _mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True, key="mob_chart_mode",
                              help="Cuộn trang: vuốt để cuộn trang bình thường, biểu đồ không bị kéo/zoom ngoài ý muốn. "
                                   "Kéo & zoom: kéo ngang để xem, dùng nút +/- và nút nhà (đặt lại) trên thanh công cụ; chạm đúp để đặt lại.")
@@ -2741,9 +2949,12 @@ def page_stock():
             if _nmax > 30:
                 _bars = st.slider("Số nến hiển thị (ít nến = phóng to)", 30, _nmax, min(90, _nmax), key=f"mob_bars_{tf}")
             _drag, _cfg = mobile_chart_opts(_mode)
+        if not _mob:
+            _bars = range_bars(tf, len(a["g"]))
         st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag),
                         config=_cfg, **_STRETCH)
         if not _mob:
+            range_bar_ui(tf, len(a["g"]))           # thanh 5D · 1M · 3M · 6M · 1Y · 2Y · 3Y · Tất cả ngay dưới biểu đồ
             CH.inject()                # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
             DT.inject(code, tf)        # thanh công cụ vẽ kiểu TradingView (đường, mũi tên, hình, đo giá/ngày, chữ...), lưu theo mã + khung
 
@@ -2899,7 +3110,7 @@ def _rt_go(target: str, code: str):
         st.session_state["selected_code"] = code
         for _k in ("mtf_code", "tab_code"):
             st.session_state[_k] = code
-        st.session_state["_nav_pending"] = ("Biểu đồ", None)
+        st.session_state["_nav_pending"] = ("Cổ phiếu", "Biểu đồ")
         st.session_state["rt_focus"] = {"kind": "id", "id": "mtf-conclusion" if target == "chart" else "wyckoff-detail", "tab": ""}
 
 
@@ -2938,12 +3149,17 @@ def _route_inner():
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
     if main == "Ngành" and sub == "Tổng quan ngành":
+        import inspect  # sector_dashboard.py bản cũ chỉ nhận (raw): không truyền thêm số liệu để khỏi báo TypeError
+        if len(inspect.signature(SD.render).parameters) >= 3:
+            return SD.render(raw, *_wb_meta_maps(WY_KEY))
         return SD.render(raw)
     if main == "Ngành" and sub == "Cảnh báo luân chuyển dòng tiền":
         header()
         return SRT.render(raw, mkt, WL.GROUPS, mkt_src)
     if main == "Ngành" and sub == "Vị thế cổ phiếu ngành":
-        return page_sector_ranking()
+        return page_sector_ranking("profit")
+    if main == "Ngành" and sub == "Xếp hạng cổ phiếu":
+        return page_sector_ranking("rank")
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Lọc tất cả CP": return page_filter()
@@ -2955,13 +3171,14 @@ def _route_inner():
         if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
         if sub == "Cổ phiếu của tôi": return page_my_portfolio()
-        if sub == "Khuyến nghị khách hàng": return page_vip_picks()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
         return NAV.placeholder("🧪 Backtest chiến lược",
-                               ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Tổng quát.",
+                               ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Biểu đồ.",
                                 "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])
-    if main in ("Biểu đồ", "Cổ phiếu") and (main == "Biểu đồ" or sub in ("Tổng quát", "Chỉ báo kỹ thuật")):
+    if main == "Livestream":
+        return page_livestream()
+    if main == "Cổ phiếu" and sub == "Biểu đồ":
         return page_stock()
     if main == "Cổ phiếu" and sub in ST.TABS:
         return page_stock_tab(sub)
@@ -2969,12 +3186,247 @@ def _route_inner():
                     NAV.MARKET_DESC.get(sub) if main == "Thị trường" else None)
 
 
+
+# ------------------------------------------------------------------ DASHBOARD LIVESTREAM
+LIVE_DAILY_H = 540        # chiều cao nền (px) biểu đồ Ngày ở Livestream (chưa tính phần đầu); chỉnh nhỏ lại nếu muốn hai biểu đồ gọn hơn nữa
+LIVE_CODE_W = 0.27        # đầu biểu đồ Ngày ở Livestream: phần bề ngang dành cho mã + giá (tăng để tên công ty nhích sang phải)
+LIVE_WEEKLY_H = 300       # chiều cao (px) biểu đồ Tuần ở Livestream (đã gồm dòng chữ KHUNG TUẦN)
+def page_livestream():
+    """Bố cục phát sóng: chart ngày/tuần bên trái, kết luận và dữ liệu bên phải."""
+    st.markdown("""
+    <style>
+    .live-shell{background:#0b1220;border:1px solid #263449;border-radius:14px;padding:14px 16px;margin:0 0 12px}
+    .live-eyebrow{font-size:11px;letter-spacing:1.2px;font-weight:800;color:#8da3bd;text-transform:uppercase}
+    .live-title{font-size:25px;font-weight:850;line-height:1.15;color:#f4f7fb;margin:4px 0}
+    .live-sub{font-size:12px;color:#91a0b5}
+    .live-card{background:#111b2b;border:1px solid #29384d;border-radius:12px;padding:13px 15px;margin-bottom:12px}
+    .live-card-title{font-size:13px;font-weight:800;color:#c7d4e5;letter-spacing:.45px;margin-bottom:9px}
+    .live-verdict{font-size:22px;line-height:1.15;font-weight:900;color:#40d6a0}
+    .live-price{font-size:28px;line-height:1.15;font-weight:900;color:#f8fafc}
+    .live-muted{font-size:12px;color:#8fa1b8}
+    .live-kpi{background:#0b1422;border:1px solid #26364b;border-radius:8px;padding:9px}
+    .live-kpi span{display:block;font-size:10px;color:#8fa1b8;margin-bottom:4px}
+    .live-kpi b{font-size:16px;color:#f1f5f9}
+    .live-table{width:100%;border-collapse:collapse;font-size:12px;color:#dce5f0}
+    .live-table th{text-align:left;color:#8fa1b8;font-weight:700;border-bottom:1px solid #314158;padding:7px 5px}
+    .live-table td{border-bottom:1px solid #202e42;padding:8px 5px}
+    .live-positive{color:#43d6a1;font-weight:800}.live-warn{color:#f7bd55;font-weight:800}
+    div[data-testid="stPlotlyChart"]{border:1px solid #263449;border-radius:10px;overflow:hidden}
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="live-shell"><div class="live-eyebrow">MIN TRADING · ON AIR DASHBOARD</div>'
+        '<div class="live-title">TRẠM TÍN HIỆU <span style="color:#39d6a0">/ LIVESTREAM</span></div>'
+        '<div class="live-sub">Phân tích đa khung thời gian · Dữ liệu cuối phiên theo nguồn đang chọn · '
+        'Thông tin chỉ phục vụ tham khảo, không phải khuyến nghị đầu tư</div></div>',
+        unsafe_allow_html=True
+    )
+    available = sorted(set(res_df["Mã"].astype(str).tolist()))
+    # Lọc theo ngành (nhóm ngành trong watchlist.GROUPS; mã thuộc nhiều nhóm thì hiện ở từng nhóm): danh sách mã bên cạnh thu hẹp theo ngành đã chọn
+    ALL_SECTORS = "Tất cả ngành"
+    sectors = sorted({g_ for c_ in available for g_ in MEMBER.get(c_, []) if g_ in WL.GROUPS})
+    top_a, top_s, top_b, top_c = st.columns([1.25, 1, 1, 1])      # Mã đang phát bên trái, lọc Ngành bên phải ô mã (ô Ngành tạo trước vì danh sách mã phụ thuộc vào nó)
+    sector = top_s.selectbox("Ngành", [ALL_SECTORS] + sectors, key="live_sector")
+    codes_in = available if sector == ALL_SECTORS else [c_ for c_ in available if sector in MEMBER.get(c_, [])]
+    default_code = st.session_state.get("selected_code", "DRI")
+    if default_code not in codes_in:
+        default_code = "DRI" if "DRI" in codes_in else (codes_in[0] if codes_in else None)
+    if st.session_state.get("live_code") not in codes_in:       # chưa chọn, hoặc mã đang chọn không thuộc ngành mới: đặt trước khi tạo ô chọn mã
+        st.session_state["live_code"] = default_code
+    if not codes_in:
+        st.info("Chưa có mã nào thuộc ngành này trong dữ liệu.")
+        return
+    code = top_a.selectbox("Mã đang phát", codes_in, key="live_code")      # giá trị lấy từ session_state["live_code"] (không truyền index để khỏi cảnh báo)
+    st.session_state["selected_code"] = code
+    top_b.markdown(f"<div class='live-muted' style='padding-top:32px'>📅 Dữ liệu đến {latest_date:%d/%m/%Y}</div>", unsafe_allow_html=True)
+    top_c.markdown(f"<div class='live-muted' style='padding-top:32px'>🟢 {data_mode}</div>", unsafe_allow_html=True)
+
+    A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
+    info = stock_row(code)
+    if info is None:
+        st.warning(f"Chưa đủ dữ liệu để hiển thị {code}.")
+        return
+    d_chg = df[df["Mã"] == code]["Chg_%"].iloc[-1]
+    conclusion = E.mtf_conclusion(A)
+    try:
+        price = float(info["Giá"])
+    except Exception:
+        price = float("nan")
+    # Mức hỗ trợ/kháng cự lấy từ bộ phân tích kỹ thuật hiện có, nếu thiếu sẽ hiển thị dấu gạch.
+    daily = A["D"].get("g")
+    support = resistance = None
+    try:
+        lev = ML.levels(daily) if daily is not None else {}
+        support = lev.get("support") or lev.get("sup")
+        resistance = lev.get("resistance") or lev.get("res")
+    except Exception:
+        pass
+    def _fmt_level(v):
+        try:
+            return f"{float(v):,.2f}" if v is not None and pd.notna(v) else "—"
+        except Exception:
+            return "—"
+    # Chỉ dùng mức mục tiêu/cắt lỗ tính minh họa khi không có mức kỹ thuật tương ứng.
+    buy_low = price * 0.98 if pd.notna(price) else None
+    buy_high = price * 1.02 if pd.notna(price) else None
+    target = resistance if resistance is not None else (price * 1.15 if pd.notna(price) else None)
+    stop = support if support is not None else (price * 0.92 if pd.notna(price) else None)
+
+    try:
+        _rs_v = float(info.get("RS20", float("nan")))
+    except (TypeError, ValueError):
+        _rs_v = float("nan")
+    _rs_txt = "—" if pd.isna(_rs_v) else f"{_rs_v:.2f}"
+    left, right = st.columns([6, 4], gap="medium")
+    with left:
+        st.markdown("<div class='live-card-title'>📌 KHUNG NGÀY · DAILY</div>", unsafe_allow_html=True)
+        DT.inject(code, ("D", "W"))                    # thanh công cụ vẽ bên trái cho cả biểu đồ Ngày và Tuần (nét vẽ lưu riêng theo mã + khung); đặt ở đầu cột để iframe luôn được nạp, không phụ thuộc cuộn trang
+        # Đầu biểu đồ Ngày: mã, giá, tên công ty, O/H/L/C, Vol vs MA10, P/B, ROE, Vốn hóa y như biểu đồ ở trang Cổ phiếu (tên có thêm " - D").
+        # Cho phép bật/tắt từng lớp chỉ báo ngay trong trang livestream.
+        # Mặc định chỉ bật Khối lượng và Dual Ichimoku theo yêu cầu.
+        layer_options = [
+            "Khối lượng", "Dual Ichimoku", "EMA 50/200", "Supertrend",
+            "Bollinger", "MACD", "RSI", "StochRSI", "VNINDEX",
+            "RS vs VNINDEX", "Vùng giá", "Dự báo", "Elliott",
+            "Wyckoff", "Tín hiệu quá khứ", "Hull Suite"
+        ]
+        layers = st.multiselect(
+            "Chỉ báo hiển thị trên biểu đồ",
+            options=layer_options,
+            default=["Khối lượng", "Dual Ichimoku"],
+            key="live_chart_layers",
+            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định chỉ hiển thị Khối lượng và Dual Ichimoku."
+        )
+        _nD, _nW = len(A["D"]["g"]), len(A["W"]["g"])
+        try:
+            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, range_bars("D", _nD, "live_", "6M"), "pan", name_suffix=" - D",
+                                      height_px=LIVE_DAILY_H, hide_legend=True, code_w=LIVE_CODE_W, hdr_right=True),
+                            config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
+        except Exception as exc:
+            st.warning(f"Không dựng được biểu đồ ngày: {exc}")
+        range_bar_ui("D", _nD, "live_", "6M")          # thanh chọn khoảng thời gian dưới biểu đồ Ngày (giống trang Cổ phiếu)
+        try:
+            st.plotly_chart(make_chart(A["W"], code, "W", layers, None, False, range_bars("W", _nW, "live_", "2Y"), "pan",
+                                      height_px=LIVE_WEEKLY_H, hide_legend=True, title_text="KHUNG TUẦN", hdr_right=True),
+                            config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
+        except Exception as exc:
+            st.warning(f"Không dựng được biểu đồ tuần: {exc}")
+        range_bar_ui("W", _nW, "live_", "2Y")
+        st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
+
+    with right:
+        verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
+        st.markdown(
+            f"<div class='live-card'><div class='live-card-title'>🏆 KẾT LUẬN ĐA KHUNG</div>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>"
+            f"<div class='live-verdict'>{htmllib.escape(verdict.upper())}</div>"
+            f"<div style='text-align:right'><div class='live-muted'>{code}</div><div class='live-price'>{price:,.2f}</div></div></div>"
+            f"<div style='height:1px;background:#29384d;margin:12px 0'></div>"
+            f"<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
+            f"<div class='live-kpi'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
+            f"<div class='live-kpi'><span>MỤC TIÊU / KHÁNG CỰ</span><b>{_fmt_level(target)}</b></div>"
+            f"<div class='live-kpi'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
+            f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{_rs_txt}</b></div>"
+            f"</div><div class='live-muted' style='margin-top:9px'>Vùng mua/cắt lỗ dự phòng là mức tham khảo nếu dữ liệu kỹ thuật không trả về hỗ trợ/kháng cự.</div></div>",
+            unsafe_allow_html=True
+        )
+
+        # Ba thẻ dưới đây phụ thuộc vào MÃ ĐANG PHÁT (không còn gắn cứng ngành cao su): định giá, động lực/đầu vào/đầu ra của ngành, cổ phiếu cùng ngành.
+        # Ngành dùng để so sánh: ngành đang lọc ở ô "Ngành" nếu mã thuộc ngành đó, không thì ngành đầu tiên của mã trong watchlist.py.
+        _secs = SDV.sectors_of(code, MEMBER, WL.GROUPS)
+        _sec_main = sector if (sector != ALL_SECTORS and sector in _secs) else (_secs[0] if _secs else None)
+        if _sec_main:
+            _secs = [_sec_main] + [x_ for x_ in _secs if x_ != _sec_main]
+        try:
+            _cap_map, _fund_map = _wb_meta_maps(WY_KEY)
+            st.markdown(SDV.valuation_card(code, _sec_main, _wb_meta(code) or {}, _fund_map, _cap_map, WL.GROUPS, _cap_rank_note(code)), unsafe_allow_html=True)
+            st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
+            st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS), unsafe_allow_html=True)
+        except Exception as exc:  # noqa: BLE001
+            st.caption(f"Không dựng được thông tin theo mã: {exc}")
+
+        # Kịch bản livestream gắn với mã đang phát; nội dung được lưu riêng trong data/kich_ban_livestream.
+        with st.expander(f"🎤 KỊCH BẢN LIVESTREAM · {code}", expanded=False):
+            script_dir = os.path.join(os.path.dirname(__file__), "data", "kich_ban_livestream")
+            short_path = os.path.join(script_dir, f"{code}_ngan.md")
+            long_path = os.path.join(script_dir, f"{code}_dai.md")
+            short_script = ""
+            long_script = ""
+            try:
+                if os.path.isfile(short_path):
+                    with open(short_path, "r", encoding="utf-8") as f:
+                        short_script = f.read()
+                if os.path.isfile(long_path):
+                    with open(long_path, "r", encoding="utf-8") as f:
+                        long_script = f.read()
+            except OSError as exc:
+                st.warning(f"Không đọc được tệp kịch bản: {exc}")
+
+            tab_short, tab_long = st.tabs(["✂️ Bản ngắn", "🎙️ Bản dài"])
+            with tab_short:
+                if short_script:
+                    st.code(short_script, language=None)
+                else:
+                    st.info(f"Chưa có bản ngắn cho {code}. Thêm tệp data/kich_ban_livestream/{code}_ngan.md để hiển thị tại đây.")
+            with tab_long:
+                if long_script:
+                    st.code(long_script, language=None)
+                else:
+                    st.info(f"Chưa có bản dài cho {code}. Thêm tệp data/kich_ban_livestream/{code}_dai.md để hiển thị tại đây.")
+            st.caption("Các số liệu và vùng giá trong kịch bản cần được kiểm tra, cập nhật trước khi phát sóng; nội dung không phải khuyến nghị đầu tư.")
+
+    # --- Tăng trưởng LNST công ty mẹ (YoY) theo quý của ngành đang xem: ngành chọn ở ô lọc, nếu chưa chọn thì ngành của mã đang phát
+    #     (dữ liệu data/lnst_quy.csv, cùng bảng với Ngành > Xếp hạng cổ phiếu)
+    try:
+        _lnst = SR._lnst_cached(os.path.getmtime(SR.LNST_PATH) if os.path.exists(SR.LNST_PATH) else 0.0)
+        _cands = [sector] if sector != ALL_SECTORS else [g_ for g_ in MEMBER.get(code, []) if g_ in WL.GROUPS]
+        _have = [g_ for g_ in _cands if not _lnst.empty and (_lnst["Ngành"].str.casefold() == g_.casefold()).any()]
+        _sec = (_have or _cands or [None])[0]
+        if _sec:
+            st.markdown(SR.CSS, unsafe_allow_html=True)
+            st.markdown(f"<div class='live-card-title' style='margin-top:14px'>📊 TĂNG TRƯỞNG LNST CÔNG TY MẸ (YoY) - NGÀNH {htmllib.escape(_sec.upper())}</div>",
+                        unsafe_allow_html=True)
+            _lh = SR.lnst_sector_html(_lnst, _sec) if _have else ""
+            if _lh:
+                st.markdown(_lh, unsafe_allow_html=True)
+                st.caption("So với cùng quý năm trước. Xanh = lãi tăng, đỏ = lãi giảm hoặc lỗ; càng đậm càng lệch xa 0. Ô \"-\" là chưa có số liệu.")
+            else:
+                st.caption(f"Chưa có dữ liệu LNST theo quý cho ngành {_sec}. Thêm các dòng có cột Ngành = \"{_sec}\" vào {SR.LNST_PATH}.")
+    except Exception as exc:  # noqa: BLE001
+        st.caption(f"Không dựng được bảng LNST: {exc}")
+
+    st.divider()
+    st.markdown("### Các thẻ phân tích hiện có")
+    st.caption("Khu vực này giữ lại các thẻ tín hiệu chi tiết bên dưới dashboard để không làm chật khung livestream.")
+    lower_left, lower_right = st.columns([6, 4], gap="medium")
+    with lower_left:
+        try:
+            st.markdown(setup_card(A["D"]["g"]), unsafe_allow_html=True)
+        except Exception:
+            pass
+        if A["D"].get("enough"):
+            st.markdown(forecast_card(A["D"], "D"), unsafe_allow_html=True)
+        try:
+            st.markdown(action_html(code), unsafe_allow_html=True)
+        except Exception:
+            pass
+    with lower_right:
+        try:
+            st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
+        except Exception:
+            pass
+        try:
+            st.markdown(_wy_note(code), unsafe_allow_html=True)
+        except Exception:
+            pass
+
+
 def _cap_open(code):
     """Mở thẻ chi tiết của mã từ tab Nhóm vốn hóa (giống nút \"Xem biểu đồ\" ở các mục khác)."""
     st.session_state["selected_code"] = code
     for _k in ("mtf_code", "tab_code"):
         st.session_state[_k] = code
-    NAV.goto("Cổ phiếu", "Tổng quát")
+    NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
 def route():
