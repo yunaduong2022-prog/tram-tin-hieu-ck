@@ -1,5 +1,5 @@
 --- /home/claude/app.py.orig	2026-10-27 05:56:12.376126848 +0000
-+++ app.py	2026-10-27 05:56:12.483777942 +0000
++++ app.py	2026-10-27 06:06:22.102630036 +0000
 @@ -144,9 +144,9 @@
                 else {"use_container_width": True})
  TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
@@ -66,3 +66,58 @@
      if "Dual Ichimoku" in layers:
          # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
          _yr = fig.layout.yaxis.range
+@@ -2687,6 +2727,41 @@
+             + head + '<div class="cm-grid">' + "".join(cells) + '</div>')
+ 
+ 
++# Thanh chọn khoảng thời gian dưới biểu đồ (kiểu TradingView): mỗi mốc = số nến hiển thị gần nhất; trục giá tự co giãn theo vùng chọn
++RANGE_OPTS = {"D": [("5D", 5), ("1M", 22), ("3M", 65), ("6M", 130), ("1Y", 250), ("2Y", 500), ("3Y", 750), ("Tất cả", None)],
++              "W": [("3M", 13), ("6M", 26), ("1Y", 52), ("2Y", 104), ("3Y", 156), ("5Y", 260), ("Tất cả", None)],
++              "M": [("1Y", 12), ("2Y", 24), ("3Y", 36), ("5Y", 60), ("10Y", 120), ("Tất cả", None)]}
++RANGE_DEFAULT = {"D": "1Y", "W": "3Y", "M": "10Y"}
++
++
++def _range_opts(tf: str, n_total: int) -> list:
++    """Chỉ giữ các mốc không dài hơn số nến thật sự có của mã (mã / khung ngắn hơn 10 năm thì không hiện 10Y); luôn có 'Tất cả'."""
++    return [lb for lb, n in RANGE_OPTS[tf] if n is None or n <= n_total]
++
++
++def _range_key(tf: str, n_total: int) -> str:
++    return f"rng_{tf}_{len(_range_opts(tf, n_total))}"        # khoá đổi theo danh sách mốc để không giữ lại lựa chọn không còn tồn tại
++
++
++def range_bars(tf: str, n_total: int) -> int:
++    """Số nến theo mốc đang chọn (đọc từ session_state nên dùng được trước khi thanh chọn được vẽ ở dưới biểu đồ)."""
++    opts = _range_opts(tf, n_total)
++    sel = st.session_state.get(_range_key(tf, n_total))
++    if sel not in opts:
++        sel = RANGE_DEFAULT[tf] if RANGE_DEFAULT[tf] in opts else "Tất cả"
++    n = dict(RANGE_OPTS[tf]).get(sel)
++    return max(2, min(n or n_total, n_total))
++
++
++def range_bar_ui(tf: str, n_total: int):
++    opts = _range_opts(tf, n_total)
++    dflt = RANGE_DEFAULT[tf] if RANGE_DEFAULT[tf] in opts else "Tất cả"
++    if hasattr(st, "pills"):
++        st.pills("Khoảng thời gian", opts, selection_mode="single", default=dflt, key=_range_key(tf, n_total), label_visibility="collapsed")
++    else:
++        st.radio("Khoảng thời gian", opts, index=opts.index(dflt), horizontal=True, key=_range_key(tf, n_total), label_visibility="collapsed")
++
++
+ def pick_layers():
+     if hasattr(st, "pills"):
+         sel = st.pills("Lớp hiển thị", LAYER_OPTS, selection_mode="multi", default=LAYER_DEFAULT,
+@@ -2800,9 +2875,12 @@
+             if _nmax > 30:
+                 _bars = st.slider("Số nến hiển thị (ít nến = phóng to)", 30, _nmax, min(90, _nmax), key=f"mob_bars_{tf}")
+             _drag, _cfg = mobile_chart_opts(_mode)
++        if not _mob:
++            _bars = range_bars(tf, len(a["g"]))
+         st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag),
+                         config=_cfg, **_STRETCH)
+         if not _mob:
++            range_bar_ui(tf, len(a["g"]))           # thanh 5D · 1M · 3M · 6M · 1Y · 2Y · 3Y · Tất cả ngay dưới biểu đồ
+             CH.inject()                # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+             DT.inject(code, tf)        # thanh công cụ vẽ kiểu TradingView (đường, mũi tên, hình, đo giá/ngày, chữ...), lưu theo mã + khung
+ 
