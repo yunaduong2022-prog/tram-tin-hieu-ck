@@ -1,6 +1,7 @@
 # DHG – Doanh nghiệp dược đầu ngành, thiên về phòng thủ và cổ tức
 
-Nhìn vào DHG, doanh nghiệp vẫn duy trì nền tảng kinh doanh tương đối ổn định, nhưng lợi nhuận ngắn hạn đang chịu áp lực. Doanh thu 9 tháng đạt 3.584 tỷ đồng, tăng 2%, lợi nhuận đạt 713 tỷ đồng. Đáng chú ý, lợi nhuận quý III giảm 53%, còn 98 tỷ đồng, chủ yếu do doanh thu tự sản xuất suy giảm và chi phí bán hàng tăng cao.
+Nhìn vào DHG, doanh nghiệp vẫn duy trì nền tảng kinh doanh tương đối ổn định, nhưng lợi nhuận ngắn hạn đang chịu áp lực. 
+Doanh thu 9 tháng đạt 3.584 tỷ đồng, tăng 2%, lợi nhuận đạt 713 tỷ đồng. Đáng chú ý, lợi nhuận quý III giảm 53%, còn 98 tỷ đồng, chủ yếu do doanh thu tự sản xuất suy giảm và chi phí bán hàng tăng cao.
 
 Tình hình tài chính: DHG có biên lợi nhuận gộp khoảng 50,9%, ROE khoảng 18–21% và P/E khoảng 12–14 lần. Các chỉ số này cho thấy khả năng sinh lời tương đối tốt, dù kết quả kinh doanh gần đây đang chịu áp lực.
 
