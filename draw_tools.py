@@ -4,7 +4,7 @@ Chạy ở trình duyệt, cùng cách với crosshair.py: gắn một lớp SVG
 đụng vào figure do Python dựng. Nét vẽ lưu theo toạ độ dữ liệu (ngày, giá) nên bám đúng nến khi kéo, zoom, đổi khung
 thời gian hiển thị; và lưu trong localStorage của trình duyệt theo từng mã + khung D/W/M (chạy lại app vẫn còn).
 
-Công cụ: đường xu hướng, mũi tên, hình chữ nhật, hình tròn, đường ngang, đường dọc, đo khoảng giá, đo khoảng ngày,
+Công cụ: đường xu hướng, mũi tên, đường song song (kênh giá, 3 điểm), hình chữ nhật, hình tròn, đường ngang, đường dọc, đo khoảng giá, đo khoảng ngày,
 đo giá + ngày, chữ, ghi chú có mũi tên; nam châm hít vào Mở/Cao/Thấp/Đóng; chọn màu; hoàn tác; xoá nét đang chọn /
 xoá tất cả; ẩn/hiện nét vẽ. Phím tắt: Esc huỷ, Delete xoá nét đang chọn, Ctrl+Z hoàn tác.
 Lưu ý: nút chụp ảnh của Plotly chỉ chụp phần biểu đồ, không có nét vẽ (lớp vẽ nằm ngoài figure).
@@ -50,6 +50,7 @@ DRAW_JS = r"""
     { id: 'ellipse', tip: 'Hình tròn / elip', pts: 2, icon: ICON('<ellipse cx="10" cy="10" rx="7" ry="5.5"/>') },
     { id: 'hline',   tip: 'Đường ngang (mức giá)', pts: 1, icon: ICON('<path d="M2.5 10h15"/><circle cx="10" cy="10" r="1.8"/>') },
     { id: 'vline',   tip: 'Đường dọc (mốc ngày)', pts: 1, icon: ICON('<path d="M10 2.5v15"/><circle cx="10" cy="10" r="1.8"/>') },
+    { id: 'channel', tip: 'Đường song song (kênh giá): bấm 2 điểm vẽ đường gốc, bấm điểm thứ 3 để đặt đường song song', pts: 3, icon: ICON('<path d="M3 11.5L12 4M8 16.5L17 9"/><circle cx="3" cy="11.5" r="1.4"/><circle cx="12" cy="4" r="1.4"/><circle cx="8" cy="16.5" r="1.4"/>') },
     { sep: true },
     { id: 'prange',  tip: 'Đo khoảng giá', pts: 2, icon: ICON('<path d="M10 3v14M7 6l3-3 3 3M7 14l3 3 3-3M5.5 3h9M5.5 17h9"/>') },
     { id: 'drange',  tip: 'Đo khoảng ngày', pts: 2, icon: ICON('<path d="M3 10h14M6 7l-3 3 3 3M14 7l3 3-3 3M3 5.5v9M17 5.5v9"/>') },
@@ -206,7 +207,7 @@ DRAW_JS = r"""
       if (da || dash) at['stroke-dasharray'] = da || dash;
       return mkEl(g, 'line', at);
     }
-    var sid = isDraft ? null : s.id;
+    var sid = isDraft ? null : s.id, chn = null;
 
     if (ty === 'line' || ty === 'arrow') {
       ln(a.x, a.y, b.x, b.y);
@@ -228,6 +229,20 @@ DRAW_JS = r"""
       if (ty === 'rect') { at.x = x; at.y = y; at.width = rw; at.height = rh; mkEl(g, 'rect', at); hit.x = x; hit.y = y; hit.width = rw; hit.height = rh; if (sid) mkEl(g, 'rect', hit); }
       else { at.cx = x + rw / 2; at.cy = y + rh / 2; at.rx = rw / 2; at.ry = rh / 2; mkEl(g, 'ellipse', at);
              hit.cx = at.cx; hit.cy = at.cy; hit.rx = at.rx; hit.ry = at.ry; if (sid) mkEl(g, 'ellipse', hit); }
+    } else if (ty === 'channel') {
+      var a2 = null, b2 = null;
+      if (s.p[2]) {                                               // đường song song: cùng độ dốc theo (ngày, giá), qua điểm thứ 3
+        var t0 = s.p[0].t, t1 = s.p[1].t, v0 = s.p[0].v, v1 = s.p[1].v;
+        var lv = t1 !== t0 ? v0 + (v1 - v0) * (s.p[2].t - t0) / (t1 - t0) : v0, dv = s.p[2].v - lv;
+        a2 = { x: a.x, y: Y(v0 + dv) }; b2 = { x: b.x, y: Y(v1 + dv) };
+        chn = { a2: a2, b2: b2 };
+        mkEl(g, 'polygon', { points: [a.x + ',' + a.y, b.x + ',' + b.y, b2.x + ',' + b2.y, a2.x + ',' + a2.y].join(' '),
+          fill: c, 'fill-opacity': 0.1, style: 'pointer-events:none' });
+        ln((a.x + a2.x) / 2, (a.y + a2.y) / 2, (b.x + b2.x) / 2, (b.y + b2.y) / 2, c, 1, '4 4');
+      }
+      ln(a.x, a.y, b.x, b.y);
+      if (sid) hitLine(g, a.x, a.y, b.x, b.y, sid);
+      if (a2) { ln(a2.x, a2.y, b2.x, b2.y); if (sid) hitLine(g, a2.x, a2.y, b2.x, b2.y, sid); }
     } else if (ty === 'prange' || ty === 'drange' || ty === 'measure') {
       var r = rangeText(s), col = r.dv >= 0 ? UPC : DNC;
       var x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
@@ -269,6 +284,7 @@ DRAW_JS = r"""
       var hs = [];
       if (ty === 'hline') hs.push({ i: 0, x: G.w / 2, y: a.y });
       else if (ty === 'vline') hs.push({ i: 0, x: a.x, y: G.h / 2 });
+      else if (ty === 'channel' && chn) { hs.push({ i: 0, x: a.x, y: a.y }, { i: 1, x: b.x, y: b.y }, { i: 2, x: (chn.a2.x + chn.b2.x) / 2, y: (chn.a2.y + chn.b2.y) / 2 }); }
       else s.p.forEach(function (q, i) { hs.push({ i: i, x: X(q.t), y: Y(q.v) }); });
       hs.forEach(function (h) {
         mkEl(g, 'circle', { cx: h.x, cy: h.y, r: 5.5, fill: '#fff', stroke: c, 'stroke-width': 2,
@@ -386,13 +402,7 @@ DRAW_JS = r"""
     I.svg.style.display = S.hidden ? 'none' : 'block';
     I.cap.style.pointerEvents = S.tool && !S.hidden ? 'auto' : 'none';
     I.cap.style.cursor = 'crosshair';
-    var hint = '';
-    if (S.tool) {
-      var pts = DEF[S.tool].pts;
-      hint = S.draft ? 'Bấm điểm thứ hai (hoặc thả chuột) · Esc để huỷ'
-           : pts === 1 ? 'Bấm vào biểu đồ để đặt · Esc để huỷ'
-           : 'Bấm điểm thứ nhất rồi bấm điểm thứ hai, hoặc kéo chuột · Esc để huỷ';
-    }
+    var hint = '';                                               // không hiện dòng hướng dẫn phía trên biểu đồ
     I.hint.textContent = hint; I.hint.style.display = hint ? 'block' : 'none';
     placeBar();
   }
@@ -438,9 +448,15 @@ DRAW_JS = r"""
   }
 
   // ---------------------------------------------------------------- tạo nét vẽ bằng chuột
+  function chanNext(pt) {                                           // đường song song: xong đường gốc (điểm 1, 2) -> chuyển sang chọn điểm thứ 3
+    var d = S.draft, a = { x: X(d.p[0].t), y: Y(d.p[0].v) }, b = { x: X(pt.t), y: Y(pt.v) };
+    if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 4) return;
+    d.p[1] = pt; d.stage = 2; d.dragging = false; d.p[2] = { t: pt.t, v: pt.v }; render();
+  }
   function finishDraft() {
     var d = S.draft; S.draft = null;
     if (!d) return;
+    if (d.type === 'channel' && !d.p[2]) { setTool(null); return; }
     var a = { x: X(d.p[0].t), y: Y(d.p[0].v) }, b = { x: X(d.p[1].t), y: Y(d.p[1].v) };
     if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 4) { setTool(null); return; }       // hai điểm trùng nhau: bỏ
     delete d.down; delete d.dragging;
@@ -471,19 +487,23 @@ DRAW_JS = r"""
       S.draft = { id: uid(), type: S.tool, p: [pt, { t: pt.t, v: pt.v }], c: S.color, w: 1.6, down: m, dragging: true };
       try { I.cap.setPointerCapture(e.pointerId); } catch (err) {}
     } else {
+      if (S.draft.type === 'channel') {
+        if (S.draft.stage === 2) { S.draft.p[2] = pt; finishDraft(); } else chanNext(pt);
+        return;
+      }
       S.draft.p[1] = pt; finishDraft(); return;
     }
     render();
   }
   function onCapMove(e) {
     if (!S.draft) return;
-    var m = capPos(e); S.draft.p[1] = fromPx(m.x, m.y, S.magnet); render();
+    var m = capPos(e); S.draft.p[S.draft.stage === 2 ? 2 : 1] = fromPx(m.x, m.y, S.magnet); render();
   }
   function onCapUp(e) {
     if (!S.draft || !S.draft.dragging) return;
     var m = capPos(e), dd = Math.abs(m.x - S.draft.down.x) + Math.abs(m.y - S.draft.down.y);
     try { I.cap.releasePointerCapture(e.pointerId); } catch (err) {}
-    if (dd > 8) { S.draft.p[1] = fromPx(m.x, m.y, S.magnet); finishDraft(); }
+    if (dd > 8) { if (S.draft.type === 'channel') chanNext(fromPx(m.x, m.y, S.magnet)); else { S.draft.p[1] = fromPx(m.x, m.y, S.magnet); finishDraft(); } }
     else { S.draft.dragging = false; render(); }                    // bấm - bấm: chờ điểm thứ hai
   }
 
