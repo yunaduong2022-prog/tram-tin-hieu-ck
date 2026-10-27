@@ -1205,6 +1205,42 @@ def _wb_meta(code: str) -> dict:
                          if pd.notna(fd.get("Xếp hạng")) and pd.notna(fd.get("Xếp hạng tài chính")) and pd.notna(fd.get("Xếp hạng kinh doanh")) else "")}
 
 
+def _cap_rank_note(code: str) -> str:
+    """Dưới ô Vốn hóa của biểu đồ: "(TOP 1 NGÀNH, chiếm 21,3% vốn hóa ngành)" nếu vốn hóa của mã thuộc 3 mã lớn nhất ngành.
+    Ngành = nhóm ngành trong watchlist.py (không tính VN30 / nhóm cũ). Mã thuộc nhiều ngành thì lấy ngành mà mã có thứ hạng cao nhất.
+    Ngành phải có ít nhất 3 mã có vốn hóa. Tỷ trọng chỉ hiện khi MỌI mã trong ngành đều có số vốn hóa (thiếu số thì tỷ trọng sai nên bỏ)."""
+    code = str(code).upper()
+    cap_map, _ = _wb_meta_maps(WY_KEY)
+    def cap_of(c):
+        try:
+            v = float(cap_map.get(str(c).upper()))
+            return v if v > 0 else None
+        except (TypeError, ValueError):
+            return None
+    mine = cap_of(code)
+    if mine is None:
+        return ""
+    best = None                                   # (thứ hạng, tỷ trọng hoặc None)
+    for sec in MEMBER.get(code, []):
+        if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:     # Họ Vingroup là nhóm tập đoàn, không phải ngành
+            continue
+        members = {str(x).upper() for x in WL.GROUPS[sec]} | {code}
+        caps = {m: cap_of(m) for m in members}
+        known = {m: v for m, v in caps.items() if v is not None}
+        if len(known) < 3:                        # ngành chỉ 1-2 mã có số thì "TOP 1 NGÀNH" vô nghĩa
+            continue
+        rank = 1 + sum(1 for m, v in known.items() if m != code and v > mine)
+        share = mine / sum(known.values()) * 100 if len(known) == len(members) else None
+        if best is None or rank < best[0]:
+            best = (rank, share)
+    if best is None or best[0] > 3:
+        return ""
+    txt = f"TOP {best[0]} NGÀNH"
+    if best[1] is not None:
+        txt += f", chiếm {best[1]:.1f}% vốn hóa ngành".replace(".", ",")
+    return f"({txt})"
+
+
 def _wb_ma_of(code: str) -> dict:
     """{20|50|200: (giá trị MA ngày, % giá đóng cửa so với MA)}; thiếu lịch sử thì bỏ qua."""
     g = df[df["Mã"].astype(str).str.upper() == str(code).upper()].sort_values("Ngày")
@@ -2800,7 +2836,7 @@ def _chart_metrics(code, info) -> list[dict]:
         chart_metrics += [
             {"label": "P/B", "value": _na(_wm.get("P/B"))},
             {"label": "ROE", "value": _na(_wm.get("ROE"))},
-            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa"))},
+            {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa")), "sub": _cap_rank_note(code), "color": "#25A879"},
         ]
         try:
             _ff = pd.to_numeric(ST._read_csv_by_code(ST.INFO_PATH).at[str(code).upper(), "%freefloat"], errors="coerce")
