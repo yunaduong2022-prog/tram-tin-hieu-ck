@@ -422,6 +422,28 @@ def bctc_sector_html(symbols: list[str], path: str = BCTC_PATH) -> str:
     return f'<div class="srt-wrap"><table class="srt"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
+def sectors_with_profit_data(groups: dict, lnst: pd.DataFrame | None = None, bctc_path: str = BCTC_PATH) -> set[str]:
+    """Các ngành đã có số doanh thu / lợi nhuận: có dòng trong data/lnst_quy.csv hoặc có mã với số TTM trong data/bctc.csv."""
+    out: set[str] = set()
+    names = {}
+    if lnst is not None and not lnst.empty:
+        names = {n.casefold() for n in lnst["Ngành"].dropna().astype(str)}
+    have_codes: set[str] = set()
+    try:
+        b = pd.read_csv(bctc_path, encoding="utf-8-sig")
+        num = [c for c, _ in _BCTC_COLS if c != "Kỳ BCTC" and c in b.columns]
+        if "Mã" in b.columns and num:
+            for c in num:
+                b[c] = pd.to_numeric(b[c], errors="coerce")
+            have_codes = set(b.loc[b[num].notna().any(axis=1), "Mã"].astype(str).str.upper().str.strip())
+    except (OSError, ValueError, pd.errors.ParserError):
+        pass
+    for sec, syms in groups.items():
+        if str(sec).strip().casefold() in names or any(str(x).upper() in have_codes for x in syms):
+            out.add(sec)
+    return out
+
+
 def _profit_section(sector: str, symbols: list[str]) -> None:
     """Nội dung trang Vị thế cổ phiếu ngành: doanh thu và lợi nhuận của các cổ phiếu trong ngành."""
     st.subheader("Tăng trưởng LNST công ty mẹ (YoY)")
@@ -518,6 +540,13 @@ def render(raw: pd.DataFrame, data_key: str, res_df: pd.DataFrame, wait_df: pd.D
     size = {s: sum(str(x).upper() in have for x in groups[s]) for s in sectors}
     # Ngành đủ mã (>= min_stocks) xếp trước, mỗi nhóm theo RS ngành giảm dần; ngành chỉ 1-2 mã không làm ngành mặc định
     sectors = sorted(sectors, key=lambda s: (size[s] < CFG["min_stocks"], order.index(s) if s in order else 999))
+
+    if profit:    # trang doanh thu / lợi nhuận: chỉ liệt kê ngành đã có số liệu
+        _ok = sectors_with_profit_data(groups, _lnst_cached(os.path.getmtime(LNST_PATH) if os.path.exists(LNST_PATH) else 0.0))
+        sectors = [x for x in sectors if x in _ok]
+        if not sectors:
+            st.info(f"Chưa ngành nào có số doanh thu, lợi nhuận. Thêm dữ liệu vào {LNST_PATH} hoặc {BCTC_PATH}.")
+            return
 
     # Mở từ bản đồ ngành ở Tổng quan ngành thì giữ đúng ngành đó
     pre = st.session_state.get("sector_detail")
