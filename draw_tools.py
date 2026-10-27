@@ -26,7 +26,7 @@ DRAW_JS = r"""
   var NS = 'http://www.w3.org/2000/svg', DAY = 86400000;
   var FONT = '"Source Sans Pro","Open Sans",Arial,sans-serif';
   var UPC = '#089981', DNC = '#F23645', INK = '#0E1C18';
-  var LSK = 'vn_draw_v1:' + KEY, LSB = 'vn_draw_bar_v1', LSC = 'vn_draw_cfg_v1';
+  var LSK = 'vn_draw_v1:' + KEY, LSB = 'vn_draw_bar_v1', LSC = 'vn_draw_cfg_v1', LSO = 'vn_draw_open_v1';
 
   function lsGet(k) { try { return JSON.parse(P.localStorage.getItem(k)); } catch (e) { return null; } }
   function lsSet(k, v) { try { P.localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -34,7 +34,7 @@ DRAW_JS = r"""
   var cfg = lsGet(LSC) || {};
   var S = {
     shapes: lsGet(LSK) || [], tool: null, sel: null, draft: null, undo: [],
-    color: cfg.color || '#F5C542', magnet: !!cfg.magnet, hidden: false, barPos: lsGet(LSB), rev: 0
+    color: cfg.color || '#F5C542', magnet: !!cfg.magnet, hidden: false, barPos: null, dockOpen: lsGet(LSO) !== false, rev: 0
   };
   if (!Array.isArray(S.shapes)) S.shapes = [];
 
@@ -292,31 +292,43 @@ DRAW_JS = r"""
     var st = D.createElement('style');
     st.id = 'vnd-style';
     st.textContent =
-      '.vnd-bar{position:absolute;z-index:1003;display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:4px 6px;' +
-      'background:rgba(20,38,31,.96);border:1px solid rgba(230,239,233,.16);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.45);' +
+      '.vnd-bar{position:absolute;z-index:1003;display:flex;flex-direction:column;align-items:center;gap:2px;width:42px;box-sizing:border-box;padding:6px 4px;' +
+      'overflow-y:auto;overflow-x:hidden;scrollbar-width:none;' +
+      'background:rgba(20,38,31,.96);border:1px solid rgba(230,239,233,.16);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.45);' +
       'user-select:none;-webkit-user-select:none;font-family:' + FONT + '}' +
-      '.vnd-grip{width:14px;height:26px;margin-right:2px;cursor:grab;opacity:.55;' +
-      'background:radial-gradient(circle,#CBD2DC 1.2px,transparent 1.6px) 0 0/6px 6px}' +
-      '.vnd-b{position:relative;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;' +
+      '.vnd-bar::-webkit-scrollbar{display:none}' +
+      '.vnd-b{position:relative;flex:none;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;' +
       'color:#CBD2DC;background:transparent;border:0;cursor:pointer;padding:0}' +
       '.vnd-b:hover{background:rgba(230,239,233,.12);color:#fff}' +
       '.vnd-b.on{background:rgba(45,212,167,.22);color:#2DD4A7}' +
       '.vnd-b.off{opacity:.38}' +
-      '.vnd-b[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);' +
-      'background:#0B1512;color:#E6EFE9;border:1px solid rgba(230,239,233,.2);padding:4px 9px;border-radius:5px;font-size:12px;' +
-      'font-weight:600;white-space:nowrap;pointer-events:none;z-index:1004}' +
-      '.vnd-sep{width:1px;height:20px;background:rgba(230,239,233,.18);margin:0 4px}' +
+      '.vnd-sep{flex:none;width:24px;height:1px;background:rgba(230,239,233,.18);margin:4px 0}' +
       '.vnd-col{width:22px;height:22px;padding:0;border:2px solid rgba(230,239,233,.5);border-radius:50%;background:none;cursor:pointer;overflow:hidden}' +
       '.vnd-col::-webkit-color-swatch-wrapper{padding:0}.vnd-col::-webkit-color-swatch{border:0;border-radius:50%}' +
+      '.vnd-tab{position:absolute;z-index:1003;width:16px;height:40px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;' +
+      'background:rgba(20,38,31,.96);border:1px solid rgba(230,239,233,.16);border-radius:0 8px 8px 0;color:#CBD2DC;cursor:pointer;padding:0}' +
+      '.vnd-tab:hover{color:#fff;background:rgba(45,70,60,.98)}' +
+      '.vnd-tip{position:absolute;z-index:1005;transform:translateY(-50%);background:#0B1512;color:#E6EFE9;border:1px solid rgba(230,239,233,.2);' +
+      'padding:4px 9px;border-radius:5px;font:600 12px ' + FONT + ';white-space:nowrap;pointer-events:none}' +
       '.vnd-hint{position:absolute;z-index:1003;font:600 12px ' + FONT + ';color:#E6EFE9;background:rgba(11,21,18,.92);' +
       'border:1px solid rgba(45,212,167,.5);padding:3px 9px;border-radius:5px;pointer-events:none;white-space:nowrap}';
     D.head.appendChild(st);
   }
 
+  function showTip(el, text) {
+    if (!I || !G) return;
+    var br = el.getBoundingClientRect(), pr = G.pc.getBoundingClientRect();
+    I.tip.textContent = text;
+    I.tip.style.left = (br.right - pr.left + 8) + 'px';
+    I.tip.style.top = (br.top - pr.top + br.height / 2) + 'px';
+    I.tip.style.display = 'block';
+  }
+  function hideTip() { if (I) I.tip.style.display = 'none'; }
+  function stopEv(el) {
+    ['pointerdown', 'mousedown', 'click', 'dblclick', 'wheel'].forEach(function (n) { el.addEventListener(n, function (e) { e.stopPropagation(); }); });
+  }
   function buildBar() {
     var bar = html('div', 'vnd-bar');
-    var grip = html('div', 'vnd-grip');
-    bar.appendChild(grip);
     TOOLS.forEach(function (t) {
       if (t.sep) { bar.appendChild(html('div', 'vnd-sep')); return; }
       var b;
@@ -335,19 +347,26 @@ DRAW_JS = r"""
         b = html('button', 'vnd-b'); b.type = 'button'; b.innerHTML = t.icon;
         b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); onBtn(t); });
       }
-      b.setAttribute('data-tip', t.tip); b.setAttribute('data-id', t.id);
+      b.setAttribute('data-id', t.id);
+      b.addEventListener('mouseenter', function () { showTip(b, t.tip); });
+      b.addEventListener('mouseleave', hideTip);
       bar.appendChild(b);
     });
-    // kéo thanh công cụ bằng chấm bên trái
-    grip.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      var sx = e.clientX, sy = e.clientY, p0 = barPos();
-      function mv(ev) { S.barPos = { dx: p0.dx + ev.clientX - sx, dy: p0.dy + ev.clientY - sy }; placeBar(); }
-      function up() { D.removeEventListener('pointermove', mv, true); D.removeEventListener('pointerup', up, true); lsSet(LSB, S.barPos); }
-      D.addEventListener('pointermove', mv, true); D.addEventListener('pointerup', up, true);
-    });
-    ['pointerdown', 'mousedown', 'click', 'dblclick', 'wheel'].forEach(function (n) { bar.addEventListener(n, function (e) { e.stopPropagation(); }); });
+    stopEv(bar);
+    bar.addEventListener('scroll', hideTip);
     return bar;
+  }
+  var CHEV_L = ICON('<path d="M12 5l-5 5 5 5"/>'), CHEV_R = ICON('<path d="M8 5l5 5-5 5"/>');
+  function buildTab() {                                              // nút nhỏ ở mép thanh dọc: bấm để ẩn / hiện thanh công cụ vẽ
+    var tab = html('button', 'vnd-tab'); tab.type = 'button';
+    tab.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      S.dockOpen = !S.dockOpen; lsSet(LSO, S.dockOpen); hideTip(); refreshBar();
+    });
+    tab.addEventListener('mouseenter', function () { showTip(tab, S.dockOpen ? 'Ẩn thanh công cụ vẽ' : 'Hiện thanh công cụ vẽ'); });
+    tab.addEventListener('mouseleave', hideTip);
+    stopEv(tab);
+    return tab;
   }
   function refreshBar() {
     if (!I) return;
@@ -377,17 +396,18 @@ DRAW_JS = r"""
     I.hint.textContent = hint; I.hint.style.display = hint ? 'block' : 'none';
     placeBar();
   }
-  function barPos() {
-    var bw = I.bar.offsetWidth, bh = I.bar.offsetHeight;
-    var p = S.barPos || { dx: G.w - bw - 10, dy: 8 };
-    return { dx: Math.max(0, Math.min(G.w - bw, p.dx)), dy: Math.max(0, Math.min(G.h - bh, p.dy)) };
-  }
   function placeBar() {
     if (!G) return;
-    I.bar.style.maxWidth = Math.max(240, G.w - 16) + 'px';
-    var p = barPos();
-    I.bar.style.left = (G.ox + G.left + p.dx) + 'px'; I.bar.style.top = (G.oy + G.top + p.dy) + 'px';
-    I.hint.style.left = (G.ox + G.left + p.dx) + 'px'; I.hint.style.top = (G.oy + G.top + p.dy + I.bar.offsetHeight + 6) + 'px';
+    var open = S.dockOpen, top = G.oy + G.top + 6, left = G.ox + 2;
+    I.bar.style.display = open ? 'flex' : 'none';
+    I.bar.style.maxHeight = Math.max(120, (G.pc.clientHeight || 600) - top - 24) + 'px';
+    I.bar.style.left = left + 'px'; I.bar.style.top = top + 'px';
+    var bw = open ? I.bar.offsetWidth : 0, bh = open ? I.bar.offsetHeight : 0;
+    I.tab.style.display = 'flex';
+    I.tab.style.left = (left + bw - (open ? 1 : 0)) + 'px';
+    I.tab.style.top = (open ? top + Math.max(0, bh / 2 - 20) : top) + 'px';
+    if (I.tabOpen !== open) { I.tab.innerHTML = open ? CHEV_L : CHEV_R; I.tabOpen = open; }
+    I.hint.style.left = (left + bw + 24) + 'px'; I.hint.style.top = top + 'px';
   }
 
   function setTool(id) {
@@ -521,7 +541,7 @@ DRAW_JS = r"""
   function onDocDown(e) {                                           // bấm ra ngoài nét vẽ: bỏ chọn
     if (!S.sel || S.tool) return;
     var t = e.target;
-    if (t && t.closest && (t.closest('[data-sid]') || t.closest('.vnd-bar'))) return;
+    if (t && t.closest && (t.closest('[data-sid]') || t.closest('.vnd-bar') || t.closest('.vnd-tab'))) return;
     S.sel = null; render();
   }
 
@@ -533,12 +553,11 @@ DRAW_JS = r"""
   }
   function layout() {
     var g = geo(I.gd);
-    if (!g) { I.box.style.display = 'none'; I.bar.style.display = 'none'; I.hint.style.display = 'none'; return false; }
+    if (!g) { I.box.style.display = 'none'; I.bar.style.display = 'none'; I.tab.style.display = 'none'; I.tip.style.display = 'none'; I.hint.style.display = 'none'; return false; }
     G = g;
-    if (I.box.parentNode !== g.pc) { g.pc.appendChild(I.box); g.pc.appendChild(I.bar); g.pc.appendChild(I.hint); }
+    if (I.box.parentNode !== g.pc) { g.pc.appendChild(I.box); g.pc.appendChild(I.bar); g.pc.appendChild(I.tab); g.pc.appendChild(I.tip); g.pc.appendChild(I.hint); }
     I.box.style.cssText = 'position:absolute;pointer-events:none;overflow:hidden;z-index:1000;left:' + (g.ox + g.left) + 'px;top:' + (g.oy + g.top) +
                           'px;width:' + g.w + 'px;height:' + g.h + 'px;';
-    I.bar.style.display = 'flex';
     return true;
   }
   function attach(gd) {
@@ -550,6 +569,7 @@ DRAW_JS = r"""
     box.appendChild(svg); box.appendChild(cap);
     I = { gd: gd, box: box, svg: svg, cap: cap, bar: null, hint: html('div', 'vnd-hint', 'display:none'), xs: null, xsKey: null, sig: '' };
     I.bar = buildBar();
+    I.tab = buildTab(); I.tip = html('div', 'vnd-tip', 'display:none');
     cap.addEventListener('pointerdown', onCapDown);
     cap.addEventListener('pointermove', onCapMove);
     cap.addEventListener('pointerup', onCapUp);
@@ -576,7 +596,7 @@ DRAW_JS = r"""
     try { cur.gd.removeListener('plotly_afterplot'); } catch (e) {}
     D.removeEventListener('keydown', onKey, true);
     D.removeEventListener('pointerdown', onDocDown, true);
-    [cur.box, cur.bar, cur.hint].forEach(function (e) { if (e && e.parentNode) e.parentNode.removeChild(e); });
+    [cur.box, cur.bar, cur.tab, cur.tip, cur.hint].forEach(function (e) { if (e && e.parentNode) e.parentNode.removeChild(e); });
     cur.gd.__vnDrawOn = false;
   }
   function scan() {
