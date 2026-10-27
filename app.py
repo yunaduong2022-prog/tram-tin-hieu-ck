@@ -2639,7 +2639,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
         _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
         if _ppu > 0:
-            _cur, _gap = last_c * _ppu, 15.0
+            _cur, _gap = last_c * _ppu, 23.0
             _pos = []
             for _v, _bg, _fg in IDU.price_tags(g, len(t), lambda k_: future_date(_last, tf, k_)):
                 if _yr[0] <= _v <= _yr[1]:
