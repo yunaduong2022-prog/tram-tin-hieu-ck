@@ -4,8 +4,6 @@
 Dùng đúng wyckoff.analyze() như thẻ Wyckoff / biểu đồ trong app (khung Ngày, dữ liệu qua engine.add_indicators).
   🟢 TÍCH LŨY (gồm tái tích lũy): sắp theo pha C, D, E, B, A (C/D = đã có Spring / SOS; A/B chỉ để quan sát)
   🔴 CẢNH BÁO PHÂN PHỐI (gồm tái phân phối): sắp theo pha D, E, C, B, A (D/E = đã thủng biên dưới / đang markdown)
-Mỗi mã có thêm dòng "Dự báo nghiêng Tăng / Giảm" (cùng phép tính với biểu đồ khung Ngày). Mục phân phối ghi gọn (kèm Ngắn hạn / Trung hạn);
-nếu nghiêng Tăng thì thêm Vùng chờ mua, Cắt lỗ, Target.
 Mã trong data/co_phieu_cua_toi.csv được đánh dấu 📌 và xếp lên đầu; watchlist 👁.
 
 Mặc định chỉ gửi mã MỚI xuất hiện hoặc ĐỔI loại / ĐỔI pha so với lần gửi trước (nhớ trong data/wy_alert_state.json),
@@ -28,7 +26,6 @@ import argparse
 import html
 import json
 import os
-import re
 import time
 from datetime import datetime
 
@@ -45,16 +42,19 @@ CSV_PATH = "data/eod_prices.csv"
 STATE_PATH = "data/wy_alert_state.json"
 MIN_VALUE_BN = 2.0            # bỏ mã có giá trị khớp trung vị 20 phiên dưới 2 tỷ đồng
 MIN_BARS = WY.MIN_BARS
-# Quy tắc kế hoạch giá (tính từ vùng Wyckoff: Bot = biên dưới, Top = biên trên, H = Top − Bot). Sửa ở đây.
+# Target 1-2 (Tóm tắt nhanh chưa có mục tiêu): lấy từ biên trên vùng Wyckoff (Top) và độ cao vùng H = Top − Bot. Sửa ở đây.
+# Vùng mua và giá cắt lỗ KHÔNG nằm ở đây: lấy đúng từ khối "Tóm tắt nhanh · Kết luận hành động" (action_summary.plan).
 PLAN = {
-    "zone_low_frac": 0.35,       # pha A/B/C: vùng thăm dò = Bot → Bot + 35% H (không cao hơn giá hiện tại)
-    "retest_frac": 0.25,         # pha D/E: vùng thăm dò = Top − 25% H → Top × 1.01 (nhịp test lại biên trên)
-    "stop_buffer": 0.01,         # cắt lỗ nằm dưới Bot 1% (tránh quét râu)
-    "retest_stop": 0.03,         # pha D/E: cắt lỗ dưới biên dưới vùng thăm dò 3%, nhưng không thấp hơn Bot
     "targets": (0.0, 0.5, 1.0, 1.5),   # mốc target = Top + k × H; T1 là mốc đầu tiên cao hơn giá ≥ 3%, T2 là mốc kế tiếp
     "min_gain": 0.03,
-    "fallback": (0.08, 0.15),    # không có mốc nào phù hợp (giá đã chạy xa): +8% / +15%
+    "fallback": (0.08, 0.15),          # không có mốc nào phù hợp (giá đã chạy xa): +8% / +15%
 }
+# Phân loại theo "Trạng thái" của bộ lọc Chờ mua (waiting_buy.STATE_GROUP), theo thứ tự ưu tiên hiển thị
+STATE_ORDER = ["Điểm mua đã xác nhận", "Sắp có điểm mua", "Theo dõi thêm", "Theo dõi phục hồi",
+               "Cảnh báo không mua đuổi", "Cảnh báo rủi ro / bán", "Loại khỏi mọi danh sách"]
+STATE_ICON = {"Điểm mua đã xác nhận": "✅", "Sắp có điểm mua": "🎯", "Theo dõi thêm": "👀", "Theo dõi phục hồi": "🔄",
+              "Cảnh báo không mua đuổi": "⚠️", "Cảnh báo rủi ro / bán": "🔻", "Loại khỏi mọi danh sách": "⛔"}
+NO_STATE = "Chưa có trạng thái Chờ mua"
 BUY_PHASES = ("C", "D")        # "canh mua" = tích lũy đã có Spring (pha C) hoặc SOS (pha D); sửa ở đây nếu muốn đổi
 ORDER = {"acc": ["C", "D", "E", "B", "A"], "dist": ["D", "E", "C", "B", "A"]}
 PHASE_NOTE = {
@@ -68,19 +68,6 @@ PHASE_NOTE = {
 # ------------------------------------------------------------------ dữ liệu
 def _last(d: pd.DataFrame, col: str) -> float:
     return float(d[col].iat[-1]) if col in d.columns and pd.notna(d[col].iat[-1]) else float("nan")
-
-
-def _recent_low(d: pd.DataFrame, close: float):
-    """Đáy gần nhất (swing low đã xác nhận, k = 3 nến) thấp hơn giá hiện tại: (giá, ngày). Không có thì lấy đáy 20 phiên (Support_20) nếu thấp hơn giá."""
-    try:
-        _, _, stack = E.swing_state(d["Giá cao nhất"].to_numpy(float), d["Giá thấp nhất"].to_numpy(float), 3)
-        for j, t, p in reversed(stack):
-            if t == "L" and p < close:
-                return float(p), pd.Timestamp(d["Ngày"].iat[j])
-    except Exception:  # noqa: BLE001
-        pass
-    sup = _last(d, "Support_20")
-    return (sup, None) if sup == sup and 0 < sup < close else None
 
 
 def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFrame, pd.Timestamp]:
@@ -103,18 +90,11 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
             continue
         if not w or w["kind"] not in ("acc", "dist") or not w["phase"]:
             continue
-        try:                                          # dự báo nghiêng tăng / giảm: cùng phép tính với biểu đồ khung Ngày trong app
-            fa = E.analyze_frame(d, "D")
-            lean, fc = (int(fa["dir"]), fa["fc"]) if fa["enough"] else (0, None)
-        except Exception as e:  # noqa: BLE001
-            print(f"  không tính được dự báo {code}: {e}")
-            lean, fc = 0, None
         c = g["Giá đóng cửa"].astype(float).to_numpy()
         v = g["Khối lượng khớp lệnh"].astype(float).to_numpy()
         liq = float(np.median(c[-20:] * v[-20:]) * 1000 / 1e9)
         if liq < min_value:
             continue
-        low_pv = _recent_low(d, float(c[-1]))
         chg = d["Chg_%"].iat[-1] if "Chg_%" in d.columns else np.nan
         ev = max(w["events"], key=lambda x: x["i"]) if w["events"] else None
         rows.append({
@@ -124,14 +104,62 @@ def scan(path: str, only: set[str] | None, min_value: float) -> tuple[pd.DataFra
             "SK": f"{ev['label']} {pd.Timestamp(ev['date']):%d/%m}" if ev else "",
             "Xác nhận": (w["trigger"]["txt"], float(w["trigger"]["p"])) if w.get("trigger") else None,
             "Vô hiệu": (w["inval"]["txt"], float(w["inval"]["p"])) if w.get("inval") else None,
-            "GTGD": liq, "Lean": lean, "FC": fc,
-            "tenkan": _last(d, "Tenkan"), "kijun": _last(d, "Kijun"), "spanA": _last(d, "SpanA"), "spanB": _last(d, "SpanB"),
-            "atr": _last(d, "ATR"), "low_pv": low_pv,
+            "GTGD": liq,
             "wy": WY.compact(w),
             "ma20": _last(d, "MA20"), "ma50": _last(d, "MA50"), "ma200": _last(d, "MA200"),
             "sup": _last(d, "Support_20"), "res": _last(d, "Resistance_20"),
         })
     return pd.DataFrame(rows), latest
+
+
+def enrich(res: pd.DataFrame, path: str) -> pd.DataFrame:
+    """Gắn "Trạng thái" Chờ mua và ngữ cảnh y hệt app (phân kỳ RSI, hỗ trợ / kháng cự khung Ngày, dự báo, vùng mua) vào từng mã,
+    để kết luận hành động / giá mua / cắt lỗ trên Telegram khớp thẻ "Tóm tắt nhanh" trong bộ lọc. Lỗi thì giữ bảng cũ (không có trạng thái)."""
+    res = res.copy()
+    res["Trạng thái"], res["Nhóm TT"] = "", ""
+    res["ctx"] = pd.Series([None] * len(res), index=res.index, dtype=object)
+    try:
+        import mtf_levels as ML
+        import rsi_divergence as DV
+        import telegram_buy_alert as TB
+        import waiting_buy as WB
+        raw, frames = TB.build_frames(path)
+        mkt, _ = E.market_series(raw)
+        scr = E.build_screener(frames, mkt)
+        scr["Nhóm"] = ""
+        wb = WB.build_waiting_buy(frames, scr)
+        cols = [c for c in ("Trạng thái", "Lý do", "Vùng mua từ", "Vùng mua đến") if c in wb.columns]
+        wbmap = wb.drop_duplicates("Mã", keep="first").set_index("Mã")[cols].to_dict("index")
+    except Exception as e:  # noqa: BLE001
+        print(f"  không dựng được trạng thái Chờ mua: {e}")
+        return res
+    states, groups, ctxs = [], [], []
+    for _, r in res.iterrows():
+        code = r["Mã"]
+        try:
+            pick = lambda tf: frames[tf][frames[tf]["Mã"] == code]       # noqa: E731
+            a = E.analyze_frame(pick("D"), "D")
+            d = ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))["D"]
+            div = DV.analyze(frames, code, ("M", "W", "D"))
+        except Exception as e:  # noqa: BLE001
+            print(f"  {code}: thiếu ngữ cảnh app ({e})")
+            a, d, div = {}, {}, []
+        w = wbmap.get(code, {})
+        state = w.get("Trạng thái") if isinstance(w.get("Trạng thái"), str) else ""
+        reason = w.get("Lý do") if isinstance(w.get("Lý do"), str) else ""
+        grp = WB.STATE_GROUP.get(state, "") if state else ""
+        in_buy = bool(grp) and grp in WB.BUY_GROUPS
+        ctxs.append(dict(
+            code=code, close=r["Giá"], ma20=r["ma20"], ma50=r["ma50"], ma200=r["ma200"],
+            label=WB.status_tag(state, reason)[0] if state else "", state=state, reason=reason,
+            lean=(a.get("dir", 0) if a.get("enough") else 0), div=div, wy=r["wy"],
+            sup=d.get("sup") if d.get("ok") else None, res=d.get("res") if d.get("ok") else None,
+            zone=(w.get("Vùng mua từ"), w.get("Vùng mua đến")) if in_buy else None))
+        states.append(state)
+        groups.append(grp or NO_STATE)
+    res["Trạng thái"], res["Nhóm TT"] = states, groups
+    res["ctx"] = pd.Series(ctxs, index=res.index, dtype=object)
+    return res
 
 
 # ------------------------------------------------------------------ trạng thái đã gửi
@@ -154,161 +182,87 @@ def sig_of(r) -> str:
 
 
 # ------------------------------------------------------------------ định dạng
-def _lean_line(r) -> str:
-    """Dòng dự báo của biểu đồ khung Ngày: nghiêng Tăng / Giảm (|độ nghiêng| >= 1.0); chưa nghiêng rõ thì ghi trung tính."""
-    lean = int(r["Lean"]) if pd.notna(r["Lean"]) else 0
-    return "Dự báo nghiêng Tăng" if lean > 0 else "Dự báo nghiêng Giảm" if lean < 0 else "Dự báo chưa nghiêng rõ"
-
-
-SUP_STOP_ATR = 0.5            # dự báo chưa rõ: cắt lỗ nằm dưới hỗ trợ này 0,5 ATR
-
-
-def _support_zone(r):
-    """Dự báo chưa nghiêng rõ: (thấp, cao, nguồn) của vùng hỗ trợ để đặt mốc tham gia.
-    - Giá nằm trên cả Tenkan và Kijun: hai đường này là hỗ trợ.
-    - Giá dưới mây Ichimoku: đáy gần nhất là hỗ trợ.
-    Không thuộc hai trường hợp thì trả None."""
-    c = float(r["Giá"])
-    tk, kj, a, b = r["tenkan"], r["kijun"], r["spanA"], r["spanB"]
-    ok = lambda x: x == x and x > 0  # noqa: E731
-    if ok(tk) and ok(kj) and c > max(tk, kj):
-        return min(tk, kj), max(tk, kj), "Tenkan–Kijun"
-    if ok(a) and ok(b) and c < min(a, b) and r["low_pv"]:
-        p, dt = r["low_pv"]
-        atr = r["atr"] if r["atr"] == r["atr"] and r["atr"] > 0 else c * 0.02
-        return p, p + 0.25 * atr, f"đáy {dt:%d/%m}" if dt is not None else "đáy 20 phiên"
-    return None
-
-
-def _lean_plan(r) -> list[str]:
-    """Vùng chờ mua / cắt lỗ / target.
-    - Nghiêng Tăng: lấy từ dự báo của biểu đồ (vùng vào = giá ± 0,25 ATR, cắt lỗ 1,5 ATR, T1 = 2R, T2 = 3R).
-    - Chưa nghiêng rõ: vùng chờ mua = hỗ trợ (Tenkan–Kijun hoặc đáy gần nhất), cắt lỗ dưới hỗ trợ 0,5 ATR, T1 / T2 = 2R / 3R tính từ giữa vùng (% cắt lỗ / target cũng tính từ giữa vùng).
-    - Nghiêng Giảm: không đưa kế hoạch mua."""
-    lean, c = int(r["Lean"] or 0), float(r["Giá"])
-    ref = c                                   # mốc tính % của cắt lỗ / target: giá hiện tại, hoặc giữa vùng chờ mua nếu vùng nằm thấp hơn giá
-    src = ""
-    if lean > 0 and isinstance(r["FC"], dict):
-        fc = r["FC"]
-        lo, hi, sl, t1, t2 = fc["lo"], fc["hi"], fc["sl"], fc["t1"], fc["t2"]
-    elif lean == 0 and (z := _support_zone(r)):
-        lo, hi, src = z
-        hi = min(max(hi, lo * 1.005), c)
-        atr = r["atr"] if r["atr"] == r["atr"] and r["atr"] > 0 else c * 0.02
-        sl = lo - SUP_STOP_ATR * atr
-        mid = (lo + hi) / 2
-        risk = mid - sl
-        t1, t2 = mid + 2 * risk, mid + 3 * risk
-        ref = mid
-        src = f" ({src}" + (f" · cách giá {(mid / c - 1) * 100:+.1f}%" if mid < c * 0.995 else "") + ")"
-    else:
-        return []
-    pct = lambda x: (float(x) / ref - 1) * 100  # noqa: E731
-    return [f"  🎯 VÙNG CHỜ MUA {lo:,.2f} – {hi:,.2f}{src}",     # khối <pre> không in đậm được nên nhấn bằng icon + chữ hoa
-            f"  Cắt lỗ {sl:,.2f} ({pct(sl):+.1f}%)",
-            f"  Target 1 {t1:,.2f} ({pct(t1):+.1f}%) · Target 2 {t2:,.2f} ({pct(t2):+.1f}%)"]
-
-
-def _picture_plain(r) -> list[str]:
-    """Hai dòng Ngắn hạn / Trung hạn (cùng quy tắc với tin riêng từng mã), bỏ thẻ HTML để đưa vào khối <pre>."""
-    ctx = {"code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"], "wy": r["wy"],
-           "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": int(r["Lean"] or 0), "div": [], "zone": None}
-    try:
-        pic = AS.parts(ctx).get("picture", "")
-    except Exception as e:  # noqa: BLE001
-        print(f"  không dựng được ngắn/trung hạn {r['Mã']}: {e}")
-        return []
-    return ["  " + re.sub(r"</?b>", "", ln).strip() for ln in pic.split("\n") if ln.strip()]
-
-
 def _block(r, held: set[str], watch: set[str]) -> str:
-    """Mục cảnh báo phân phối, mỗi mã 3 dòng (nghiêng Tăng thì thêm vùng chờ mua / cắt lỗ / target)."""
     mark = "📌 " if r["Mã"] in held else ("👁 " if r["Mã"] in watch else "")
     chg = "" if pd.isna(r["Chg"]) else f" ({r['Chg']:+.1f}%)"
     note = PHASE_NOTE[r["Loại"]][r["Pha"]]
     lines = [f"{mark}{r['Mã']}  Giá {r['Giá']:,.2f}{chg}",
              f"  {r['Nhãn']} · {note}",
-             *_picture_plain(r),
-             _lean_line(r)] + _lean_plan(r)
+             f"  Vùng {r['Bot']:,.2f} – {r['Top']:,.2f} · {r['Nến']} nến · khớp mẫu {r['Khớp']}%"]
+    if r["SK"]:
+        lines.append(f"  Sự kiện gần nhất: {r['SK']}")
+    if r["Xác nhận"]:
+        lines.append(f"  {r['Xác nhận'][0]}")
+    if r["Vô hiệu"]:
+        lines.append(f"  {r['Vô hiệu'][0]}")
+    lines.append(f"  GTGD {r['GTGD']:,.0f} tỷ")
     return html.escape("\n".join(lines))
 
 
-def _plan_levels(r) -> dict:
-    """Vùng mua thăm dò, giá cắt lỗ, Target 1, Target 2 (theo PLAN). Thiếu dữ liệu thì trả {}."""
+def _targets(r) -> tuple[float, float] | None:
+    """(Target 1, Target 2) từ vùng Wyckoff: các mốc Top + k×H cao hơn giá hiện tại ≥ 3%; không có thì +8% / +15%."""
     close, top, bot = float(r["Giá"]), float(r["Top"]), float(r["Bot"])
     if not (close > 0 and top > bot > 0):
-        return {}
+        return None
     H = top - bot
-    if r["Pha"] in ("D", "E"):
-        lo, hi = top - PLAN["retest_frac"] * H, top * 1.01
-    else:
-        lo, hi = bot, bot + PLAN["zone_low_frac"] * H
-    hi = min(hi, close)                          # không canh mua cao hơn giá hiện tại
-    lo = min(lo, hi * 0.98)                      # vùng rộng tối thiểu ~2%
-    if r["Pha"] in ("D", "E"):
-        stop = max(bot, lo * (1 - PLAN["retest_stop"]))
-    else:
-        stop = bot * (1 - PLAN["stop_buffer"])
-    levels = [top + k * H for k in PLAN["targets"]]
-    ups = [x for x in levels if x > close * (1 + PLAN["min_gain"])]
+    ups = [x for x in (top + k * H for k in PLAN["targets"]) if x > close * (1 + PLAN["min_gain"])]
     ups += [close * (1 + g) for g in PLAN["fallback"]]
-    t1, t2 = ups[0], ups[1]
-    return {"lo": lo, "hi": hi, "stop": stop, "t1": t1, "t2": t2,
-            "stop_pct": (stop / close - 1) * 100, "t1_pct": (t1 / close - 1) * 100, "t2_pct": (t2 / close - 1) * 100}
+    return ups[0], ups[1]
 
 
 def _stock_msg(r, held: set[str], watch: set[str]) -> str:
-    """Một tin riêng cho 1 mã: Wyckoff, Ngắn/Trung hạn, hướng xử lý khi cầm tiền mặt, vùng mua thăm dò, cắt lỗ, Target 1-2."""
+    """Tin riêng 1 mã: trạng thái, Wyckoff, Ngắn/Trung hạn, hướng xử lý của người cầm tiền mặt, vùng mua thăm dò, cắt lỗ (cùng
+    "Tóm tắt nhanh · Kết luận hành động" trong bộ lọc), Target 1-2."""
     mark = "📌 " if r["Mã"] in held else ("👁 " if r["Mã"] in watch else "")
     chg = "" if pd.isna(r["Chg"]) else f" ({r['Chg']:+.1f}%)"
     esc = html.escape
     icon = "🟢" if r["Loại"] == "acc" else "🔴"
     head = f"{icon} {mark}<b>{esc(r['Mã'])}</b> · Giá {r['Giá']:,.2f}{chg} · GTGD {r['GTGD']:,.0f} tỷ"
+    ctx = r.get("ctx") if isinstance(r.get("ctx"), dict) else {
+        "code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"], "wy": r["wy"],
+        "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": 0, "div": [], "zone": None}
+    grp, state = str(r.get("Nhóm TT") or ""), str(r.get("Trạng thái") or "")
+    st_line = f"<b>Trạng thái:</b> {esc(grp)}" + (f" · {esc(state)}" if state and state != grp else "") if grp else ""
     wy_line = f"<b>Wyckoff</b> {esc(r['Nhãn'])} · {esc(PHASE_NOTE[r['Loại']][r['Pha']])}"
-    ctx = {"code": r["Mã"], "close": r["Giá"], "ma20": r["ma20"], "ma50": r["ma50"], "ma200": r["ma200"],
-           "wy": r["wy"], "sup": r["sup"], "res": r["res"], "label": "", "state": "", "reason": "", "lean": int(r["Lean"] or 0), "div": [], "zone": None}
     try:
-        pt = AS.parts(ctx)
+        pt, pl = AS.parts(ctx), AS.plan(ctx)
     except Exception as e:  # noqa: BLE001
         print(f"  không dựng được tóm tắt {r['Mã']}: {e}")
-        pt = {}
-    block1 = wy_line + ("\n" + pt["picture"] if pt.get("picture") else "") + "\n" + f"<b>{esc(_lean_line(r))}</b>"
-    cash = pt.get("cash")
+        pt, pl = {}, {}
+    block1 = wy_line + ("\n" + pt["picture"] if pt.get("picture") else "")
     action = ""
-    if cash:
-        _, why, zone = cash
+    if pt.get("cash"):
+        _, why, zone = pt["cash"]
         action = (why[:1].upper() + why[1:]) + (f"\n   ↳ {zone}" if zone else "")
-    lv = _plan_levels(r)
-    plan = ""
-    try:
-        mid_pos = AS._signals(ctx)["mid"] == "+"
-    except Exception:  # noqa: BLE001
-        mid_pos = False
-    zone_name = "Vùng chờ mua" if mid_pos else "Vùng mua thăm dò"      # trung hạn tích cực thì gọi là vùng chờ mua
-    if lv:
-        plan = (f"{zone_name}: {lv['lo']:,.2f} – {lv['hi']:,.2f}\n"
-                f"Cắt lỗ nếu sai: {lv['stop']:,.2f} ({lv['stop_pct']:+.1f}%)\n"
-                f"Target 1: {lv['t1']:,.2f} ({lv['t1_pct']:+.1f}%)\n"
-                f"Target 2: {lv['t2']:,.2f} ({lv['t2_pct']:+.1f}%)")
+    px = lambda v: f"{float(v):,.2f}"        # noqa: E731
+    close = float(r["Giá"])
+    buy, wait = pl.get("buy"), pl.get("wait")
+    if buy and buy.get("zone"):
+        bl = f"{px(buy['zone'][0])} – {px(buy['zone'][1])}"
+    elif buy and buy.get("levels"):
+        bl = "quanh " + " hoặc ".join(px(x) for x in buy["levels"])
+    elif wait:
+        bl = f"chưa mua, chờ giá lấy lại {wait[0]} {px(wait[1])}"
+    else:
+        bl = "chưa có vùng rõ, chờ giá về hỗ trợ gần nhất"
+    lines = [f"Vùng mua thăm dò: {bl}"]
+    stop = pl.get("stop")
+    lines.append(f"Cắt lỗ nếu sai: {px(stop)} ({(float(stop) / close - 1) * 100:+.1f}%)" if stop else "Cắt lỗ nếu sai: chưa xác định")
+    tg = _targets(r)
+    if tg:
+        lines += [f"Target 1: {px(tg[0])} ({(tg[0] / close - 1) * 100:+.1f}%)", f"Target 2: {px(tg[1])} ({(tg[1] / close - 1) * 100:+.1f}%)"]
     foot = "<i>Quy tắc mang tính chủ quan, chỉ để tham khảo, không phải khuyến nghị đầu tư.</i>"
-    mid = "\n".join(x for x in (action, plan) if x)
-    return "\n\n".join(x for x in (head, block1, mid, foot) if x)
+    mid = "\n".join(x for x in (action, "\n".join(lines)) if x)
+    return "\n\n".join(x for x in (head, st_line, block1, mid, foot) if x)
 
 
-def build_acc_messages(show: pd.DataFrame, held: set[str], watch: set[str], cap: int) -> list[str]:
-    """Tích lũy: tách theo từng pha (C, D, E, B, A); mỗi pha có 1 tin mở đầu rồi mỗi mã 1 tin riêng."""
-    acc = _sorted(show, "acc", held, watch)
+def build_acc_messages(show: pd.DataFrame, held: set[str], watch: set[str], cap: int, by: str = "state") -> list[str]:
+    """Tích lũy: tách theo nhóm (trạng thái Chờ mua hoặc pha); mỗi nhóm có 1 tin mở đầu rồi mỗi mã 1 tin riêng."""
     msgs: list[str] = []
-    for ph in ORDER["acc"]:
-        g = acc[acc["Pha"] == ph]
-        if g.empty:
-            continue
+    for title, icon, hint, g in _acc_groups(show, held, watch, by):
         shown = g.head(cap) if cap else g
-        title = WY.PHASE_NAME["acc"][ph] if hasattr(WY, "PHASE_NAME") else PHASE_NOTE["acc"][ph]
-        hint = WY.PHASE_HINT["acc"][ph] if hasattr(WY, "PHASE_HINT") else ""
         more = f" · hiển thị {len(shown)}/{len(g)} mã" if len(g) > len(shown) else ""
-        msgs.append(f"🟢 <b>TÍCH LŨY · PHA {ph} — {html.escape(title)}</b> ({len(g)} mã{more})"
-                    + (f"\n<i>{html.escape(hint)}</i>" if hint else ""))
+        msgs.append(f"{icon} <b>{html.escape(title)}</b> ({len(g)} mã{more})" + (f"\n<i>{html.escape(hint)}</i>" if hint else ""))
         msgs.extend(_stock_msg(r, held, watch) for _, r in shown.iterrows())
     return msgs
 
@@ -320,15 +274,12 @@ def _sorted(d: pd.DataFrame, kind: str, held: set[str], watch: set[str]) -> pd.D
     return d.sort_values(["_p", "_o", "Khớp"], ascending=[True, True, False])
 
 
-SEP = "─" * 26                  # đường kẻ ngăn cách các mã trong mục cảnh báo phân phối
-
-
 def _section_chunks(title: str, total: int, items: list[str], more: str, limit: int = TG_LIMIT) -> list[str]:
     """Chia 1 mục (tích lũy / phân phối) thành nhiều khối <pre>, mỗi khối không vượt quá giới hạn Telegram.
     Mỗi khối tự đóng/mở thẻ <pre> riêng nên tin nhắn nào cũng hợp lệ."""
     def render(body: list[str], first: bool) -> str:
         t = f"{title} ({total} mã)" if first else f"{title} (tiếp)"
-        return f"<b>{t}</b>\n<pre>{(chr(10) + SEP + chr(10)).join(body)}</pre>"
+        return f"<b>{t}</b>\n<pre>{chr(10).join(body)}</pre>"
 
     budget = limit - len(more) - 40            # chừa chỗ cho dòng "… và N mã khác" và khoảng trắng nối tin
     chunks: list[str] = []
@@ -361,27 +312,43 @@ def _sector_map() -> dict[str, str]:
         return {}
 
 
-def _by_sector(codes: list[str], smap: dict[str, str]) -> str:
-    """"Ngân hàng: HDB, VPB\nChứng khoán: HCM, TCX" (ngành nhiều mã đứng trước, "Khác" đứng cuối)."""
+def _acc_groups(show: pd.DataFrame, held: set[str], watch: set[str], by: str) -> list[tuple[str, str, str, pd.DataFrame]]:
+    """Tích lũy chia thành các nhóm theo thứ tự hiển thị: [(tiêu đề, icon, gợi ý, bảng mã)]. by="state": theo trạng thái Chờ mua; by="phase": theo pha."""
+    acc = _sorted(show, "acc", held, watch)
+    out: list[tuple[int, str, str, str, pd.DataFrame]] = []
+    if by == "phase":
+        for i, ph in enumerate(ORDER["acc"]):
+            g = acc[acc["Pha"] == ph]
+            if not g.empty:
+                hint = WY.PHASE_HINT["acc"][ph] if hasattr(WY, "PHASE_HINT") else ""
+                out.append((i, f"TÍCH LŨY · PHA {ph} — {PHASE_NOTE['acc'][ph]}", "🟢", hint, g))
+    else:
+        col = acc["Nhóm TT"] if "Nhóm TT" in acc.columns else pd.Series(NO_STATE, index=acc.index)
+        for name in dict.fromkeys(col):
+            g = acc[col == name]
+            idx = STATE_ORDER.index(name) if name in STATE_ORDER else len(STATE_ORDER)
+            out.append((idx, name, STATE_ICON.get(name, "⚪"), "", g))
+    out.sort(key=lambda t: t[0])
+    return [(t, ic, h, g) for _, t, ic, h, g in out]
+
+
+def _by_sector(codes: list[str], smap: dict[str, str], tags: dict[str, str] | None = None) -> str:
+    """"Ngân hàng: HDB (C), VPB (D)\nChứng khoán: HCM, TCX" (ngành nhiều mã đứng trước, "Khác" đứng cuối)."""
     groups: dict[str, list[str]] = {}
     for c in codes:
         groups.setdefault(smap.get(c.upper(), "Khác"), []).append(c)
     order = sorted(groups, key=lambda k: (k == "Khác", -len(groups[k]), k))
-    return "\n".join(f"{html.escape(k)}: {html.escape(', '.join(groups[k]))}" for k in order)
+    lab = lambda c: f"{c} ({tags[c]})" if tags and tags.get(c) else c      # noqa: E731
+    return "\n".join(f"{html.escape(k)}: {html.escape(', '.join(lab(c) for c in groups[k]))}" for k in order)
 
 
-def build_summary(show: pd.DataFrame, held: set[str], watch: set[str]) -> list[str]:
-    """Tin tổng hợp gửi trước các tin riêng lẻ: canh mua, từng pha tích lũy, cảnh báo phân phối; mỗi mục gom theo ngành."""
+def build_summary(show: pd.DataFrame, held: set[str], watch: set[str], by: str = "state") -> list[str]:
+    """Tin tổng hợp gửi trước các tin riêng lẻ: mỗi nhóm (trạng thái hoặc pha) gom theo ngành, mã kèm pha Wyckoff trong ngoặc."""
     smap = _sector_map()
-    acc = _sorted(show, "acc", held, watch)
     blocks: list[str] = []
-    buy = acc[acc["Pha"].isin(BUY_PHASES)]
-    if not buy.empty:
-        blocks.append(f"<b>🎯 Cổ phiếu canh mua</b> (tích lũy pha {', '.join(BUY_PHASES)}) · {len(buy)} mã\n" + _by_sector(list(buy["Mã"]), smap))
-    for ph in ORDER["acc"]:
-        g = acc[acc["Pha"] == ph]
-        if not g.empty:
-            blocks.append(f"<b>🟢 Cổ phiếu tích lũy pha {ph}, {html.escape(PHASE_NOTE['acc'][ph])}</b> · {len(g)} mã\n" + _by_sector(list(g["Mã"]), smap))
+    for title, icon, _, g in _acc_groups(show, held, watch, by):
+        tags = {r["Mã"]: r["Pha"] for _, r in g.iterrows()} if by == "state" else None
+        blocks.append(f"<b>{icon} {html.escape(title)}</b> · {len(g)} mã\n" + _by_sector(list(g["Mã"]), smap, tags))
     dist = _sorted(show, "dist", held, watch)
     if not dist.empty:
         blocks.append(f"<b>🔴 Cảnh báo phân phối</b> · {len(dist)} mã\n" + _by_sector(list(dist["Mã"]), smap))
@@ -401,7 +368,7 @@ def _pack(blocks: list[str]) -> list[str]:
 
 
 def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held: set[str], watch: set[str], cap: int,
-                   mode_txt: str, sent_at: datetime | None = None, cap_acc: int = 10) -> list[str]:
+                   mode_txt: str, sent_at: datetime | None = None, cap_acc: int = 10, by: str = "state") -> list[str]:
     head = (f"🏗 <b>Wyckoff · cấu trúc khung Ngày cuối phiên {latest:%d/%m/%Y}</b>\n"
             f"Đang tích lũy: {totals['acc']} mã · Đang phân phối: {totals['dist']} mã\n"
             f"{mode_txt}\n"
@@ -415,7 +382,7 @@ def build_messages(show: pd.DataFrame, totals: dict, latest: pd.Timestamp, held:
         items = [_block(r, held, watch) for _, r in shown.iterrows()]
         more = f"\n… và {len(d) - len(shown)} mã khác" if len(d) > len(shown) else ""
         dist_blocks = _section_chunks("🔴 CẢNH BÁO PHÂN PHỐI", len(d), items, more)
-    return _pack([head] + build_summary(show, held, watch)) + build_acc_messages(show, held, watch, cap_acc) + _pack(dist_blocks + [foot])
+    return _pack([head] + build_summary(show, held, watch, by)) + build_acc_messages(show, held, watch, cap_acc, by) + _pack(dist_blocks + [foot])
 
 
 def main() -> None:
@@ -424,7 +391,8 @@ def main() -> None:
     ap.add_argument("--all", action="store_true", help="gửi toàn bộ danh sách hiện tại, không chỉ mã mới / đổi pha")
     ap.add_argument("--only", default="", help="chỉ xét các mã này, ngăn cách bằng dấu phẩy")
     ap.add_argument("--max", type=int, default=20, help="số mã tối đa của mục phân phối (mặc định 20, 0 = tất cả)")
-    ap.add_argument("--max-acc", type=int, default=10, help="số mã tối đa MỖI PHA của mục tích lũy, mỗi mã 1 tin (mặc định 10, 0 = tất cả)")
+    ap.add_argument("--max-acc", type=int, default=10, help="số mã tối đa MỖI NHÓM của mục tích lũy, mỗi mã 1 tin (mặc định 10, 0 = tất cả)")
+    ap.add_argument("--by", choices=("state", "phase"), default="state", help="phân loại tích lũy theo trạng thái Chờ mua (mặc định) hoặc theo pha Wyckoff")
     ap.add_argument("--min-value", type=float, default=MIN_VALUE_BN, help="giá trị khớp trung vị 20 phiên tối thiểu, tỷ đồng (mặc định 2)")
     ap.add_argument("--csv", default=CSV_PATH)
     args = ap.parse_args()
@@ -451,7 +419,8 @@ def main() -> None:
             if not args.dry_run:
                 save_state({r["Mã"]: sig_of(r) for _, r in res.iterrows()}, latest)
             return
-    msgs = build_messages(show, totals, latest, held, watch, args.max, mode_txt, cap_acc=args.max_acc)
+    show = enrich(show, args.csv) if int((show['Loại'] == 'acc').sum()) or int((show['Loại'] == 'dist').sum()) else show
+    msgs = build_messages(show, totals, latest, held, watch, args.max, mode_txt, cap_acc=args.max_acc, by=args.by)
     if args.dry_run:
         for m in msgs:
             print(m, "\n" + "=" * 40)

@@ -324,3 +324,37 @@ def parts(ctx: dict) -> dict:
     pic = re.sub(r"</?div[^>]*>", "", pic)
     rows = {pos: (head, why, zone) for pos, head, why, zone in _rows(ctx, s, lv)}
     return {"picture": pic, "cash": rows.get("Cầm tiền mặt")}
+
+
+def plan(ctx: dict) -> dict:
+    """Giá mua / giá cắt lỗ đúng như khối "Tóm tắt nhanh · Kết luận hành động" cho vị thế CẦM TIỀN MẶT (cùng nhánh quy tắc với _rows).
+    Trả {"scenario", "buy": {"zone": (lo, hi)} | {"levels": [giá…]} | None, "wait": (tên mốc, giá) | None, "stop": giá | None, "res": giá | None};
+    {} nếu thiếu giá. `buy` = vùng / mốc canh mua; `wait` = mốc phải lấy lại trước khi xét mua (khi kết luận là chưa mua)."""
+    if not _ok(ctx.get("close")):
+        return {}
+    s = _signals(ctx)
+    lv = _levels(ctx, s)
+    sc = _scenario(s)
+    ma20, ma50 = s["ma"][20], s["ma"][50]
+    z = ctx.get("zone")
+    zone = (float(z[0]), float(z[1])) if z and _ok(z[0]) and _ok(z[1]) else None
+    buy = wait = None
+    stop = lv["stop"]
+    if sc == "A":
+        buy = {"levels": list(lv["buy"])} if lv["buy"] else None
+    elif sc == "B":
+        if s["over"] or s["sell"]:
+            buy = {"levels": [float(ma20)]} if _ok(ma20) else None
+        elif s["buy"] or s["near"]:
+            buy = {"zone": zone} if zone else None
+            if _ok(ma20):
+                stop = float(ma20)                      # thẻ ghi "Cắt lỗ dưới MA20" cho nhánh giải ngân thăm dò
+        else:
+            buy = {"levels": [float(ma20)]} if _ok(ma20) else None
+    elif sc == "C":
+        wait = ("MA50", float(ma50)) if _ok(ma50) else None
+    elif sc == "D":
+        wait = ("MA20", float(ma20)) if _ok(ma20) else None
+    else:
+        buy = {"levels": list(lv["buy"])} if lv["buy"] else ({"zone": zone} if zone else None)
+    return {"scenario": sc, "buy": buy, "wait": wait, "stop": stop, "res": lv["res"]}
