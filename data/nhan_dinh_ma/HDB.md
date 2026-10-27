@@ -24,3 +24,13 @@ Các mốc giao dịch tham khảo theo hệ thống Min Trading:
 - **Biên độ tích lũy trung hạn:** Vùng hỗ trợ quanh **21.000–21.500 đồng**, vùng kháng cự ngắn hạn quanh **23.500–24.000 đồng**.
 - **Vùng mua tham khảo:** Có thể theo dõi các nhịp điều chỉnh về **20.800–21.600 đồng**, với điều kiện diễn biến giá và tín hiệu kỹ thuật xác nhận phù hợp.
 - **Mục tiêu ngắn hạn:** Hướng đến vùng **23.950 đồng**, tùy thuộc vào diễn biến thị trường và dòng tiền.
+
+Bạn dùng đan xen khi đang phân tích kỹ thuật và các chỉ số để thay đổi trạng thái tâm lý người xem, khiến họ sợ mất cơ hội hoặc bừng tỉnh:
+• Bẫy tâm lý "Sợ gãy nền" (Giúp khán giả bừng tỉnh khi thấy giá đỏ):
+"Nhiều anh chị cứ thấy HDB đỏ vài phiên, nằm dưới MA200 là sợ hãi mang hàng ra cắt lỗ đúng đáy. Nhưng anh chị có nhìn thấy thanh khoản không? Các phiên giảm von (khối lượng) cực kỳ nhỏ, nghĩa là dòng tiền lớn họ không hề thoát hàng. Đây thuần túy là nhịp ép bán để gom nốt lượng cổ tức trôi nổi của nhỏ lẻ thôi! Anh chị rớt hàng vùng này là dâng quà cho cá mập rồi."
+
+• Bẫy tâm lý "Chê nặng mông" (Kích thích dòng tiền gom hàng giá rẻ):
+"Ai cũng chê bank nặng mông, thích đua lệnh mấy mã bất động sản hay đầu cơ tăng nóng. Nhưng đến lúc thị trường rung lắc, tài khoản bốc hơi 15-20% thì mới thấm. Giai đoạn này HDB định giá P/E chỉ có 4.9 lần – thuộc top rẻ nhất sàn, trong khi quý 3 lãi kỷ lục. Anh chị chê nó chậm thì đến lúc game IPO Chứng khoán HDS nổ ra vào cuối năm, nó kéo giật cục 3-4 cây nến trần lúc đó lại hỏi AD 'còn điểm mua không' nhé!"
+
+• Bẫy tâm lý "Nợ xấu tăng" (Xử lý góc nhìn tiêu cực về chỉ số NPL):
+"Hôm qua có người nhắn AD bảo: 'AD ơi nợ xấu NPL của HDB lên tới hơn 2%, đáng sợ quá'. Đúng, nhìn bề ngoài thì sợ thật. Nhưng anh chị phải hiểu bản chất: HDB được cấp room tín dụng khủng tới 37%, họ chủ động đẩy mạnh cho vay thì nợ xấu tăng nhẹ là bài toán đánh đổi. Quan trọng là họ tự tin xử lý bằng khối tài sản đảm bảo cực dày nên mới duy trì tỷ lệ bao phủ nợ xấu LLR ở mức vừa phải để giải phóng lợi nhuận. Đừng nhìn số liệu một cách máy móc rồi bỏ lỡ một siêu cổ phiếu tăng trưởng!"
