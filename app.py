@@ -144,10 +144,11 @@ _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe
                else {"use_container_width": True})
 TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
+MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GIÁ TRỊ MA20/MA50 ngày + tuần dưới dòng chỉ số, không vẽ đường
 CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", "MA20 / W-MA20", "Bollinger",
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", "MA20 / W-MA20", "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "Supertrend", "Khối lượng", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -2282,6 +2283,20 @@ def _brand_tag() -> str:
             f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
 
 
+def _ma_row_html(code) -> str:
+    """Dòng giá trị MA20(D) · MA20(W) · MA50(D) · MA50(W): lấy MA cuối của khung Ngày / Tuần (tính trên toàn lịch sử, nến tuần cuối là tuần đang chạy)."""
+    parts = []
+    for col, tf_, nm, color in (("MA20", "D", "MA20(D)", "#F5A623"), ("MA20", "W", "MA20(W)", "#FF7A1A"),
+                                ("MA50", "D", "MA50(D)", "#3B82F6"), ("MA50", "W", "MA50(W)", "#A78BFA")):
+        try:
+            f_ = frames[tf_]
+            v = pd.to_numeric(f_.loc[f_["Mã"] == code, col], errors="coerce").iloc[-1]
+        except Exception:  # noqa: BLE001
+            v = float("nan")
+        parts.append(f'<span style="color:{color}">{nm}</span> <b style="color:#E6EDF3">{"-" if pd.isna(v) else f"{v:,.2f}"}</b>')
+    return "&nbsp;&nbsp;&nbsp;".join(parts)
+
+
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix="",
                height_px=None, hide_legend=False, title_text=None, code_w=0.20, hdr_right=False):
     """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D").
@@ -2403,27 +2418,6 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             fig.add_trace(_tr, row=1, col=1)
         for _an in SPT.annotations(x, _stv):
             fig.add_annotation(**_an, row=1, col=1)
-
-    # MA20 ngày + MA20 tuần (W-MA20) trên khung Ngày: MA20 tuần = TB 20 giá đóng cửa TUẦN, giữ nguyên giá trị trong cả tuần (đường bậc thang)
-    _ma_tags = []
-    if "MA20 / W-MA20" in layers and tf == "D":
-        try:
-            _wk = E.resample_ohlcv(g[[c_ for c_ in ["Mã", "Ngày"] + list(E.NUMERIC_COLS) if c_ in g.columns]], "W")
-            _wk["_ma20"] = _wk["Giá đóng cửa"].rolling(20).mean()
-            _wmap = pd.Series(_wk["_ma20"].to_numpy(), index=pd.PeriodIndex(_wk["Ngày"], freq="W-FRI"))
-            _w20 = pd.Series(pd.PeriodIndex(t["Ngày"], freq="W-FRI").map(_wmap), index=t.index).astype(float)
-            _d20 = t["MA20"].astype(float)
-            fig.add_trace(go.Scatter(x=x, y=_w20, name="W-MA20", line=dict(width=1.6, color="#FF7A1A", shape="hv"),
-                                     hovertemplate="W-MA20 %{y:,.2f}<extra></extra>"), row=1, col=1)
-            fig.add_trace(go.Scatter(x=x, y=_d20, name="MA20", line=dict(width=1.4, color="#F5A623"),
-                                     hovertemplate="MA20 %{y:,.2f}<extra></extra>"), row=1, col=1)
-            for _nm, _s, _col in (("W-MA20", _w20, "#FF7A1A"), ("MA20", _d20, "#F5A623")):
-                _v = _s.dropna()
-                if len(_v):
-                    _ma_tags.append((float(_v.iloc[-1]), _nm, _col))
-                    ys.append(float(_v.min())); ys.append(float(_v.max()))
-        except Exception:  # noqa: BLE001
-            _ma_tags = []
 
     r = 2
     if "Khối lượng" in subs:
@@ -2601,7 +2595,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
         BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
         top += BRAND_H
-        height += BRAND_H - 80                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
+        height += BRAND_H - 80
+        _ma_row = _ma_row_html(code) if MA_LAYER in layers else ""
+        _ex = 26 if _ma_row else 0                    # chừa thêm 26px cho dòng MA ngay dưới dòng chỉ số
+        top += _ex
+        height += _ex                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
         if hide_legend:                                # không có dòng chú giải thì bỏ phần lề trên dành cho nó (thương hiệu cao nhất ở brand_y + ~34px)
             top -= 72
             height -= 72
@@ -2614,8 +2612,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                                font=dict(size=NAME_PX, color="#E6EDF3"))
         fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
                            align="left", text=_ohlc_header(code, tf, g))
+        if _ma_row:
+            for _an in fig.layout.annotations:           # đẩy cụm chỉ số phía trên lên 26px, nhường chỗ cho dòng MA sát mép trên biểu đồ
+                if _an.xref == "paper" and _an.yref == "paper" and _an.y == 1:
+                    _an.yshift = (_an.yshift or 0) + _ex
+            fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=4, showarrow=False,
+                               align="left", text=_ma_row, font=dict(size=13))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
-                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H) / ph, font=dict(size=10)))
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H + _ex) / ph, font=dict(size=10)))
     elif mobile:
         # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
@@ -2629,25 +2633,6 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     TH.style_fig(fig)
     if hide_legend:
         fig.update_layout(showlegend=False)
-    if _ma_tags:
-        # Nhãn "W-MA20 20.26" / "MA20 19.65" ở cột giá bên phải (nền cùng màu đường); nới lề phải để đủ chỗ chữ, đẩy lệch (px) nếu 2 nhãn / nhãn giá gần nhau
-        fig.update_layout(margin=dict(r=max(int(fig.layout.margin.r or 0), 120)))
-        _yr = fig.layout.yaxis.range
-        _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
-        _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
-        if _ppu > 0:
-            _cur, _gap = last_c * _ppu, 16.0
-            _pos = [[v_ * _ppu, v_, nm_, col_] for v_, nm_, col_ in _ma_tags if _yr[0] <= v_ <= _yr[1]]
-            _prev = _cur
-            for _r in sorted((r_ for r_ in _pos if r_[0] >= _cur), key=lambda r_: r_[0]):
-                _r[0] = _prev = max(_r[0], _prev + _gap)
-            _prev = _cur
-            for _r in sorted((r_ for r_ in _pos if r_[0] < _cur), key=lambda r_: -r_[0]):
-                _r[0] = _prev = min(_r[0], _prev - _gap)
-            for _p, _v, _nm, _col in _pos:
-                fig.add_annotation(xref="paper", yref="y", x=1, y=_v, xanchor="left", yanchor="middle", showarrow=False,
-                                   yshift=_p - _v * _ppu, text=f"<b>{_nm}  {_v:,.2f}</b>", font=dict(size=11, color="#1A1205"),
-                                   bgcolor=_col, borderpad=3)
     if "Dual Ichimoku" in layers:
         # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
         _yr = fig.layout.yaxis.range
@@ -2869,6 +2854,8 @@ def page_stock():
         _drag, _cfg, _bars = "pan", {"displayModeBar": True}, None
         if _mob:
             st.markdown(metrics_html(chart_metrics, code, _chart_name(code)), unsafe_allow_html=True)
+            if MA_LAYER in layers:
+                st.markdown(f'<div style="font-size:13px;margin:-4px 0 6px">{_ma_row_html(code)}</div>', unsafe_allow_html=True)
             _mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True, key="mob_chart_mode",
                              help="Cuộn trang: vuốt để cuộn trang bình thường, biểu đồ không bị kéo/zoom ngoài ý muốn. "
                                   "Kéo & zoom: kéo ngang để xem, dùng nút +/- và nút nhà (đặt lại) trên thanh công cụ; chạm đúp để đặt lại.")
