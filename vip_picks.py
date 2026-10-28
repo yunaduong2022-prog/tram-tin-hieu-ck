@@ -6,7 +6,7 @@ Ba nhóm (vòng đời một khuyến nghị): Chờ mua -> Đang nắm giữ ->
 - Đang nắm giữ: bắt buộc có Điểm mua (giá vào lệnh); tính lợi nhuận, theo dõi cutloss / điểm bán.
 - Đã đóng: có Giá đóng và Ngày đóng; hiện kết quả (% lãi / lỗ) và số ngày kể từ ngày khuyến nghị.
 Mỗi mã có Khung thời gian (Trung hạn / Dài hạn), Ngày khuyến nghị và Luận điểm (một dòng giải thích vì sao khuyến nghị).
-Bảng nhóm Chờ mua trình bày theo form riêng (nền xanh đậm): Hạng | Lệnh | Mã CP + ngày KN | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng |
+Bảng nhóm Chờ mua trình bày theo form riêng (màu và ô Khuyến nghị như các nhóm khác): Hạng | Lệnh | Mã CP + ngày KN | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng |
 Ví dụ | Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | FA | TA | Tổng điểm | Khuyến nghị. Cột Tỷ trọng và Ví dụ lấy từ hai cột mới của file CSV:
 "Tỷ trọng %" (vd 30) và "Dự định mua" (số cổ phiếu, vd 1000); câu Ví dụ tự ghép: "Dự định mua 1000 cổ phiếu. Tỷ trọng 30% là mua trước 300 cổ phiếu."
 
@@ -485,24 +485,6 @@ CSS = """
 .tp-tb tr.hasth td{border-bottom:none}
 .tp-tb tr.th td{padding:0 12px 14px;text-align:left;color:var(--muted);font-size:12.5px;line-height:1.5}
 .tp-tb tr.th b{color:var(--txt)}
-.tp-wrap.wt{background:#0c343d;border-color:#1f5560}
-.tp-tb.wt-tb{min-width:1560px;color:#fff;font-weight:700}
-.tp-tb.wt-tb th{color:#fff;font-size:13px;letter-spacing:0;padding:16px 10px;border-bottom:1px solid #1f5560}
-.tp-tb.wt-tb td{padding:14px 10px;border-bottom:1px solid #1f5560;line-height:1.35}
-.tp-tb.wt-tb tr.hasth td{border-bottom:none}
-.tp-tb.wt-tb tr.th td{color:#b9d3d7;font-weight:400}
-.tp-tb.wt-tb tr.th b{color:#fff}
-.wt-cmd{font-size:15px;font-weight:800;color:#ffd966;letter-spacing:.3px}
-.wt-cmd.green{color:#5be08f}.wt-cmd.red{color:#ff7b6e}.wt-cmd.gray{color:#b9d3d7}
-.wt-code{font-size:15px;font-weight:800;color:#fff}
-.wt-date{font-size:11px;font-weight:700;color:#d5e6e8;margin-top:2px}
-.wt-g{color:#4fd18b}.wt-r{color:#ff5a4d}
-.wt-s{font-size:12px;font-weight:700}
-.tp-tb.wt-tb td.wt-ex{font-size:12px;font-weight:400;color:#e6f0f1;text-align:left;min-width:190px;max-width:230px}
-.tp-tb.wt-tb td.wt-rec{font-size:13px;font-weight:800;color:#fff;text-align:left;min-width:120px;max-width:150px}
-.wt-mu{color:#8fb3b9;font-weight:400}
-.wt-auto{display:block;font-size:10px;font-weight:400;font-style:italic;color:#8fb3b9}
-.wt-sc{font-size:15px;font-weight:800;color:#fff}.wt-sc small{font-weight:600;color:#b9d3d7;font-size:11px}
 </style>
 """
 
@@ -603,10 +585,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
 # Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Khuyến nghị
 WAIT_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá hiện tại", "Cách vùng mua", "Tỷ trọng", "Ví dụ", "Cắt lỗ",
              "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Khuyến nghị"]
-_WAIT_CMD = {"CHỜ VỀ VÙNG MUA": ("CHỜ MUA", ""), "VÙNG MUA": ("MUA NGAY", "green"), "DƯỚI VÙNG MUA": ("DƯỚI VÙNG", "gray")}
-_WAIT_ACT = {"CHỜ VỀ VÙNG MUA": "Không mua đuổi. Chờ về vùng mua.",
-             "VÙNG MUA": "Giá trong vùng mua: có thể mua, nên chia lệnh.",
-             "DƯỚI VÙNG MUA": "Giá đã xuống dưới vùng mua: chờ xác nhận, cân nhắc hủy kế hoạch."}
+_WAIT_CMD = {"CHỜ VỀ VÙNG MUA": ("CHỜ MUA", "gold"), "VÙNG MUA": ("MUA NGAY", "green"), "DƯỚI VÙNG MUA": ("DƯỚI VÙNG", "gray")}
 
 
 def example_text(weight, qty) -> str:
@@ -618,57 +597,68 @@ def example_text(weight, qty) -> str:
 
 
 def _wait_row_html(i: int, r) -> str:
-    mu = '<span class="wt-mu">—</span>'
-    kn = fmt_date(parse_date(r.get("Ngày KN"))) or ""
+    mu = '<span class="tp-mu">—</span>'
     nd = r.get("_nodata")
     if isinstance(nd, (bool, np.bool_)) and nd:
-        return (f'<tr><td>{i}</td><td></td><td><div class="wt-code">{_e(r["Mã"])}</div></td>'
-                f'<td colspan="12" class="wt-mu" style="text-align:left">Chưa có dữ liệu giá của mã này</td></tr>')
+        return (f'<tr><td><span class="tp-rank">{i}</span></td><td></td><td class="l"><span class="tp-code">{_e(r["Mã"])}</span>'
+                f'<div class="tp-name">Chưa có dữ liệu giá của mã này</div></td>' + '<td></td>' * 12 + '</tr>')
     price = r["Giá"]
     label, tone, note = r["Khuyến nghị"]
-    cmd, ctone = _WAIT_CMD.get(label, (label, tone if tone in ("green", "red", "gray") else ""))
-    act = _WAIT_ACT.get(label, note)
+    cmd, ctone = _WAIT_CMD.get(label, (label, tone))
+    kn = fmt_date(parse_date(r.get("Ngày KN"))) or ""
     b = r["Điểm mua"]
     if isinstance(b, tuple):
-        zone = (_px(b[0]) if abs(b[0] - b[1]) < 1e-9 else f"{_px(b[0])} - {_px(b[1])}") + _wauto(r["buy_auto"])
-        gap = (f'{(price / b[1] - 1) * 100:+.1f}%' if price > b[1] else f'{(price / b[0] - 1) * 100:+.1f}%' if price < b[0] else "0.0%")
+        bt = _px(b[0]) if abs(b[0] - b[1]) < 1e-9 else f"{_px(b[0])} – {_px(b[1])}"
+        buy = f'<span class="tp-pill g">● {bt}</span>{_auto(r["buy_auto"])}'
+        if price > b[1]:
+            gap = f'<span class="tp-pill">{(price / b[1] - 1) * 100:+.1f}%<small>cao hơn vùng</small></span>'
+        elif price < b[0]:
+            gap = f'<span class="tp-pill">{(price / b[0] - 1) * 100:+.1f}%<small>thấp hơn vùng</small></span>'
+        else:
+            gap = '<span class="tp-pill g">0%<small>trong vùng</small></span>'
     else:
-        zone, gap = mu, mu
+        buy = gap = mu
 
-    def lvl(val, auto, cls):
+    def lvl(val, auto, tone_):
         if not _ok(val) or not val:
             return mu
-        d = (val / price - 1) * 100
-        return (f'<div class="{cls}">{_px(val)}</div><div class="{cls} wt-s">{"▲" if d >= 0 else "▼"} {abs(d):.2f}%</div>{_wauto(auto)}')
+        return f'<span class="tp-pill {tone_}">{_px(val)}<small>{(val / price - 1) * 100:+.1f}%</small></span>{_auto(auto)}'
     t1, t2 = r["Target"], r["Điểm bán"]
     t2_show = t2 if (_ok(t2) and t2 and _ok(t1) and t1 and t2 > t1) else None            # Mục tiêu 2 chỉ hiện khi cao hơn Mục tiêu 1
     w = _f(r.get("Tỷ trọng"))
     ex = example_text(r.get("Tỷ trọng"), r.get("Dự định"))
-    fa = (f'<span class="wt-sc">{int(r["FA"])}<small>/100</small></span>' if _ok(r["FA"]) else "")
-    ta = (f'<span class="wt-sc">{int(r["TA"])}<small>/100</small></span>' if _ok(r["TA"]) else "")
-    tot = (f'<span class="wt-sc">{r["Tổng điểm"]:.0f}<small> {_e(r["Hạng"])}</small></span>' if _ok(r["Tổng điểm"]) else "")
+    tot = (f'<span class="tp-score">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
+           if _ok(r["Tổng điểm"]) else mu)
+    if _ok(r["FA"]):
+        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/100</small></span>{_bar(r["FA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["FA tags"][:3])
+    else:
+        fa = '<span class="tp-mu">Chưa đủ số liệu</span>'
+    if _ok(r["TA"]):
+        rsi = f'<div class="tp-mu" style="font-size:11.5px">RSI {r["RSI"]:.1f}</div>' if _ok(r["RSI"]) else ""
+        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
+    else:
+        ta = '<span class="tp-mu">Chưa đủ số liệu</span>'
+    ng = r["Ngoại"]
+    foreign = (f'<div class="tp-note">{"Khối ngoại gom ròng" if ng > 0 else "Khối ngoại bán ròng"}</div>'
+               if ng is not None and pd.notna(ng) and abs(ng) > 0 else "")
+    rec = f'<span class="tp-rec {tone}">{_e(label)}</span><div class="tp-note">{_e(note)}</div>{foreign}'      # giữ nguyên như cũ
     thesis = str(r.get("Luận điểm") or "").strip()
-    main = (f'<tr class="{"hasth" if thesis else ""}"><td>{i}</td>'
-            f'<td><span class="wt-cmd {ctone}">{_e(cmd)}</span></td>'
-            f'<td class="l"><div class="wt-code">{_e(r["Mã"])}</div>' + (f'<div class="wt-date">{_e(kn)}</div>' if kn else "") + '</td>'
-            f'<td>{zone}</td><td>{_px(price)}</td><td>{gap}</td><td>{f"{w:g}%" if w else mu}</td>'
-            f'<td class="wt-ex">{_e(ex) if ex else mu}</td>'
-            f'<td>{lvl(r["Cutloss"], r["stop_auto"], "wt-r")}</td><td>{lvl(t1, r["target_auto"], "wt-g")}</td>'
-            f'<td>{lvl(t2_show, r["sell_auto"], "wt-g")}</td><td>{fa}</td><td>{ta}</td><td>{tot}</td>'
-            f'<td class="wt-rec">{_e(act)}</td></tr>')
+    main = (f'<tr class="{"hasth" if thesis else ""}"><td><span class="tp-rank">{i}</span></td>'
+            f'<td><span class="tp-rec {ctone}">{_e(cmd)}</span></td>'
+            f'<td class="l"><span class="tp-code">{_e(r["Mã"])}</span>' + (f'<div class="tp-name" style="min-width:0">{_e(kn)}</div>' if kn else "") + '</td>'
+            f'<td>{buy}</td><td><span class="tp-px">{_px(price)}</span></td><td>{gap}</td><td>{f"{w:g}%" if w else mu}</td>'
+            f'<td class="l tp-name">{_e(ex) if ex else mu}</td>'
+            f'<td>{lvl(r["Cutloss"], r["stop_auto"], "r")}</td><td>{lvl(t1, r["target_auto"], "a")}</td><td>{lvl(t2_show, r["sell_auto"], "a")}</td>'
+            f'<td>{fa}</td><td>{ta}</td><td>{tot}</td><td>{rec}</td></tr>')
     if thesis:
         main += f'<tr class="th"><td></td><td colspan="14">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
     return main
 
 
-def _wauto(flag: bool) -> str:
-    return '<span class="wt-auto">tự động</span>' if flag else ""
-
-
 def wait_table_html(v: pd.DataFrame) -> str:
-    th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h}</th>' for h in WAIT_HEAD)
+    th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h.upper()}</th>' for h in WAIT_HEAD)
     body = "".join(_wait_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
-    return f'<div class="tp-wrap wt"><table class="tp-tb wt-tb"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
+    return f'<div class="tp-wrap"><table class="tp-tb" style="min-width:1560px"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
