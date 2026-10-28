@@ -19,8 +19,8 @@ Dữ liệu
     Cutloss   <- mốc cắt lỗ của "Tóm tắt nhanh", thiếu thì cắt lỗ của bảng Chờ mua
     Target    <- Mục tiêu 1 của bảng Chờ mua, thiếu thì kháng cự gần của "Tóm tắt nhanh"
     Điểm bán  <- Mục tiêu 2 của bảng Chờ mua (nếu cao hơn Target), không thì bằng Target
-- Lợi nhuận = giá khớp so với Điểm mua do Admin nhập (giữa vùng nếu là vùng); Điểm mua tự động thì để "—" vì chưa phải giá vào lệnh.
-  Target / Cutloss tính % so với giá khớp.
+- Lợi nhuận = giá hiện tại so với Điểm mua do Admin nhập (giữa vùng nếu là vùng); Điểm mua tự động thì để "—" vì chưa phải giá vào lệnh.
+  Target / Cutloss tính % so với giá hiện tại.
 
 Cách chấm điểm (sửa các hằng số / hàm fa_score, ta_score nếu muốn đổi):
 - Tổng điểm = Score sẵn có của app (thang 0-10) × 10; hạng A ≥ 75, B ≥ 60, C ≥ 40, còn lại D.
@@ -579,7 +579,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
 
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
     """mode="wait": nhóm Chờ mua (cột VÙNG MUA + CÁCH VÙNG MUA); mode="hold": nhóm Đang nắm giữ (cột ĐIỂM MUA + LỢI NHUẬN)."""
-    head = ["HẠNG", "MÃ CK", "GIÁ KHỚP", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "VÙNG MUA" if mode == "wait" else "GIÁ MUA",
+    head = ["HẠNG", "MÃ CK", "GIÁ HIỆN TẠI", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "VÙNG MUA" if mode == "wait" else "GIÁ MUA",
             "CÁCH VÙNG MUA" if mode == "wait" else "LỢI NHUẬN", "TARGET", "CUTLOSS", "ĐIỂM BÁN", "ĐIỂM CƠ BẢN (FA)", "ĐIỂM KỸ THUẬT (TA)", "KHUYẾN NGHỊ"]
     th = "".join(f'<th class="{"l" if h == "MÃ CK" else ""}">{h}</th>' for h in head)
     body = "".join(_row_html(i + 1, r, mode) for i, (_, r) in enumerate(v.iterrows()))
@@ -626,7 +626,7 @@ _GROUP_KEY = {"Chờ mua": "wait", "Đang nắm giữ": "hold", "Đã đóng": "
 _GROUP_ICON = {"Chờ mua": "🎯", "Đang nắm giữ": "📈", "Đã đóng": "✅"}
 _GROUP_HINT = {
     "Chờ mua": "Cổ phiếu Admin đang theo dõi, chờ giá về vùng mua. Chưa vào lệnh: bạn tự cân nhắc theo vùng mua, cutloss và target.",
-    "Đang nắm giữ": "Các khuyến nghị đã vào lệnh. Lợi nhuận tính từ giá mua khuyến nghị đến giá khớp hiện tại.",
+    "Đang nắm giữ": "Các khuyến nghị đã vào lệnh. Lợi nhuận tính từ giá mua khuyến nghị đến giá hiện tại.",
     "Đã đóng": "Các khuyến nghị đã kết thúc (chốt lời hoặc cắt lỗ). Kết quả tính từ giá mua khuyến nghị đến giá đóng.",
 }
 
@@ -791,7 +791,7 @@ def _admin_panel(available: set) -> None:
     c = st.columns([1.1, 1.5, 1.3, 1, 1, 1.3])
     c[0].text_input("Mã CK *", key="vp_code", placeholder="VD: IDC, HPG...")
     c[1].text_input("Điểm Mua", key="vp_buy", placeholder="VD: 35.5 - 36.0")
-    c[2].text_input("Lợi Nhuận", key="vp_profit", placeholder="Tự tính theo giá khớp", disabled=True)
+    c[2].text_input("Lợi Nhuận", key="vp_profit", placeholder="Tự tính theo giá hiện tại", disabled=True)
     c[3].text_input("Target", key="vp_target", placeholder="VD: 42.0")
     c[4].text_input("Cutloss", key="vp_cut", placeholder="VD: 34.0")
     c[5].text_input("Điểm Bán", key="vp_sell", placeholder="VD: ≥ 42.0")
