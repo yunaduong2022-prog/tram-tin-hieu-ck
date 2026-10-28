@@ -6,7 +6,7 @@ Ba nhóm (vòng đời một khuyến nghị): Chờ mua -> Đang nắm giữ ->
 - Đang nắm giữ: bắt buộc có Điểm mua (giá vào lệnh); tính lợi nhuận, theo dõi cutloss / điểm bán.
 - Đã đóng: có Giá đóng và Ngày đóng; hiện kết quả (% lãi / lỗ) và số ngày kể từ ngày khuyến nghị.
 Mỗi mã có Khung thời gian (Trung hạn / Dài hạn), Ngày khuyến nghị và Luận điểm (một dòng giải thích vì sao khuyến nghị).
-Nhóm Đang nắm giữ có form riêng: Hạng | Lệnh | Mã CP | Vùng mua KN | Giá khớp lệnh | Giá hiện tại | Khối lượng | Lãi/Lỗ dự kiến | FA | TA | Tổng điểm |
+Nhóm Đang nắm giữ có form riêng: Hạng | Lệnh | Mã CP | Vùng mua KN | Giá khớp lệnh | Giá hiện tại | Khối lượng | Lãi/Lỗ dự kiến | Cắt lỗ | Mục tiêu 1 | Mục tiêu 2 | FA | TA | Tổng điểm |
 Tín hiệu hiện tại | Khuyến nghị; hai cột CSV mới "Giá khớp" (giá vào lệnh thật) và "Khối lượng" (số cổ phiếu đang giữ) dùng để tính lãi/lỗ bằng đồng.
 Bảng nhóm Chờ mua trình bày theo form riêng (màu và ô Khuyến nghị như các nhóm khác): Hạng | Lệnh | Mã CP + ngày KN | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng |
 Ví dụ | Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | FA | TA | Tổng điểm | Khuyến nghị. Cột Tỷ trọng và Ví dụ lấy từ hai cột mới của file CSV:
@@ -728,10 +728,10 @@ def wait_table_html(v: pd.DataFrame) -> str:
 
 
 # Nhóm Đang nắm giữ: Hạng | Lệnh | Mã CP (+ngày KN) | Vùng mua KN | Giá khớp lệnh | Giá hiện tại | Khối lượng | Lãi/Lỗ dự kiến (%) |
-# Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Tín hiệu hiện tại | Khuyến nghị
-HOLD_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá khớp lệnh", "Giá hiện tại", "Khối lượng", "Lãi/Lỗ dự kiến (%)",
-             "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Tín hiệu hiện tại", "Khuyến nghị"]
-HOLD_WIDTH = [2.5, 5.5, 6.5, 10, 8, 8, 7, 11.5, 9, 9.5, 5.5, 7.5, 9.5]            # % bề rộng từng cột, tổng 100
+# Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Tín hiệu hiện tại | Khuyến nghị
+HOLD_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá khớp lệnh", "Giá hiện tại", "Khối lượng", "Lãi/Lỗ dự kiến (%)", "Cắt lỗ",
+             "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Tín hiệu hiện tại", "Khuyến nghị"]
+HOLD_WIDTH = [2.5, 5, 6, 8, 6.5, 6.5, 5.5, 9, 5.5, 5.5, 5.5, 7.5, 8.5, 5, 6, 7.5]            # % bề rộng từng cột, tổng 100
 
 
 def _hold_row_html(i: int, r) -> str:
@@ -739,7 +739,7 @@ def _hold_row_html(i: int, r) -> str:
     nd = r.get("_nodata")
     if isinstance(nd, (bool, np.bool_)) and nd:
         return (f'<tr><td class="pl">{i}</td><td></td><td class="pl l"><div class="pl-code">{_e(r["Mã"])}</div></td>'
-                f'<td colspan="10" class="tp-mu" style="text-align:left">Chưa có dữ liệu giá của mã này</td></tr>')
+                f'<td colspan="13" class="tp-mu" style="text-align:left">Chưa có dữ liệu giá của mã này</td></tr>')
     price = r["Giá"]
     kn = fmt_date(parse_date(r.get("Ngày KN"))) or ""
     b = r["Điểm mua"]
@@ -769,6 +769,13 @@ def _hold_row_html(i: int, r) -> str:
             pl = pl_pct
     else:
         pl = mu
+    def lvl(val, auto, cls):
+        if not _ok(val) or not val:
+            return mu
+        d = (val / price - 1) * 100
+        return f'<div class="lv {cls}">{_px(val)}{_star(auto)}</div><div class="lv {cls}">{"▲" if d >= 0 else "▼"} {abs(d):.2f}%</div>'
+    t1, t2 = r["Target"], r["Điểm bán"]
+    t2_show = t2 if (_ok(t2) and t2 and _ok(t1) and t1 and t2 > t1) else None            # Mục tiêu 2 chỉ hiện khi cao hơn Mục tiêu 1
     sig = str(r.get("Tín hiệu") or "").strip()
     tot, fa, ta, rec = _score_cells(r)
     thesis = str(r.get("Luận điểm") or "").strip()
@@ -776,10 +783,12 @@ def _hold_row_html(i: int, r) -> str:
             f'<td class="pl cmd"><span class="cmd-t green">MUA</span></td>'
             f'<td class="pl l"><div class="pl-code">{_e(r["Mã"])}</div>' + (f'<div class="pl-date">{_e(kn)}</div>' if kn else "") + '</td>'
             f'<td class="pl key">{zone}</td><td class="pl key">{fill_html}</td><td class="pl key">{_price_html(r)}</td><td class="pl">{qty}</td>'
-            f'<td class="pl rt">{pl}</td><td>{fa}</td><td>{ta}</td><td>{tot}</td>'
+            f'<td class="pl rt">{pl}</td>'
+            f'<td class="pl rt">{lvl(r["Cutloss"], r["stop_auto"], "dn")}</td><td class="pl rt">{lvl(t1, r["target_auto"], "up")}</td>'
+            f'<td class="pl rt">{lvl(t2_show, r["sell_auto"], "up")}</td><td>{fa}</td><td>{ta}</td><td>{tot}</td>'
             f'<td class="pl sig">{_e(sig) if sig else mu}</td><td>{rec}</td></tr>')
     if thesis:
-        main += f'<tr class="th"><td></td><td colspan="12">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
+        main += f'<tr class="th"><td></td><td colspan="15">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
     return main
 
 
@@ -790,10 +799,10 @@ def hold_table_html(v: pd.DataFrame) -> str:
     notes = []
     if any((not (_ok(r.get("Giá khớp")) and r.get("Giá khớp"))) and _ok(r.get("Entry")) and r.get("Entry") for _, r in v.iterrows()):
         notes.append("Chưa nhập giá khớp: tạm tính theo giữa vùng mua.")
-    if any(bool(r.get("buy_auto")) for _, r in v.iterrows()):
+    if any(bool(r.get(k)) for _, r in v.iterrows() for k in ("buy_auto", "target_auto", "stop_auto", "sell_auto")):
         notes.append("Mức giá do hệ thống tự điền theo dữ liệu cuối phiên.")
     foot = f'<div class="vp-disc">* {" ".join(notes)}</div>' if notes else ""
-    return f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1560px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>{foot}'
+    return f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1900px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>{foot}'
 
 
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
