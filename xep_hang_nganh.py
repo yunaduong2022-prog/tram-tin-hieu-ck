@@ -14,7 +14,10 @@ Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.
 from __future__ import annotations
 
 import html as _html
+import io
 import os
+import re
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -50,25 +53,66 @@ LAYOUT["Hàng công nghiệp"] = LAYOUT["Bán lẻ"] = _LAYOUT_ND
 DEFAULT_LAYOUT = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách", "ROE", "ROA"]
 
 
+_CANON = ["Ngành", "STT", "Mã", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B",
+          "Giá trị sổ sách", "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Kỳ", "Cập nhật nguồn"]
+_ERR = ""          # thông báo lỗi đọc file gần nhất ("" = đọc tốt); render_section hiển thị để dễ sửa file
+
+
+def _norm(x) -> str:
+    """Chuẩn hóa tên cột: gộp dấu tiếng Việt (NFC), bỏ BOM, bỏ khoảng trắng thừa, không phân biệt hoa thường."""
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", str(x)).replace("\ufeff", "")).strip().casefold()
+
+
+_CANON_MAP = {_norm(c): c for c in _CANON}
+
+
+def _read_text(path: str) -> str:
+    raw = open(path, "rb").read()
+    for enc in ("utf-8-sig", "utf-16", "cp1258", "cp1252"):
+        try:
+            return raw.decode(enc)
+        except UnicodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 @st.cache_data(show_spinner=False)
-def _load_cached(mtime: float) -> pd.DataFrame:
+def _load_cached(mtime: float) -> tuple[pd.DataFrame, str]:
+    """Đọc data/xep_hang_nganh.csv: tự nhận dấu phân cách (, ; hoặc Tab), mã hóa (UTF-8, UTF-16, Windows) và dấu thập phân phẩy
+    (file lưu từ Excel tiếng Việt thường dùng ;). Trả (bảng, thông báo lỗi); không bao giờ ném lỗi ra ngoài."""
     try:
-        d = pd.read_csv(PATH, dtype={"Mã": str, "Ngành": str}, encoding="utf-8-sig")
-    except Exception:  # noqa: BLE001
-        return pd.DataFrame()
-    d.columns = [str(c).strip() for c in d.columns]
-    d["Mã"] = d["Mã"].astype(str).str.upper().str.strip()
-    d["Ngành"] = d["Ngành"].astype(str).str.strip()
-    for c in _NUM:
-        d[c] = pd.to_numeric(d[c], errors="coerce") if c in d.columns else np.nan
-    d = d[~(d["Vốn hóa (tỷ)"] < MIN_VON_HOA)]            # ô vốn hóa trống thì giữ lại
-    return d.drop_duplicates(["Ngành", "Mã"], keep="last").reset_index(drop=True)
+        text = _read_text(PATH)
+        first = next((ln for ln in text.splitlines() if ln.strip()), "")
+        sep = max((",", ";", "\t"), key=first.count)
+        d = pd.read_csv(io.StringIO(text), sep=sep, dtype=str, keep_default_na=False)
+        d.columns = [_CANON_MAP.get(_norm(c), str(c).strip()) for c in d.columns]
+        miss = [c for c in ("Ngành", "Mã") if c not in d.columns]
+        if miss:
+            return pd.DataFrame(), f"thiếu cột {', '.join(miss)}; các cột tìm thấy: {', '.join(map(str, d.columns))}"
+        d["Mã"] = d["Mã"].astype(str).str.upper().str.strip()
+        d["Ngành"] = d["Ngành"].astype(str).str.strip()
+        for c in _NUM:
+            if c in d.columns:
+                v = d[c].astype(str).str.replace("%", "", regex=False).str.replace("\u00a0", "", regex=False).str.replace(" ", "", regex=False)
+                if sep == ";":
+                    v = v.str.replace(",", ".", regex=False)
+                d[c] = pd.to_numeric(v, errors="coerce")
+            else:
+                d[c] = np.nan
+        d = d[d["Mã"].ne("") & d["Ngành"].ne("")]
+        d = d[~(d["Vốn hóa (tỷ)"] < MIN_VON_HOA)]            # ô vốn hóa trống thì giữ lại
+        return d.drop_duplicates(["Ngành", "Mã"], keep="last").reset_index(drop=True), ""
+    except Exception as e:  # noqa: BLE001
+        return pd.DataFrame(), f"{type(e).__name__}: {e}"
 
 
 def load() -> pd.DataFrame:
+    global _ERR
     try:
-        return _load_cached(os.path.getmtime(PATH))
+        d, _ERR = _load_cached(os.path.getmtime(PATH))
+        return d
     except OSError:
+        _ERR = ""                      # chưa có file thì coi như chưa dùng tính năng này
         return pd.DataFrame()
 
 
@@ -86,9 +130,16 @@ def _missing(v) -> bool:
 
 def apply_to_maps(fund_map: dict, cap_map: dict, df: pd.DataFrame | None = None) -> None:
     """Điền vào fund_map / cap_map các ô còn thiếu (xem docstring đầu file). P/E phải trong (0, 1000), P/B trong (0, 200)."""
-    d = load() if df is None else df
-    if d is None or d.empty:
+    try:
+        d = load() if df is None else df
+        if d is None or d.empty:
+            return
+        _apply(fund_map, cap_map, d)
+    except Exception:  # noqa: BLE001  (dữ liệu bổ sung lỗi thì bỏ qua, không làm hỏng các trang khác)
         return
+
+
+def _apply(fund_map: dict, cap_map: dict, d: pd.DataFrame) -> None:
     for _, r in d.iterrows():
         code = str(r["Mã"]).upper()
         fm = fund_map.setdefault(code, {})
@@ -174,6 +225,9 @@ def render_section(sector: str | None) -> None:
     if not sector:
         return
     d = load()
+    if _ERR:
+        st.warning(f"Không đọc được {PATH}: {_ERR}. Kiểm tra dòng tiêu đề có các cột Ngành, Mã, ... (mẫu trong file gốc).")
+        return
     if d.empty:
         return
     d = d[d["Ngành"] == sector].sort_values("STT", na_position="last")
