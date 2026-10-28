@@ -490,14 +490,23 @@ CSS = """
   --tag-green-bg:#14463a;--tag-green-fg:#3fd68f;--tag-amber-bg:#14463a;--tag-amber-fg:#3fd68f;--tag-red-bg:#3a2024;--tag-gray-bg:#1b3d37;--tag-gray-fg:#9cc7ba;
   background:linear-gradient(135deg,#0d2622 0%,#113029 100%);border:1px solid #21504a;border-radius:18px;letter-spacing:.2px}
 .vpb .tp-tb{table-layout:fixed;width:100%;min-width:1660px;font-size:12.5px}
-.vpb .tp-tb th{color:var(--muted);font-weight:800;font-size:11px;letter-spacing:0;padding:14px 4px;border-bottom:1px solid var(--line);line-height:1.3}
+.vpb .tp-tb th{color:#fff;font-weight:800;font-size:12.5px;letter-spacing:0;padding:14px 4px;border-bottom:1px solid var(--line);line-height:1.3}
 .vpb .tp-tb td{padding:12px 6px;border-bottom:1px solid var(--line2);overflow:hidden}
 .vpb .tp-tb tr.th td{padding:0 12px 12px;overflow:visible}
 .vpb .tp-rank{width:28px;height:28px;color:#06251a;box-shadow:0 0 0 3px rgba(63,214,143,.15)}
 .vpb .tp-code{font-size:16px;letter-spacing:.6px}
 .vpb .tp-px{font-size:16px;font-weight:800;letter-spacing:.3px}
 .vpb .tp-name{color:var(--muted);font-size:11.5px;min-width:0;max-width:none}
-.vpb td.ex{text-align:left;font-size:11.5px;line-height:1.5;color:var(--muted);font-weight:500}
+/* Các cột Hạng → Giá Mục Tiêu 2: chữ phẳng, đậm, font đơn cách như bảng mẫu */
+.vpb .tp-tb td.pl{font-family:Consolas,"Roboto Mono",Menlo,"Courier New",monospace;font-weight:700;font-size:13px;color:#fff;letter-spacing:0}
+.vpb td.pl .tp-auto,.vpb td.pl .tp-mu{font-family:inherit}
+.vpb .cmd-t{font-size:14px;font-weight:800;color:#ffd966;white-space:nowrap}
+.vpb .cmd-t.green{color:#4fd18b}.vpb .cmd-t.red{color:#ff5a4d}.vpb .cmd-t.gray{color:#b9d3d7}
+.vpb .pl-code{font-size:14px;font-weight:800;color:#fff}
+.vpb .pl-date{font-size:11px;font-weight:700;color:#fff;margin-top:2px}
+.vpb .tp-tb td.pl.ex{text-align:left;font-size:12px;line-height:1.35;white-space:normal}
+.vpb .tp-tb td.pl.rt{text-align:right;padding-right:14px}
+.vpb .lv.dn{color:#ff5a4d}.vpb .lv.up{color:#4fd18b}
 .vpb .tp-pill{min-width:0;width:92%;max-width:118px;padding:6px 4px;border:1px solid transparent;border-radius:12px;font-size:13px;letter-spacing:.2px;white-space:nowrap;box-sizing:border-box}
 .vpb .tp-pill small{font-size:10.5px;white-space:nowrap}
 .vpb .tp-pill.g{background:#14463a;border-color:#1f6b52;color:#3fd68f}
@@ -615,7 +624,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
 # Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Khuyến nghị
 WAIT_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá hiện tại", "Cách vùng mua", "Tỷ trọng", "Ví dụ", "Cắt lỗ",
              "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Khuyến nghị"]
-WAIT_WIDTH = [3.5, 6.5, 5.5, 8.5, 6, 7, 4.5, 9, 6, 6, 6, 8, 8.5, 5.5, 9.5]            # % bề rộng từng cột, tổng 100
+WAIT_WIDTH = [3, 6.5, 5.5, 8.5, 5.5, 7, 4.5, 10.5, 6, 6, 6, 8, 8.5, 5.5, 9]            # % bề rộng từng cột, tổng 100
 _WAIT_CMD = {"CHỜ VỀ VÙNG MUA": ("CHỜ MUA", "gold"), "VÙNG MUA": ("MUA NGAY", "green"), "DƯỚI VÙNG MUA": ("DƯỚI VÙNG", "gray")}
 
 
@@ -640,20 +649,17 @@ def _wait_row_html(i: int, r) -> str:
     b = r["Điểm mua"]
     if isinstance(b, tuple):
         bt = _px(b[0]) if abs(b[0] - b[1]) < 1e-9 else f"{_px(b[0])} – {_px(b[1])}"
-        buy = f'<span class="tp-pill g">● {bt}</span>{_auto(r["buy_auto"])}'
-        if price > b[1]:
-            gap = f'<span class="tp-pill">{(price / b[1] - 1) * 100:+.1f}%<small>cao hơn vùng</small></span>'
-        elif price < b[0]:
-            gap = f'<span class="tp-pill">{(price / b[0] - 1) * 100:+.1f}%<small>thấp hơn vùng</small></span>'
-        else:
-            gap = '<span class="tp-pill g">0%<small>trong vùng</small></span>'
+        bt = bt.replace(" – ", " - ")
+        buy = f'{bt}{_auto(r["buy_auto"])}'
+        gap = (f'{(price / b[1] - 1) * 100:+.1f}%' if price > b[1] else f'{(price / b[0] - 1) * 100:+.1f}%' if price < b[0] else "0.0%")
     else:
         buy = gap = mu
 
     def lvl(val, auto, tone_):
         if not _ok(val) or not val:
             return mu
-        return f'<span class="tp-pill {tone_}">{_px(val)}<small>{(val / price - 1) * 100:+.1f}%</small></span>{_auto(auto)}'
+        d = (val / price - 1) * 100
+        return f'<div class="lv {tone_}">{_px(val)}</div><div class="lv {tone_}">{"▲" if d >= 0 else "▼"} {abs(d):.2f}%</div>{_auto(auto)}'
     t1, t2 = r["Target"], r["Điểm bán"]
     t2_show = t2 if (_ok(t2) and t2 and _ok(t1) and t1 and t2 > t1) else None            # Mục tiêu 2 chỉ hiện khi cao hơn Mục tiêu 1
     w = _f(r.get("Tỷ trọng"))
@@ -674,12 +680,13 @@ def _wait_row_html(i: int, r) -> str:
                if ng is not None and pd.notna(ng) and abs(ng) > 0 else "")
     rec = f'<span class="tp-rec {tone}">{_e(label)}</span><div class="tp-note">{_e(note)}</div>{foreign}'      # giữ nguyên như cũ
     thesis = str(r.get("Luận điểm") or "").strip()
-    main = (f'<tr class="{"hasth" if thesis else ""}"><td><span class="tp-rank">{i}</span></td>'
-            f'<td class="cmd"><span class="tp-rec {ctone}">{_e(cmd)}</span></td>'
-            f'<td class="l"><span class="tp-code">{_e(r["Mã"])}</span>' + (f'<div class="tp-name" style="min-width:0">{_e(kn)}</div>' if kn else "") + '</td>'
-            f'<td>{buy}</td><td><span class="tp-px">{_px(price)}</span></td><td>{gap}</td><td>{f"{w:g}%" if w else mu}</td>'
-            f'<td class="ex">{_e(ex) if ex else mu}</td>'
-            f'<td>{lvl(r["Cutloss"], r["stop_auto"], "r")}</td><td>{lvl(t1, r["target_auto"], "a")}</td><td>{lvl(t2_show, r["sell_auto"], "a")}</td>'
+    main = (f'<tr class="{"hasth" if thesis else ""}"><td class="pl">{i}</td>'
+            f'<td class="pl cmd"><span class="cmd-t {ctone}">{_e(cmd)}</span></td>'
+            f'<td class="pl l"><div class="pl-code">{_e(r["Mã"])}</div>' + (f'<div class="pl-date">{_e(kn)}</div>' if kn else "") + '</td>'
+            f'<td class="pl">{buy}</td><td class="pl">{_px(price)}</td><td class="pl">{gap}</td><td class="pl">{f"{w:g}%" if w else mu}</td>'
+            f'<td class="pl ex">{_e(ex) if ex else mu}</td>'
+            f'<td class="pl rt">{lvl(r["Cutloss"], r["stop_auto"], "dn")}</td><td class="pl rt">{lvl(t1, r["target_auto"], "up")}</td>'
+            f'<td class="pl rt">{lvl(t2_show, r["sell_auto"], "up")}</td>'
             f'<td>{fa}</td><td>{ta}</td><td>{tot}</td><td>{rec}</td></tr>')
     if thesis:
         main += f'<tr class="th"><td></td><td colspan="14">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
@@ -688,7 +695,7 @@ def _wait_row_html(i: int, r) -> str:
 
 def wait_table_html(v: pd.DataFrame) -> str:
     cg = "".join(f'<col style="width:{w}%">' for w in WAIT_WIDTH)
-    th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h.upper()}</th>' for h in WAIT_HEAD)
+    th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h}</th>' for h in WAIT_HEAD)
     body = "".join(_wait_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
     return f'<div class="tp-wrap vpb"><table class="tp-tb"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
