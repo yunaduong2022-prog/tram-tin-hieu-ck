@@ -11,7 +11,7 @@ MENU = {
     "Cổ phiếu": ["Biểu đồ", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
                  "Thanh khoản", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Mua ngay", "Chờ mua", "Tăng mạnh", "Lọc tất cả CP", "Bộ lọc Realtime", "Giảm mạnh", "Cạn cung", "Đang phục hồi",
-                          "Watchlist", "Cổ phiếu của tôi", "Danh sách cảnh báo",
+                          "Watchlist", "Cổ phiếu của tôi", "Khuyến nghị khách hàng", "Danh sách cảnh báo",
                           "Bán / Chốt lời", "Backtest chiến lược"],
     "Livestream": [],
 }

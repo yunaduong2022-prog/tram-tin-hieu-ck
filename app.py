@@ -40,6 +40,7 @@ import cap_filter as CF
 import market_overview as MO
 import my_watchlist as MW
 import my_portfolio as MP
+import vip_picks as VP
 import sell_card
 import dry_supply as DS
 import stock_map as SM
@@ -477,15 +478,16 @@ def _wb_rows(key: str) -> dict:
     return t.drop_duplicates("Mã", keep="first").set_index("Mã")[cols].to_dict("index")
 
 
-def _action_html(code) -> str:
-    """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
-    hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py."""
+def _action_ctx(code):
+    """Ngữ cảnh (dict) của khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
+    hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py.
+    Hàm này chỉ dựng ctx để AS.html / AS.plan dùng chung; trả None nếu chưa có giá."""
     try:
         code = str(code)
         g = df[df["Mã"] == code].sort_values("Ngày")
         c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce")
         if c.empty:
-            return ""
+            return None
         ma = {n: (float(c.rolling(n).mean().iloc[-1]) if len(c) >= n else None) for n in (20, 50, 200)}
         w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb12").get(code, {})
         state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
@@ -499,7 +501,16 @@ def _action_html(code) -> str:
                    div=divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"),
                    wy=WY_TABLE.get(code), sup=d.get("sup") if d.get("ok") else None, res=d.get("res") if d.get("ok") else None,
                    zone=(w.get("Vùng mua từ"), w.get("Vùng mua đến")) if state in WB.STATE_GROUP and WB.STATE_GROUP[state] in WB.BUY_GROUPS else None)
-        return AS.html(ctx)
+        return ctx
+    except Exception:
+        return None
+
+
+def _action_html(code) -> str:
+    """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ (quy tắc ở action_summary.py)."""
+    try:
+        ctx = _action_ctx(code)
+        return AS.html(ctx) if ctx else ""
     except Exception:
         return ""
 
@@ -1598,6 +1609,22 @@ def page_watchlist():
 
     MW.render(_wb_table(), res_df, _open_chart, _wl_card)
     _rt_focus_scroll()
+
+
+def page_vip_picks():
+    st.title("🔥 Khuyến nghị khách hàng")
+    header()
+
+    def _open_filter():
+        NAV.goto("Bộ lọc & Backtest", "Lọc tất cả CP")
+
+    def _meta(code: str):
+        m = _wb_meta(code)
+        sec = str(m.get("Ngành", ""))
+        return m.get("Tên", ""), ("" if sec.startswith("Khác") else sec.split(",")[0].strip())
+
+    cap_map, fund_map = _wb_meta_maps(WY_KEY)
+    VP.render(res_df, frames["D"], _wb_table(), fund_map, _meta, _action_ctx, _open_chart_of, _open_filter)
 
 
 def page_my_portfolio():
@@ -3171,6 +3198,7 @@ def _route_inner():
         if sub == "Đang phục hồi": return page_recovering()
         if sub == "Watchlist": return page_watchlist()
         if sub == "Cổ phiếu của tôi": return page_my_portfolio()
+        if sub == "Khuyến nghị khách hàng": return page_vip_picks()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
         return NAV.placeholder("🧪 Backtest chiến lược",
