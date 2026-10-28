@@ -485,29 +485,36 @@ CSS = """
 .tp-tb tr.hasth td{border-bottom:none}
 .tp-tb tr.th td{padding:0 12px 14px;text-align:left;color:var(--muted);font-size:12.5px;line-height:1.5}
 .tp-tb tr.th b{color:var(--txt)}
-/* Bảng Chờ mua: tông navy + xanh mint (phong cách app VPBankS). Chỉ đổi biến màu trong khung .vpb nên các bảng khác giữ nguyên */
-.tp-wrap.vpb{--card:#1a2033;--card2:#222a42;--line:#2a3347;--line2:#222b3d;--txt:#f2f5fa;--txt2:#fff;--muted:#7b839a;--accent:#3fd68f;--green:#3fd68f;--red:#ff5c63;
-  --tag-green-bg:#213e44;--tag-green-fg:#3fd68f;--tag-amber-bg:#213e44;--tag-amber-fg:#3fd68f;--tag-red-bg:#3a2230;--tag-gray-bg:#262e45;--tag-gray-fg:#9aa3ba;
-  background:linear-gradient(135deg,#1b2336 0%,#1d2140 100%);border:1px solid #2a3347;border-radius:18px;letter-spacing:.2px}
-.vpb .tp-tb th{color:var(--muted);font-weight:800;font-size:12.5px;letter-spacing:.3px;border-bottom:1px solid var(--line)}
-.vpb .tp-tb td{border-bottom:1px solid var(--line2)}
-.vpb .tp-rank{color:#06251a;box-shadow:0 0 0 3px rgba(63,214,143,.15)}
-.vpb .tp-code{letter-spacing:.8px}
-.vpb .tp-px{font-size:17px;font-weight:800;letter-spacing:.4px}
-.vpb .tp-name{color:var(--muted)}
-.vpb .tp-pill{border:1px solid transparent;border-radius:12px;letter-spacing:.3px}
-.vpb .tp-pill.g{background:#213e44;border-color:#195d48;color:#3fd68f}
-.vpb .tp-pill.a{background:#213e44;border-color:#195d48;color:#3fd68f}
-.vpb .tp-pill.r{background:#3a2230;border-color:#5a2a38;color:#ff5c63}
-.vpb .tp-pill:not(.g):not(.a):not(.r){background:#222a42;border-color:#2a3347;color:#e8ecf4}
-.vpb .tp-rec{border-radius:8px;border:1px solid transparent;letter-spacing:.5px}
+/* Bảng Chờ mua: tông xanh lá đậm + mint (phong cách app VPBankS). Chỉ đổi biến màu trong khung .vpb nên các bảng khác giữ nguyên */
+.tp-wrap.vpb{--card:#0f2b27;--card2:#173a34;--line:#21504a;--line2:#1a413b;--txt:#f1f8f5;--txt2:#fff;--muted:#80ab9e;--accent:#3fd68f;--green:#3fd68f;--red:#ff6168;
+  --tag-green-bg:#14463a;--tag-green-fg:#3fd68f;--tag-amber-bg:#14463a;--tag-amber-fg:#3fd68f;--tag-red-bg:#3a2024;--tag-gray-bg:#1b3d37;--tag-gray-fg:#9cc7ba;
+  background:linear-gradient(135deg,#0d2622 0%,#113029 100%);border:1px solid #21504a;border-radius:18px;letter-spacing:.2px}
+.vpb .tp-tb{table-layout:fixed;width:100%;min-width:1660px;font-size:12.5px}
+.vpb .tp-tb th{color:var(--muted);font-weight:800;font-size:11px;letter-spacing:0;padding:14px 4px;border-bottom:1px solid var(--line);line-height:1.3}
+.vpb .tp-tb td{padding:12px 6px;border-bottom:1px solid var(--line2);overflow:hidden}
+.vpb .tp-tb tr.th td{padding:0 12px 12px;overflow:visible}
+.vpb .tp-rank{width:28px;height:28px;color:#06251a;box-shadow:0 0 0 3px rgba(63,214,143,.15)}
+.vpb .tp-code{font-size:16px;letter-spacing:.6px}
+.vpb .tp-px{font-size:16px;font-weight:800;letter-spacing:.3px}
+.vpb .tp-name{color:var(--muted);font-size:11.5px;min-width:0;max-width:none}
+.vpb td.ex{text-align:left;font-size:11.5px;line-height:1.5;color:var(--muted);font-weight:500}
+.vpb .tp-pill{min-width:0;width:92%;max-width:118px;padding:6px 4px;border:1px solid transparent;border-radius:12px;font-size:13px;letter-spacing:.2px;white-space:nowrap;box-sizing:border-box}
+.vpb .tp-pill small{font-size:10.5px;white-space:nowrap}
+.vpb .tp-pill.g{background:#14463a;border-color:#1f6b52;color:#3fd68f}
+.vpb .tp-pill.a{background:#14463a;border-color:#1f6b52;color:#3fd68f}
+.vpb .tp-pill.r{background:#3a2024;border-color:#5f2c33;color:#ff6168}
+.vpb .tp-pill:not(.g):not(.a):not(.r){background:#173a34;border-color:#21504a;color:#e8f3ef}
+.vpb .tp-rec{display:inline-block;max-width:100%;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid transparent;font-size:12px;letter-spacing:.3px;line-height:1.3}
+.vpb td.cmd .tp-rec{white-space:nowrap;padding:6px 7px}
 .vpb .tp-rec.green{background:#3fd68f;color:#06251a}
-.vpb .tp-rec.gold,.vpb .tp-rec.amber{background:#213e44;border-color:#195d48;color:#3fd68f}
-.vpb .tp-rec.red{background:#3a2230;border-color:#5a2a38;color:#ff5c63}
-.vpb .tp-rec.gray{background:#262e45;color:#9aa3ba}
-.vpb .tp-grade{background:#213e44;color:#3fd68f}
-.vpb .tp-chip{background:#222a42;border-color:#2a3347}
-.vpb .tp-bar{background:#2a3347}
+.vpb .tp-rec.gold,.vpb .tp-rec.amber{background:#14463a;border-color:#1f6b52;color:#3fd68f}
+.vpb .tp-rec.red{background:#3a2024;border-color:#5f2c33;color:#ff6168}
+.vpb .tp-rec.gray{background:#1b3d37;color:#9cc7ba}
+.vpb .tp-note{font-size:11px;line-height:1.4}
+.vpb .tp-grade{background:#14463a;color:#3fd68f}
+.vpb .tp-score{font-size:20px}
+.vpb .tp-chip{max-width:none;width:100%;box-sizing:border-box;font-size:10.5px;padding:2px 6px;background:#173a34;border-color:#21504a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vpb .tp-bar{background:#21504a;width:80%}
 </style>
 """
 
@@ -608,6 +615,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
 # Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Khuyến nghị
 WAIT_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá hiện tại", "Cách vùng mua", "Tỷ trọng", "Ví dụ", "Cắt lỗ",
              "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Khuyến nghị"]
+WAIT_WIDTH = [3.5, 6.5, 5.5, 8.5, 6, 7, 4.5, 9, 6, 6, 6, 8, 8.5, 5.5, 9.5]            # % bề rộng từng cột, tổng 100
 _WAIT_CMD = {"CHỜ VỀ VÙNG MUA": ("CHỜ MUA", "gold"), "VÙNG MUA": ("MUA NGAY", "green"), "DƯỚI VÙNG MUA": ("DƯỚI VÙNG", "gray")}
 
 
@@ -667,10 +675,10 @@ def _wait_row_html(i: int, r) -> str:
     rec = f'<span class="tp-rec {tone}">{_e(label)}</span><div class="tp-note">{_e(note)}</div>{foreign}'      # giữ nguyên như cũ
     thesis = str(r.get("Luận điểm") or "").strip()
     main = (f'<tr class="{"hasth" if thesis else ""}"><td><span class="tp-rank">{i}</span></td>'
-            f'<td><span class="tp-rec {ctone}">{_e(cmd)}</span></td>'
+            f'<td class="cmd"><span class="tp-rec {ctone}">{_e(cmd)}</span></td>'
             f'<td class="l"><span class="tp-code">{_e(r["Mã"])}</span>' + (f'<div class="tp-name" style="min-width:0">{_e(kn)}</div>' if kn else "") + '</td>'
             f'<td>{buy}</td><td><span class="tp-px">{_px(price)}</span></td><td>{gap}</td><td>{f"{w:g}%" if w else mu}</td>'
-            f'<td class="l tp-name">{_e(ex) if ex else mu}</td>'
+            f'<td class="ex">{_e(ex) if ex else mu}</td>'
             f'<td>{lvl(r["Cutloss"], r["stop_auto"], "r")}</td><td>{lvl(t1, r["target_auto"], "a")}</td><td>{lvl(t2_show, r["sell_auto"], "a")}</td>'
             f'<td>{fa}</td><td>{ta}</td><td>{tot}</td><td>{rec}</td></tr>')
     if thesis:
@@ -679,9 +687,10 @@ def _wait_row_html(i: int, r) -> str:
 
 
 def wait_table_html(v: pd.DataFrame) -> str:
+    cg = "".join(f'<col style="width:{w}%">' for w in WAIT_WIDTH)
     th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h.upper()}</th>' for h in WAIT_HEAD)
     body = "".join(_wait_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
-    return f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1560px"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
+    return f'<div class="tp-wrap vpb"><table class="tp-tb"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
