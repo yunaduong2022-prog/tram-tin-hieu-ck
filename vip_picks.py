@@ -485,6 +485,29 @@ CSS = """
 .tp-tb tr.hasth td{border-bottom:none}
 .tp-tb tr.th td{padding:0 12px 14px;text-align:left;color:var(--muted);font-size:12.5px;line-height:1.5}
 .tp-tb tr.th b{color:var(--txt)}
+/* Bảng Chờ mua: tông navy + xanh mint (phong cách app VPBankS). Chỉ đổi biến màu trong khung .vpb nên các bảng khác giữ nguyên */
+.tp-wrap.vpb{--card:#1a2033;--card2:#222a42;--line:#2a3347;--line2:#222b3d;--txt:#f2f5fa;--txt2:#fff;--muted:#7b839a;--accent:#3fd68f;--green:#3fd68f;--red:#ff5c63;
+  --tag-green-bg:#213e44;--tag-green-fg:#3fd68f;--tag-amber-bg:#213e44;--tag-amber-fg:#3fd68f;--tag-red-bg:#3a2230;--tag-gray-bg:#262e45;--tag-gray-fg:#9aa3ba;
+  background:linear-gradient(135deg,#1b2336 0%,#1d2140 100%);border:1px solid #2a3347;border-radius:18px;letter-spacing:.2px}
+.vpb .tp-tb th{color:var(--muted);font-weight:800;font-size:12.5px;letter-spacing:.3px;border-bottom:1px solid var(--line)}
+.vpb .tp-tb td{border-bottom:1px solid var(--line2)}
+.vpb .tp-rank{color:#06251a;box-shadow:0 0 0 3px rgba(63,214,143,.15)}
+.vpb .tp-code{letter-spacing:.8px}
+.vpb .tp-px{font-size:17px;font-weight:800;letter-spacing:.4px}
+.vpb .tp-name{color:var(--muted)}
+.vpb .tp-pill{border:1px solid transparent;border-radius:12px;letter-spacing:.3px}
+.vpb .tp-pill.g{background:#213e44;border-color:#195d48;color:#3fd68f}
+.vpb .tp-pill.a{background:#213e44;border-color:#195d48;color:#3fd68f}
+.vpb .tp-pill.r{background:#3a2230;border-color:#5a2a38;color:#ff5c63}
+.vpb .tp-pill:not(.g):not(.a):not(.r){background:#222a42;border-color:#2a3347;color:#e8ecf4}
+.vpb .tp-rec{border-radius:8px;border:1px solid transparent;letter-spacing:.5px}
+.vpb .tp-rec.green{background:#3fd68f;color:#06251a}
+.vpb .tp-rec.gold,.vpb .tp-rec.amber{background:#213e44;border-color:#195d48;color:#3fd68f}
+.vpb .tp-rec.red{background:#3a2230;border-color:#5a2a38;color:#ff5c63}
+.vpb .tp-rec.gray{background:#262e45;color:#9aa3ba}
+.vpb .tp-grade{background:#213e44;color:#3fd68f}
+.vpb .tp-chip{background:#222a42;border-color:#2a3347}
+.vpb .tp-bar{background:#2a3347}
 </style>
 """
 
@@ -658,7 +681,7 @@ def _wait_row_html(i: int, r) -> str:
 def wait_table_html(v: pd.DataFrame) -> str:
     th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h.upper()}</th>' for h in WAIT_HEAD)
     body = "".join(_wait_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
-    return f'<div class="tp-wrap"><table class="tp-tb" style="min-width:1560px"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
+    return f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1560px"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
