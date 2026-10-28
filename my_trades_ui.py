@@ -42,7 +42,10 @@ def build_wait(plans: pd.DataFrame, res: pd.DataFrame, wb: pd.DataFrame) -> pd.D
     """Bảng CHỜ MUA: giá hiện tại, cách vùng mua, hành động (trong vùng = MUA NGAY, trên vùng = CHỜ MUA, dưới vùng = vùng đã thủng)."""
     w = plans[plans["Trạng thái"] == MT.WAIT].copy()
     px = _prices(res, wb)
-    w["Giá hiện tại"] = w["Mã"].map(px)
+    for c in ("Vùng mua từ", "Vùng mua đến"):
+        w[c] = pd.to_numeric(w[c], errors="coerce").astype(float)
+    # ép về số thực: bảng rỗng hoặc cột kiểu chuỗi (pyarrow) sẽ làm phép so sánh với số báo TypeError
+    w["Giá hiện tại"] = pd.to_numeric(w["Mã"].map(px), errors="coerce").astype(float)
     g, lo, hi = w["Giá hiện tại"], w["Vùng mua từ"], w["Vùng mua đến"]
     w["Cách vùng mua %"] = np.where(g > hi, (g / hi - 1) * 100, np.where(g < lo, (g / lo - 1) * 100, 0.0))
     w["Lệnh"] = np.where(g.isna(), "—", np.where((g.round(2) >= lo.round(2)) & (g.round(2) <= hi.round(2)), "MUA NGAY",
@@ -50,7 +53,7 @@ def build_wait(plans: pd.DataFrame, res: pd.DataFrame, wb: pd.DataFrame) -> pd.D
     w["Hành động"] = w["Lệnh"].map({"MUA NGAY": "Giá trong vùng mua: có thể mua, nên chia lệnh.",
                                     "CHỜ MUA": "Không mua đuổi. Chờ về vùng mua.",
                                     "DƯỚI VÙNG": "Giá đã xuống dưới vùng mua: chờ xác nhận, cân nhắc hủy kế hoạch."}).fillna("Chưa có giá")
-    w["Vùng mua"] = w.apply(lambda r: f"{r['Vùng mua từ']:.2f} - {r['Vùng mua đến']:.2f}", axis=1)
+    w["Vùng mua"] = pd.Series([f"{a:.2f} - {b:.2f}" for a, b in zip(lo, hi)], index=w.index, dtype=object)
     return w.sort_values("Cách vùng mua %", key=lambda s: s.abs()).reset_index(drop=True)
 
 
@@ -82,6 +85,8 @@ def build_hold(plans: pd.DataFrame, lots: pd.DataFrame, res: pd.DataFrame, wb: p
     out = pd.DataFrame(rows)
     if out.empty:
         return out
+    for c in ("Giá hiện tại", "Cắt lỗ", "Mục tiêu"):
+        out[c] = pd.to_numeric(out[c], errors="coerce").astype(float)
     px_, sl_, tp_ = out["Giá hiện tại"], out["Cắt lỗ"], out["Mục tiêu"]
     out["Hành động"] = np.where((sl_ > 0) & (px_ <= sl_), "Chạm cắt lỗ: thực hiện theo kế hoạch.",
                         np.where((tp_ > 0) & (px_ >= tp_), "Đạt mục tiêu: cân nhắc chốt lời, dời cắt lỗ lên.", "Nắm giữ"))
