@@ -6,6 +6,9 @@ Ba nhóm (vòng đời một khuyến nghị): Chờ mua -> Đang nắm giữ ->
 - Đang nắm giữ: bắt buộc có Điểm mua (giá vào lệnh); tính lợi nhuận, theo dõi cutloss / điểm bán.
 - Đã đóng: có Giá đóng và Ngày đóng; hiện kết quả (% lãi / lỗ) và số ngày kể từ ngày khuyến nghị.
 Mỗi mã có Khung thời gian (Trung hạn / Dài hạn), Ngày khuyến nghị và Luận điểm (một dòng giải thích vì sao khuyến nghị).
+Bảng nhóm Chờ mua trình bày theo form riêng (nền xanh đậm): Hạng | Lệnh | Mã CP + ngày KN | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng |
+Ví dụ | Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | FA | TA | Tổng điểm | Khuyến nghị. Cột Tỷ trọng và Ví dụ lấy từ hai cột mới của file CSV:
+"Tỷ trọng %" (vd 30) và "Dự định mua" (số cổ phiếu, vd 1000); câu Ví dụ tự ghép: "Dự định mua 1000 cổ phiếu. Tỷ trọng 30% là mua trước 300 cổ phiếu."
 
 Quyền
 - Khách chỉ xem bảng và mở đồ thị. Admin mở khóa bằng mật khẩu (biến môi trường hoặc Secrets VIP_ADMIN_PASSWORD) để thêm / sửa / xóa mã.
@@ -49,7 +52,7 @@ PATH = "data/khuyen_nghi_khach_hang.csv"
 FOREIGN_PATH = "data/foreign_flow.csv"
 STATUSES = ("Chờ mua", "Đang nắm giữ", "Đã đóng")
 FRAMES = ("Trung hạn", "Dài hạn")
-COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán", "Trạng thái", "Khung thời gian", "Ngày khuyến nghị", "Luận điểm", "Giá đóng", "Ngày đóng"]
+COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán", "Trạng thái", "Khung thời gian", "Ngày khuyến nghị", "Luận điểm", "Giá đóng", "Ngày đóng", "Tỷ trọng %", "Dự định mua"]
 _ERR = ""                                                    # thông báo lỗi đọc file gần nhất ("" = tốt)
 GRADES = ((75, "A"), (60, "B"), (40, "C"), (0, "D"))        # (điểm tối thiểu, hạng)
 NEAR_BUY = 1.01                                              # giá <= biên trên vùng mua × 1.01 vẫn coi là "trong vùng mua"
@@ -422,6 +425,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             "RSI": _f(g["RSI"].iat[-1]) if "RSI" in g.columns else None,
             "Khuyến nghị": rec, "Ngoại": net5,
             "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Luận điểm": p.get("Luận điểm", ""),
+            "Tỷ trọng": p.get("Tỷ trọng %", ""), "Dự định": p.get("Dự định mua", ""),
         })
     v = pd.DataFrame(rows)
     if "Tổng điểm" in v:
@@ -481,6 +485,24 @@ CSS = """
 .tp-tb tr.hasth td{border-bottom:none}
 .tp-tb tr.th td{padding:0 12px 14px;text-align:left;color:var(--muted);font-size:12.5px;line-height:1.5}
 .tp-tb tr.th b{color:var(--txt)}
+.tp-wrap.wt{background:#0c343d;border-color:#1f5560}
+.tp-tb.wt-tb{min-width:1560px;color:#fff;font-weight:700}
+.tp-tb.wt-tb th{color:#fff;font-size:13px;letter-spacing:0;padding:16px 10px;border-bottom:1px solid #1f5560}
+.tp-tb.wt-tb td{padding:14px 10px;border-bottom:1px solid #1f5560;line-height:1.35}
+.tp-tb.wt-tb tr.hasth td{border-bottom:none}
+.tp-tb.wt-tb tr.th td{color:#b9d3d7;font-weight:400}
+.tp-tb.wt-tb tr.th b{color:#fff}
+.wt-cmd{font-size:15px;font-weight:800;color:#ffd966;letter-spacing:.3px}
+.wt-cmd.green{color:#5be08f}.wt-cmd.red{color:#ff7b6e}.wt-cmd.gray{color:#b9d3d7}
+.wt-code{font-size:15px;font-weight:800;color:#fff}
+.wt-date{font-size:11px;font-weight:700;color:#d5e6e8;margin-top:2px}
+.wt-g{color:#4fd18b}.wt-r{color:#ff5a4d}
+.wt-s{font-size:12px;font-weight:700}
+.tp-tb.wt-tb td.wt-ex{font-size:12px;font-weight:400;color:#e6f0f1;text-align:left;min-width:190px;max-width:230px}
+.tp-tb.wt-tb td.wt-rec{font-size:13px;font-weight:800;color:#fff;text-align:left;min-width:120px;max-width:150px}
+.wt-mu{color:#8fb3b9;font-weight:400}
+.wt-auto{display:block;font-size:10px;font-weight:400;font-style:italic;color:#8fb3b9}
+.wt-sc{font-size:15px;font-weight:800;color:#fff}.wt-sc small{font-weight:600;color:#b9d3d7;font-size:11px}
 </style>
 """
 
@@ -577,8 +599,82 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     return main
 
 
+# Nhóm Chờ mua trình bày theo form riêng: Hạng | Lệnh | Mã CP (+ngày KN) | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng | Ví dụ |
+# Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Khuyến nghị
+WAIT_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá hiện tại", "Cách vùng mua", "Tỷ trọng", "Ví dụ", "Cắt lỗ",
+             "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Khuyến nghị"]
+_WAIT_CMD = {"CHỜ VỀ VÙNG MUA": ("CHỜ MUA", ""), "VÙNG MUA": ("MUA NGAY", "green"), "DƯỚI VÙNG MUA": ("DƯỚI VÙNG", "gray")}
+_WAIT_ACT = {"CHỜ VỀ VÙNG MUA": "Không mua đuổi. Chờ về vùng mua.",
+             "VÙNG MUA": "Giá trong vùng mua: có thể mua, nên chia lệnh.",
+             "DƯỚI VÙNG MUA": "Giá đã xuống dưới vùng mua: chờ xác nhận, cân nhắc hủy kế hoạch."}
+
+
+def example_text(weight, qty) -> str:
+    """Câu minh họa giải ngân: "Dự định mua 1000 cổ phiếu. Tỷ trọng 30% là mua trước 300 cổ phiếu." Thiếu tỷ trọng hoặc số lượng thì để trống."""
+    w, q = _f(weight), _f(qty)
+    if not w or not q or w <= 0 or q <= 0:
+        return ""
+    return f"Dự định mua {q:.0f} cổ phiếu. Tỷ trọng {w:g}% là mua trước {q * w / 100:.0f} cổ phiếu."
+
+
+def _wait_row_html(i: int, r) -> str:
+    mu = '<span class="wt-mu">—</span>'
+    kn = fmt_date(parse_date(r.get("Ngày KN"))) or ""
+    nd = r.get("_nodata")
+    if isinstance(nd, (bool, np.bool_)) and nd:
+        return (f'<tr><td>{i}</td><td></td><td><div class="wt-code">{_e(r["Mã"])}</div></td>'
+                f'<td colspan="12" class="wt-mu" style="text-align:left">Chưa có dữ liệu giá của mã này</td></tr>')
+    price = r["Giá"]
+    label, tone, note = r["Khuyến nghị"]
+    cmd, ctone = _WAIT_CMD.get(label, (label, tone if tone in ("green", "red", "gray") else ""))
+    act = _WAIT_ACT.get(label, note)
+    b = r["Điểm mua"]
+    if isinstance(b, tuple):
+        zone = (_px(b[0]) if abs(b[0] - b[1]) < 1e-9 else f"{_px(b[0])} - {_px(b[1])}") + _wauto(r["buy_auto"])
+        gap = (f'{(price / b[1] - 1) * 100:+.1f}%' if price > b[1] else f'{(price / b[0] - 1) * 100:+.1f}%' if price < b[0] else "0.0%")
+    else:
+        zone, gap = mu, mu
+
+    def lvl(val, auto, cls):
+        if not _ok(val) or not val:
+            return mu
+        d = (val / price - 1) * 100
+        return (f'<div class="{cls}">{_px(val)}</div><div class="{cls} wt-s">{"▲" if d >= 0 else "▼"} {abs(d):.2f}%</div>{_wauto(auto)}')
+    t1, t2 = r["Target"], r["Điểm bán"]
+    t2_show = t2 if (_ok(t2) and t2 and _ok(t1) and t1 and t2 > t1) else None            # Mục tiêu 2 chỉ hiện khi cao hơn Mục tiêu 1
+    w = _f(r.get("Tỷ trọng"))
+    ex = example_text(r.get("Tỷ trọng"), r.get("Dự định"))
+    fa = (f'<span class="wt-sc">{int(r["FA"])}<small>/100</small></span>' if _ok(r["FA"]) else "")
+    ta = (f'<span class="wt-sc">{int(r["TA"])}<small>/100</small></span>' if _ok(r["TA"]) else "")
+    tot = (f'<span class="wt-sc">{r["Tổng điểm"]:.0f}<small> {_e(r["Hạng"])}</small></span>' if _ok(r["Tổng điểm"]) else "")
+    thesis = str(r.get("Luận điểm") or "").strip()
+    main = (f'<tr class="{"hasth" if thesis else ""}"><td>{i}</td>'
+            f'<td><span class="wt-cmd {ctone}">{_e(cmd)}</span></td>'
+            f'<td class="l"><div class="wt-code">{_e(r["Mã"])}</div>' + (f'<div class="wt-date">{_e(kn)}</div>' if kn else "") + '</td>'
+            f'<td>{zone}</td><td>{_px(price)}</td><td>{gap}</td><td>{f"{w:g}%" if w else mu}</td>'
+            f'<td class="wt-ex">{_e(ex) if ex else mu}</td>'
+            f'<td>{lvl(r["Cutloss"], r["stop_auto"], "wt-r")}</td><td>{lvl(t1, r["target_auto"], "wt-g")}</td>'
+            f'<td>{lvl(t2_show, r["sell_auto"], "wt-g")}</td><td>{fa}</td><td>{ta}</td><td>{tot}</td>'
+            f'<td class="wt-rec">{_e(act)}</td></tr>')
+    if thesis:
+        main += f'<tr class="th"><td></td><td colspan="14">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
+    return main
+
+
+def _wauto(flag: bool) -> str:
+    return '<span class="wt-auto">tự động</span>' if flag else ""
+
+
+def wait_table_html(v: pd.DataFrame) -> str:
+    th = "".join(f'<th class="{"l" if h == "Mã CP" else ""}">{h}</th>' for h in WAIT_HEAD)
+    body = "".join(_wait_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
+    return f'<div class="tp-wrap wt"><table class="tp-tb wt-tb"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
+
+
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
-    """mode="wait": nhóm Chờ mua (cột VÙNG MUA + CÁCH VÙNG MUA); mode="hold": nhóm Đang nắm giữ (cột ĐIỂM MUA + LỢI NHUẬN)."""
+    """mode="wait": nhóm Chờ mua (form riêng, xem wait_table_html); mode="hold": nhóm Đang nắm giữ (cột ĐIỂM MUA + LỢI NHUẬN)."""
+    if mode == "wait":
+        return wait_table_html(v)
     head = ["HẠNG", "MÃ CK", "GIÁ HIỆN TẠI", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "VÙNG MUA" if mode == "wait" else "GIÁ MUA",
             "CÁCH VÙNG MUA" if mode == "wait" else "LỢI NHUẬN", "TARGET", "CUTLOSS", "ĐIỂM BÁN", "ĐIỂM CƠ BẢN (FA)", "ĐIỂM KỸ THUẬT (TA)", "KHUYẾN NGHỊ"]
     th = "".join(f'<th class="{"l" if h == "MÃ CK" else ""}">{h}</th>' for h in head)
@@ -620,8 +716,8 @@ def closed_html(d: pd.DataFrame, meta_fn) -> str:
 # ------------------------------------------------------------------ TRANG
 _FIELDS = {"vp_code": "Mã", "vp_buy": "Điểm mua", "vp_target": "Target", "vp_cut": "Cutloss", "vp_sell": "Điểm bán",
            "vp_status": "Trạng thái", "vp_frame": "Khung thời gian", "vp_date": "Ngày khuyến nghị", "vp_note": "Luận điểm",
-           "vp_close": "Giá đóng", "vp_cdate": "Ngày đóng"}
-_DEFAULT = {"vp_status": "Chờ mua", "vp_frame": "Trung hạn"}
+           "vp_close": "Giá đóng", "vp_cdate": "Ngày đóng", "vp_weight": "Tỷ trọng %", "vp_qty": "Dự định mua"}
+_DEFAULT = {"vp_status": "Chờ mua", "vp_frame": "Trung hạn", "vp_weight": "30", "vp_qty": "1000"}
 _GROUP_KEY = {"Chờ mua": "wait", "Đang nắm giữ": "hold", "Đã đóng": "closed"}
 _GROUP_ICON = {"Chờ mua": "🎯", "Đang nắm giữ": "📈", "Đã đóng": "✅"}
 _GROUP_HINT = {
@@ -677,6 +773,11 @@ def _save_cb(available: set) -> None:
     for col in ("Điểm mua", "Target", "Cutloss", "Điểm bán", "Giá đóng"):
         if row[col] and not _nums(row[col]):
             return err(f"Ô {col} cần là số, ví dụ 35.5 hoặc 35.5 - 36.0.")
+    w, q = parse_price(row["Tỷ trọng %"]), parse_price(row["Dự định mua"])
+    if (row["Tỷ trọng %"] and not (w and 0 < w <= 100)) or (row["Dự định mua"] and not (q and q > 0)):
+        return err("Tỷ trọng là số từ 1 đến 100 (%), Dự định mua là số cổ phiếu lớn hơn 0.")
+    row["Tỷ trọng %"] = f"{w:g}" if w else ""
+    row["Dự định mua"] = f"{q:.0f}" if q else ""
     t, c = parse_price(row["Target"]), parse_price(row["Cutloss"])
     if t and c and t <= c:
         return err("Target phải cao hơn Cutloss.")
@@ -722,7 +823,8 @@ def _add_cb(available: set) -> None:
     bad = [c for c in dict.fromkeys(codes) if c not in available]
     werr = ""
     if ok:
-        new = [{"Mã": c, "Trạng thái": "Chờ mua", "Khung thời gian": "Trung hạn", "Ngày khuyến nghị": fmt_date(_today())} for c in ok]
+        new = [{"Mã": c, "Trạng thái": "Chờ mua", "Khung thời gian": "Trung hạn", "Ngày khuyến nghị": fmt_date(_today()),
+                "Tỷ trọng %": _DEFAULT["vp_weight"], "Dự định mua": _DEFAULT["vp_qty"]} for c in ok]
         werr = save(pd.concat([d, pd.DataFrame(new)], ignore_index=True))
     parts = ([f"Đã thêm vào Chờ mua: {', '.join(ok)}"] if ok else []) + ([f"Đã có sẵn: {', '.join(dup)}"] if dup else []) \
         + ([f"Không có trong dữ liệu: {', '.join(bad)}"] if bad else []) + ([f"chưa ghi được vào file: {werr}"] if werr else [])
@@ -801,6 +903,9 @@ def _admin_panel(available: set) -> None:
     c2[2].text_input("Ngày khuyến nghị", key="vp_date", placeholder="dd/mm/yyyy (trống = hôm nay)")
     c2[3].text_input("Giá đóng", key="vp_close", placeholder="Chỉ khi Đã đóng")
     c2[4].text_input("Ngày đóng", key="vp_cdate", placeholder="dd/mm/yyyy")
+    c3 = st.columns([1.1, 1.5, 1.3, 1, 1, 1.3])
+    c3[0].text_input("Tỷ trọng (%)", key="vp_weight", placeholder="VD: 30")
+    c3[1].text_input("Dự định mua (cổ phiếu)", key="vp_qty", placeholder="VD: 1000")
     st.text_input("Luận điểm", key="vp_note", placeholder="VD: Nền tích lũy pha C, chờ giá vượt MA20 kèm khối lượng (tối đa 300 ký tự)")
     b1, b2, _ = st.columns([1.2, 0.5, 6])
     b1.button("✓ Lưu", type="primary", on_click=_save_cb, args=(available,), use_container_width=True)
