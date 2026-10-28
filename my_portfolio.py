@@ -26,6 +26,8 @@ import pandas as pd
 import streamlit as st
 
 import engine as E
+import my_trades as MT
+import my_trades_ui as MTU
 import my_watchlist as MW
 
 PATH = "data/co_phieu_cua_toi.csv"
@@ -285,6 +287,10 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof) -> None:
     lots = load()
     available = set(res["Mã"].astype(str).str.upper())
 
+    st.subheader("Theo dõi từ chờ mua đến khi bán xong")
+    MTU.render(wb, res, asof, lots, save)
+    lots = load()                                           # có thể vừa đổi sau khi ghi nhận mua / bán
+
     pos, tot, sec = build_positions_view(lots, wb, res, asof, cfg["cash"])
 
     # 1) tổng quan
@@ -363,9 +369,10 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof) -> None:
         elif tp and tp <= px:
             st.warning("Mục tiêu phải cao hơn giá mua.")
         else:
-            new = pd.DataFrame([{"Mã": code, "Số lượng": qty, "Giá vốn": px, "Ngày mua": pd.Timestamp(dt), "Cắt lỗ": sl or np.nan,
-                                 "Mục tiêu": tp or np.nan, "Ghi chú": note}])
-            err = save(pd.concat([lots, new], ignore_index=True))
+            # mọi lần mua đều đi qua sổ giao dịch (my_trades): mã đang CHỜ MUA tự chuyển sang ĐANG GIỮ, lịch sử được giữ lại để backtest
+            p2, t2_, l2, err = MT.record_buy(MT.load_plans(), MT.load_trades(), lots, code, int(qty), float(px), pd.Timestamp(dt),
+                                             MTU.scores_for(code, res), "", note, stop=sl or None, target=tp or None)
+            err = err or MTU._save_all(p2, t2_, l2, save)
             st.session_state["pf_ver"] = ver + 1
             if err:
                 st.warning(f"Chưa lưu được vào file: {err}")
@@ -416,7 +423,7 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof) -> None:
             st.warning(f"Chưa lưu được: {err}") if err else st.rerun()
 
         if not lots.empty:
-            st.markdown("**Các lô mua** (sửa trực tiếp, tick Xóa rồi bấm Lưu để bỏ lô; bán một phần thì giảm Số lượng)")
+            st.markdown("**Các lô mua** (chỉ để sửa lỗi nhập; mua và bán hãy ghi ở phần theo dõi phía trên để giữ lịch sử)")
             ed = st.data_editor(lots.assign(**{"Xóa": False}), hide_index=True, key=f"pf_editor_{ver}", disabled=["Mã"],
                                 column_config={"Số lượng": st.column_config.NumberColumn(format="%d", min_value=0, step=LOT),
                                                "Giá vốn": st.column_config.NumberColumn(format="%.2f", min_value=0.0),
@@ -447,4 +454,4 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof) -> None:
         st.caption("⚠ Đây là dữ liệu tài chính cá nhân. Nếu repo GitHub ở chế độ public thì file data/co_phieu_cua_toi.csv và "
                    "data/danh_muc_cai_dat.json sẽ lộ ra ngoài: hãy để repo private hoặc không đẩy hai file này lên (thêm vào .gitignore). "
                    "Trên Streamlit Cloud, file ghi lúc chạy mất khi app khởi động lại: hãy bấm Sao lưu thường xuyên. "
-                   "App chưa lưu lịch sử lệnh đã bán nên lãi/lỗ đã chốt cần ghi riêng.")
+                   "Lịch sử mua bán nằm ở data/lich_su_giao_dich.csv và data/ke_hoach_giao_dich.csv: cũng cần sao lưu / đẩy lên GitHub.")
