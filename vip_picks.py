@@ -506,7 +506,7 @@ CSS = """
 .vpb .tp-tb td.pl.rt{text-align:right;padding-right:16px}
 .vpb .tp-tb td.pl.key{font-size:15.5px;font-weight:700;letter-spacing:.2px}
 .vpb .lv{font-size:15.5px;font-weight:700;line-height:1.4;letter-spacing:.2px}.vpb .lv+.lv{font-size:12px;font-weight:600;letter-spacing:0}
-.vpb .lv.dn{color:#ff5a4d}.vpb .lv.up{color:#4fd18b}
+.vpb .lv.dn{color:#ff5a4d}.vpb .lv.up{color:#4fd18b}.vpb .lv.fl{color:#ffb02e}
 .vpb .st{color:var(--muted);font-weight:500;margin-left:2px}
 .vpb .tp-mu{color:var(--muted)}
 /* FA / TA / Tổng điểm: điểm + thanh + nhãn hiển thị sẵn (để chụp gửi khách), nhãn viết gọn dạng dòng chữ */
@@ -663,6 +663,12 @@ def _wait_row_html(i: int, r) -> str:
         return f'<div class="lv {tone_}">{_px(val)}{_star(auto)}</div><div class="lv {tone_}">{"▲" if d >= 0 else "▼"} {abs(d):.2f}%</div>'
     t1, t2 = r["Target"], r["Điểm bán"]
     t2_show = t2 if (_ok(t2) and t2 and _ok(t1) and t1 and t2 > t1) else None            # Mục tiêu 2 chỉ hiện khi cao hơn Mục tiêu 1
+    chg, chgp = _f(r.get("Chg")), _f(r.get("Chg %"))
+    if chg is None:
+        px_html = _px(price)
+    else:                                          # xanh: đóng cửa tăng, đỏ: giảm, cam vàng: đứng giá (so với phiên trước)
+        pc, ar = ("up", "▲") if round(chg, 2) > 0 else ("dn", "▼") if round(chg, 2) < 0 else ("fl", "■")
+        px_html = f'<div class="lv {pc}">{_px(price)}</div><div class="lv {pc}">{ar} {abs(chgp or 0):.2f}%</div>'
     w = _f(r.get("Tỷ trọng"))
     ex = example_text(r.get("Tỷ trọng"), r.get("Dự định"))
     tot = (f'<span class="tp-score">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
@@ -684,7 +690,7 @@ def _wait_row_html(i: int, r) -> str:
     main = (f'<tr class="{"hasth" if thesis else ""}"><td class="pl">{i}</td>'
             f'<td class="pl cmd"><span class="cmd-t {ctone}">{_e(cmd)}</span></td>'
             f'<td class="pl l"><div class="pl-code">{_e(r["Mã"])}</div>' + (f'<div class="pl-date">{_e(kn)}</div>' if kn else "") + '</td>'
-            f'<td class="pl key">{buy}</td><td class="pl">{_px(price)}</td><td class="pl">{gap}</td><td class="pl">{f"{w:g}%" if w else mu}</td>'
+            f'<td class="pl key">{buy}</td><td class="pl key">{px_html}</td><td class="pl">{gap}</td><td class="pl">{f"{w:g}%" if w else mu}</td>'
             f'<td class="pl ex">{_e(ex) if ex else mu}</td>'
             f'<td class="pl rt">{lvl(r["Cutloss"], r["stop_auto"], "dn")}</td><td class="pl rt">{lvl(t1, r["target_auto"], "up")}</td>'
             f'<td class="pl rt">{lvl(t2_show, r["sell_auto"], "up")}</td>'
