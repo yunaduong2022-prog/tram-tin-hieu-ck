@@ -8,7 +8,7 @@ Ba nhóm (vòng đời một khuyến nghị): Chờ mua -> Đang nắm giữ ->
 Mỗi mã có Khung thời gian (Trung hạn / Dài hạn), Ngày khuyến nghị và Luận điểm (một dòng giải thích vì sao khuyến nghị).
 Bảng nhóm Chờ mua trình bày theo form riêng (màu và ô Khuyến nghị như các nhóm khác): Hạng | Lệnh | Mã CP + ngày KN | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng |
 Ví dụ | Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | FA | TA | Tổng điểm | Khuyến nghị. Cột Tỷ trọng và Ví dụ lấy từ hai cột mới của file CSV:
-"Tỷ trọng %" (vd 30) và "Dự định mua" (số cổ phiếu, vd 1000); câu Ví dụ tự ghép: "Mua 1000 CP · Đợt 1: 300 CP (30%)".
+"Tỷ trọng %" (vd 30) và "Dự định mua" (số cổ phiếu, vd 1000); câu Ví dụ tự ghép: "Dự định mua 1000 CP. Tỷ trọng 30% = 300 CP".
 
 Quyền
 - Khách chỉ xem bảng và mở đồ thị. Admin mở khóa bằng mật khẩu (biến môi trường hoặc Secrets VIP_ADMIN_PASSWORD) để thêm / sửa / xóa mã.
@@ -504,7 +504,8 @@ CSS = """
 .vpb .pl-date{font-size:11px;font-weight:500;color:var(--muted);margin-top:3px}
 .vpb .tp-tb td.pl.ex{text-align:left;font-size:12px;line-height:1.5;font-weight:500;color:#b7d3c8;white-space:normal}
 .vpb .tp-tb td.pl.rt{text-align:right;padding-right:16px}
-.vpb .lv{line-height:1.45}.vpb .lv+.lv{font-size:12px;font-weight:600}
+.vpb .tp-tb td.pl.key{font-size:15.5px;font-weight:700;letter-spacing:.2px}
+.vpb .lv{font-size:15.5px;font-weight:700;line-height:1.4;letter-spacing:.2px}.vpb .lv+.lv{font-size:12px;font-weight:600;letter-spacing:0}
 .vpb .lv.dn{color:#ff5a4d}.vpb .lv.up{color:#4fd18b}
 .vpb .st{color:var(--muted);font-weight:500;margin-left:2px}
 .vpb .tp-mu{color:var(--muted)}
@@ -629,11 +630,11 @@ def _star(flag: bool) -> str:
 
 
 def example_text(weight, qty) -> str:
-    """Câu minh họa giải ngân: "Mua 1000 CP · Đợt 1: 300 CP (30%)". Thiếu tỷ trọng hoặc số lượng thì để trống."""
+    """Câu minh họa giải ngân: "Dự định mua 1000 CP. Tỷ trọng 30% = 300 CP". Thiếu tỷ trọng hoặc số lượng thì để trống."""
     w, q = _f(weight), _f(qty)
     if not w or not q or w <= 0 or q <= 0:
         return ""
-    return f"Mua {q:.0f} CP · Đợt 1: {q * w / 100:.0f} CP ({w:g}%)"
+    return f"Dự định mua {q:.0f} CP. Tỷ trọng {w:g}% = {q * w / 100:.0f} CP"
 
 
 def _wait_row_html(i: int, r) -> str:
@@ -683,7 +684,7 @@ def _wait_row_html(i: int, r) -> str:
     main = (f'<tr class="{"hasth" if thesis else ""}"><td class="pl">{i}</td>'
             f'<td class="pl cmd"><span class="cmd-t {ctone}">{_e(cmd)}</span></td>'
             f'<td class="pl l"><div class="pl-code">{_e(r["Mã"])}</div>' + (f'<div class="pl-date">{_e(kn)}</div>' if kn else "") + '</td>'
-            f'<td class="pl">{buy}</td><td class="pl">{_px(price)}</td><td class="pl">{gap}</td><td class="pl">{f"{w:g}%" if w else mu}</td>'
+            f'<td class="pl key">{buy}</td><td class="pl">{_px(price)}</td><td class="pl">{gap}</td><td class="pl">{f"{w:g}%" if w else mu}</td>'
             f'<td class="pl ex">{_e(ex) if ex else mu}</td>'
             f'<td class="pl rt">{lvl(r["Cutloss"], r["stop_auto"], "dn")}</td><td class="pl rt">{lvl(t1, r["target_auto"], "up")}</td>'
             f'<td class="pl rt">{lvl(t2_show, r["sell_auto"], "up")}</td>'
