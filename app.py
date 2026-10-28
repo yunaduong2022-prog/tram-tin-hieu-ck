@@ -41,7 +41,7 @@ import market_overview as MO
 import my_watchlist as MW
 import my_portfolio as MP
 import vip_picks as VP
-import bank_ranking as BK
+import xep_hang_nganh as XH
 import sell_card
 import dry_supply as DS
 import stock_map as SM
@@ -1179,7 +1179,7 @@ def _wb_table() -> pd.DataFrame:
 def _meta_files_sig() -> str:
     """Dấu thời gian sửa file các nguồn P/B, ROE, Vốn hóa: đổi file nhập tay là cache tự làm mới (trước đây cache chỉ đổi khi có giá mới)."""
     sig = []
-    for f in ("data/nhap_tay.csv", "data/xep_hang_ngan_hang.csv", "data/fundamentals.csv", "data/stock_metadata.csv", "data/thong_tin_chung.csv", "data/shares_outstanding.csv"):
+    for f in ("data/nhap_tay.csv", "data/xep_hang_nganh.csv", "data/fundamentals.csv", "data/stock_metadata.csv", "data/thong_tin_chung.csv", "data/shares_outstanding.csv"):
         try:
             sig.append(str(int(os.path.getmtime(f))))
         except OSError:
@@ -1197,7 +1197,7 @@ def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
     cap_map = market_cap_map(_px)
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
-    BK.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, xếp hạng, vốn hóa của ngân hàng (data/xep_hang_ngan_hang.csv), chỉ điền ô còn thiếu
+    XH.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, giá trị sổ sách, xếp hạng, vốn hóa theo bảng xếp hạng ngành (data/xep_hang_nganh.csv), chỉ điền ô còn thiếu
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
     return cap_map, fund_map
 
@@ -1576,7 +1576,7 @@ def page_sector_ranking(mode: str = "rank"):
 
     SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt, mode=mode)
     if mode == "rank":
-        BK.render_section(st.session_state.get("sr_sector"))   # bảng xếp hạng cơ bản ngành Ngân hàng (Xếp hạng, ROE, ROA, NIM, LLR, CASA...)
+        XH.render_section(st.session_state.get("sr_sector"))   # bảng xếp hạng cơ bản của ngành đang chọn (Ngân hàng, Hàng công nghiệp...), nếu có số liệu
 
 
 def _wl_card(r, u, ver):
