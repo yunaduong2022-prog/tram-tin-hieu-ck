@@ -75,11 +75,118 @@ def _inline(t: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", esc(t))
 
 
+COMMENT_MAX_H = 380      # chiều cao tối đa (px) của phần nội dung nhận định; dài hơn thì cuộn dọc ngay trong khung
+
+
+def _comment_html(text: str) -> tuple[str, str]:
+    """Đổi nội dung file nhận định thành (tiêu đề, phần thân HTML).
+
+    Hiểu: "# " dòng đầu = tiêu đề; "## [Phần 1: ...]" hoặc "## ..." = tiêu đề phần (bỏ dấu ngoặc vuông);
+    dòng bắt đầu bằng "•", "- ", "* " hoặc "– " (và các ý nối nhau bằng " • " trên cùng một dòng) = gạch đầu dòng;
+    các dòng thường liên tiếp = một đoạn;
+    khối bắt đầu bằng "Vị thế" (đến dòng trống kế tiếp) = khung nổi bật, gồm cả các gạch đầu dòng và câu kết trong khối;
+    từ dòng bắt đầu bằng "Mẹo điều phối" đến tiêu đề / khối "Vị thế" kế tiếp = ghi chú cho người dẫn, thu gọn sẵn (không hiện trên màn hình livestream).
+    """
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    title, out, para = "", [], []
+    BODY = "color:#dce5f0;font-size:13.5px;line-height:1.75"
+
+    def li(it: str) -> str:
+        return ("<div style='color:#dce5f0;font-size:13.5px;line-height:1.7;margin-top:5px;padding-left:16px;text-indent:-12px'>"
+                f"<span style='color:#43d6a1'>•</span>&nbsp;{_inline(it)}</div>")
+
+    def flush(target):
+        if para:
+            target.append(f"<div style='{BODY};margin-top:9px'>{_inline(' '.join(para))}</div>")
+            para.clear()
+
+    def bullets(t: str, target):
+        for it in re.split(r"\s+•\s+", t.strip()):
+            it = it.strip().lstrip("•").strip()
+            if it:
+                target.append(li(it))
+
+    def mixed(t: str, target):
+        """Chuỗi có ý nối bằng " • ": phần trước dấu • đầu tiên là câu dẫn (đoạn thường), phần sau là các gạch đầu dòng."""
+        t = t.strip()
+        if t.startswith("•"):
+            bullets(t, target)
+            return
+        intro, _, rest = t.partition(" • ")
+        if intro.strip():
+            para.append(intro.strip())
+            flush(target)
+        if rest:
+            bullets("• " + rest, target)
+
+    def is_bullet(ln: str) -> bool:
+        return bool(re.match(r"^(•|[-*–]\s)", ln)) or " • " in ln
+
+    i, first, n = 0, True, len(lines)
+    while i < n:
+        ln = lines[i].strip()
+        i += 1
+        if not ln:
+            flush(out)
+            continue
+        if first and re.match(r"^#\s", ln):
+            title, first = ln.lstrip("#").strip(), False
+            continue
+        first = False
+        if ln.casefold().startswith("mẹo điều phối"):          # ghi chú cho người dẫn: thu gọn sẵn
+            flush(out)
+            note = [ln]
+            while i < n and not re.match(r"^#{1,6}\s", lines[i].strip()) and not lines[i].strip().casefold().startswith("vị thế"):
+                note.append(lines[i].strip())
+                i += 1
+            inner = "".join(f"<div style='color:#8fa1b8;font-size:13px;line-height:1.7;margin-top:6px'>{_inline(x)}</div>" for x in note if x)
+            out.append("<details style='margin-top:14px;border:1px dashed #3b4d66;border-radius:8px;padding:6px 11px'>"
+                       "<summary style='cursor:pointer;color:#8fa1b8;font-size:12.5px'>🎙️ Ghi chú cho người dẫn (bấm để mở, khán giả không thấy khi đóng)</summary>"
+                       f"{inner}</details>")
+            continue
+        if ln.casefold().startswith("vị thế"):                 # khung nổi bật: gom cả khối đến dòng trống
+            flush(out)
+            blk = [ln]
+            while i < n and lines[i].strip():
+                blk.append(lines[i].strip())
+                i += 1
+            head, _, rest = _inline(blk[0]).partition(":")
+            inner = [f"<div><b>{head}:</b>{rest}</div>"]
+            for x in blk[1:]:
+                if is_bullet(x):
+                    mixed(re.sub(r"^[-*–]\s+", "• ", x), inner)
+                else:
+                    inner.append(f"<div style='margin-top:8px'>{_inline(x)}</div>")
+            out.append("<div style='margin-top:14px;background:#0b1422;border:1px solid #26364b;border-left:3px solid #43d6a1;border-radius:8px;"
+                       f"padding:10px 13px;color:#f1f5f9;font-size:13.5px;line-height:1.7'>{''.join(inner)}</div>")
+            continue
+        m = re.match(r"^#{1,6}\s*(.*)$", ln)
+        if m:                                                   # tiêu đề phần: "## [Phần 1: X] nội dung..." hoặc "## X"
+            flush(out)
+            rest = m.group(1).strip()
+            mb = re.match(r"^\[([^\]]+)\]\s*(.*)$", rest)
+            if mb:
+                head, rest = mb.group(1).strip(), mb.group(2).strip()
+            else:
+                head, _, tail = rest.partition(" • ")
+                head, rest = head.strip(), ("• " + tail.strip() if tail else "")
+            out.append(f"<div style='color:#43d6a1;font-size:13.5px;font-weight:800;margin-top:14px;letter-spacing:.2px'>{_inline(head)}</div>")
+            if rest:
+                mixed(rest, out)
+            continue
+        if is_bullet(ln):                                       # gạch đầu dòng (kể cả nhiều ý nối bằng " • ")
+            flush(out)
+            mixed(re.sub(r"^[-*–]\s+", "• ", ln), out)
+            continue
+        para.append(ln)
+    flush(out)
+    return title, "".join(out)
+
+
 def commentary_card(code: str) -> str | None:
     """Thẻ nhận định riêng của mã, đọc từ data/nhan_dinh_ma/<MÃ>.md; trả None nếu chưa có file (trang sẽ hiện thẻ vốn hóa & định giá).
 
-    Quy ước file: dòng đầu bắt đầu bằng "# " là tiêu đề; các đoạn cách nhau bằng một dòng trống;
-    đoạn bắt đầu bằng "Vị thế doanh nghiệp:" được làm nổi bật ở cuối thẻ.
+    Khung có chiều cao tối đa COMMENT_MAX_H: nội dung dài hơn thì hiện thanh cuộn dọc bên trong khung (tiêu đề và ghi chú cuối đứng yên).
     """
     path = os.path.join(COMMENT_DIR, f"{str(code).upper()}.md")
     if not os.path.isfile(path):
@@ -89,24 +196,19 @@ def commentary_card(code: str) -> str | None:
             text = f.read()
     except OSError:
         return None
-    blocks = [b.strip() for b in re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip()) if b.strip()]
-    if not blocks:
+    title, body = _comment_html(text)
+    if not (title or body):
         return None
-    body = []
-    if blocks[0].startswith("#"):
-        body.append(f"<div style='font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.5;margin-bottom:2px'>{_inline(blocks[0].lstrip('#').strip())}</div>")
-        blocks = blocks[1:]
-    for b in blocks:
-        paras = _inline(" ".join(x.strip() for x in b.split("\n")))
-        if b.casefold().startswith("vị thế"):
-            head, _, rest = paras.partition(":")
-            body.append("<div style='margin-top:11px;background:#0b1422;border:1px solid #26364b;border-left:3px solid #43d6a1;border-radius:8px;"
-                        f"padding:9px 12px;color:#f1f5f9;font-size:13.5px;line-height:1.7'><b>{head}:</b>{rest}</div>")
-        else:
-            body.append(f"<div style='color:#dce5f0;font-size:13.5px;line-height:1.75;margin-top:9px'>{paras}</div>")
-    body.append(f"<div class='live-muted' style='margin-top:9px'>Nhận định do bạn tự cập nhật trong data/nhan_dinh_ma/{esc(str(code).upper())}.md; "
-                "số liệu trong đoạn là chữ cố định, không tự đổi theo dữ liệu của app; không phải khuyến nghị mua hay bán.</div>")
-    return _card(f"📝 NHẬN ĐỊNH · {esc(code)}", "".join(body))
+    c = esc(str(code).upper())
+    head = (f"<div style='font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.5;margin-bottom:4px'>{_inline(title)}</div>" if title else "")
+    scroll = ("<style>.nd-scroll{scrollbar-width:thin;scrollbar-color:#3b4d66 #0b1422}"
+              ".nd-scroll::-webkit-scrollbar{width:8px}.nd-scroll::-webkit-scrollbar-track{background:#0b1422;border-radius:6px}"
+              ".nd-scroll::-webkit-scrollbar-thumb{background:#3b4d66;border-radius:6px}</style>"
+              f"<div class='nd-scroll' style='max-height:{COMMENT_MAX_H}px;overflow-y:auto;padding:0 10px 4px 0;"
+              f"border-top:1px solid #26364b;border-bottom:1px solid #26364b'>{body}</div>")
+    foot = (f"<div class='live-muted' style='margin-top:9px'>Nhận định do bạn tự cập nhật trong data/nhan_dinh_ma/{c}.md; "
+            "số liệu trong đoạn là chữ cố định, không tự đổi theo dữ liệu của app; không phải khuyến nghị mua hay bán.</div>")
+    return _card(f"📝 NHẬN ĐỊNH · {c}", head + scroll + foot)
 
 
 # ---------------------------------------------------------------- định giá
