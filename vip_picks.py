@@ -19,7 +19,7 @@ Dữ liệu
 Cách chấm điểm (sửa các hằng số / hàm fa_score, ta_score nếu muốn đổi):
 - Tổng điểm = Score sẵn có của app (thang 0-10) × 10; hạng A ≥ 75, B ≥ 60, C ≥ 40, còn lại D.
 - FA (0-100) chấm từ ROE, P/E, P/B (data/fundamentals.csv); chỉ tính các chỉ số có số liệu, cần ít nhất 2 chỉ số.
-- TA (0-100, tối đa 90) chấm từ giá so với MA20, độ dốc MA20, độ xa MA20 và RSI(14) khung Ngày.
+- TA (0-100) chấm từ MA20, MA50, MA200, RSI(14) và khối lượng khung Ngày (chi tiết ở docstring của ta_score).
 - Dòng "Khối ngoại gom / bán ròng" chỉ hiện khi có data/foreign_flow.csv (tổng 5 phiên gần nhất).
 Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.
 """
@@ -133,29 +133,85 @@ def fa_score(pe, roe, pb) -> tuple[int | None, list[str]]:
     return int(round(got / mx * 100)), tags
 
 
-def ta_score(close, ma20, ma20_prev, rsi) -> tuple[int | None, list[str]]:
-    """Điểm kỹ thuật 0-100 (tối đa 90): giá trên MA20 30, MA20 dốc lên 10, giá chưa xa MA20 (0-3%: 15, 3-8%: 10), RSI (50-62: 35,
-    45-50 hoặc 62-70: 25, 40-45 hoặc 70-78: 12, còn lại 4)."""
-    close, ma20, ma20_prev, rsi = _f(close), _f(ma20), _f(ma20_prev), _f(rsi)
-    if close is None or ma20 is None or rsi is None or ma20 <= 0:
+def ta_score(g: pd.DataFrame) -> tuple[int | None, list[str]]:
+    """Điểm kỹ thuật 0-100 chấm trên khung Ngày từ MA20, MA50, MA200, RSI(14) và khối lượng. g = các phiên gần nhất của một mã (cần ≥ 26 phiên
+    để chấm khối lượng), có cột Giá đóng cửa, Khối lượng khớp lệnh, MA20, MA50, MA200, RSI.
+
+    Thang điểm (tối đa 100):
+      Xu hướng MA (60):  MA20 20 (giá trên MA20 12, giá cách MA20 ≤ 8% thì +3, MA20 dốc lên so với 5 phiên trước +5)
+                         MA50 15 (giá trên MA50 10, MA50 dốc lên +5) · MA200 10 (giá trên MA200)
+                         Thứ tự MA 15 (MA20 > MA50 > MA200: 15; MA20 > MA50 nhưng MA50 chưa vượt MA200: 8; MA50 > MA200 nhưng MA20 chưa trên MA50: 5)
+      RSI(14) (20):      50-62: 20 · 45-50 hoặc 62-70: 14 · 40-45 hoặc 70-78: 7 · còn lại 2
+      Khối lượng (20):   thanh khoản 5 phiên / TB 20 phiên trước đó (≥ 1.2: 10, ≥ 0.9: 7, ≥ 0.7: 4, còn lại 1)
+                         + tỷ trọng khối lượng ở các phiên giá tăng trong 10 phiên (≥ 60%: 10, ≥ 50%: 7, ≥ 40%: 4, còn lại 1)
+    Thành phần nào thiếu dữ liệu (ví dụ mã mới lên sàn chưa đủ 200 phiên cho MA200) thì bỏ khỏi cả điểm đạt lẫn điểm tối đa rồi quy về thang 100;
+    cần tối thiểu MA20 và RSI. Trả (None, []) nếu không đủ."""
+    if g is None or len(g) < 5:
         return None, []
+    last = g.iloc[-1]
+    close, ma20, ma50, ma200, rsi = (_f(last.get(c)) for c in ("Giá đóng cửa", "MA20", "MA50", "MA200", "RSI"))
+    if close is None or ma20 is None or ma20 <= 0 or rsi is None:
+        return None, []
+
+    def prev(col: str, k: int = 5) -> float | None:
+        return _f(g[col].iat[-1 - k]) if col in g.columns and len(g) > k else None
+
+    got = mx = 0.0
+    tags: list[str] = []
+
+    # --- MA20 (20)
     gap = (close / ma20 - 1) * 100
-    s, tags = 0, []
+    p = 0
     if close > ma20:
-        s += 30
-        tags.append(f"Trên MA20 ({gap:+.2f}%)")
-        if gap <= 3:
-            s += 15
-        elif gap <= 8:
-            s += 10
-        else:
-            tags.append("Xa MA20, dễ điều chỉnh")
+        p += 12
+        p += 3 if gap <= 8 else 0
+        tags.append(f"Trên MA20 ({gap:+.2f}%)" if gap <= 8 else f"Xa MA20 ({gap:+.1f}%), dễ điều chỉnh")
     else:
         tags.append(f"Dưới MA20 ({gap:+.2f}%)")
-    if ma20_prev is not None and ma20 > ma20_prev:
-        s += 10
-    s += 35 if 50 <= rsi <= 62 else 25 if (45 <= rsi < 50 or 62 < rsi <= 70) else 12 if (40 <= rsi < 45 or 70 < rsi <= 78) else 4
-    return int(s), tags
+    m20p = prev("MA20")
+    p += 5 if (m20p is not None and ma20 > m20p) else 0
+    got, mx = got + p, mx + 20
+
+    # --- MA50 (15) và MA200 (10)
+    if ma50 is not None:
+        m50p = prev("MA50")
+        got += (10 if close > ma50 else 0) + (5 if (m50p is not None and ma50 > m50p) else 0)
+        mx += 15
+    if ma200 is not None:
+        got += 10 if close > ma200 else 0
+        mx += 10
+    if ma50 is not None and ma200 is not None:
+        tags.append("Trên MA50 và MA200" if close > max(ma50, ma200) else "Dưới MA50 và MA200" if close < min(ma50, ma200)
+                    else "Trên MA50, dưới MA200" if close > ma50 else "Trên MA200, dưới MA50")
+        got += 15 if ma20 > ma50 > ma200 else 8 if ma20 > ma50 else 5 if ma50 > ma200 else 0
+        mx += 15
+    elif ma50 is not None:
+        tags.append("Trên MA50" if close > ma50 else "Dưới MA50")
+        got += 8 if ma20 > ma50 else 0
+        mx += 8
+
+    # --- RSI (20)
+    got += 20 if 50 <= rsi <= 62 else 14 if (45 <= rsi < 50 or 62 < rsi <= 70) else 7 if (40 <= rsi < 45 or 70 < rsi <= 78) else 2
+    mx += 20
+
+    # --- Khối lượng (20)
+    vcol = "Khối lượng khớp lệnh"
+    if vcol in g.columns and "Giá đóng cửa" in g.columns and len(g) >= 16:
+        v = pd.to_numeric(g[vcol], errors="coerce")
+        base = v.iloc[:-5].tail(20)
+        if v.tail(5).notna().all() and base.notna().sum() >= 10 and base.mean() > 0:
+            r = float(v.tail(5).mean() / base.mean())
+            c10 = pd.to_numeric(g["Giá đóng cửa"], errors="coerce").tail(11)
+            v10 = v.tail(10).reset_index(drop=True)
+            up = (c10.diff().tail(10).reset_index(drop=True) > 0)
+            share = float(v10[up].sum() / v10.sum()) if v10.sum() > 0 else 0.5
+            got += (10 if r >= 1.2 else 7 if r >= 0.9 else 4 if r >= 0.7 else 1) + (10 if share >= 0.6 else 7 if share >= 0.5 else 4 if share >= 0.4 else 1)
+            mx += 20
+            tags.append(f"KL cạn ({r:.1f}x TB20)" if r < 0.7 else "Lực bán áp đảo" if share < 0.4
+                        else f"Dòng tiền vào (KL {r:.1f}x TB20)" if (r >= 1.0 and share >= 0.55) else f"KL {r:.1f}x TB20")
+    if ma200 is None:
+        tags.append("Chưa đủ dữ liệu MA200")
+    return (int(round(got / mx * 100)), tags) if mx >= 40 else (None, [])
 
 
 def grade_of(pct: float) -> str:
@@ -247,13 +303,12 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
     rows = []
     for _, p in plans.iterrows():
         code = p["Mã"]
-        g = frames_d[frames_d["Mã"] == code].sort_values("Ngày").tail(8)
+        g = frames_d[frames_d["Mã"] == code].sort_values("Ngày").tail(30)
         if g.empty:
             rows.append({"Mã": code, "_nodata": True})
             continue
         close = float(g["Giá đóng cửa"].iat[-1])
         prev = float(g["Giá đóng cửa"].iat[-2]) if len(g) > 1 else np.nan
-        ma20_prev = g["MA20"].iat[-6] if len(g) >= 6 and "MA20" in g.columns else np.nan
         wbrow = wbmap.get(code, {})
         sysv = _system_levels(code, ctx_fn, wbrow)
 
@@ -275,8 +330,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         entry = (buy[0] + buy[1]) / 2 if buy and not buy_auto else None      # chỉ tính lợi nhuận khi Admin đã nhập điểm mua
         fd = fund_map.get(code, {}) or {}
         fa, fa_tags = fa_score(fd.get("P/E"), fd.get("ROE"), fd.get("P/B"))
-        ta, ta_tags = ta_score(close, g["MA20"].iat[-1] if "MA20" in g.columns else np.nan, ma20_prev,
-                               g["RSI"].iat[-1] if "RSI" in g.columns else np.nan)
+        ta, ta_tags = ta_score(g)
         sc = score.get(code)
         total = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
@@ -414,7 +468,7 @@ def _row_html(i: int, r) -> str:
         fa = '<span class="tp-mu">Chưa đủ số liệu</span>'
     if _ok(r["TA"]):
         rsi = f'<div class="tp-mu" style="font-size:11.5px">RSI {r["RSI"]:.1f}</div>' if _ok(r["RSI"]) else ""
-        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:2])
+        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
     else:
         ta = '<span class="tp-mu">Chưa đủ số liệu</span>'
     label, tone, note = r["Khuyến nghị"]
@@ -608,7 +662,7 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
 
     f1, f2 = st.columns([5, 1.6])
     f1.markdown('<div class="vp-foot">🛡️ Danh mục Khuyến nghị độc quyền dành cho khách hàng VIP • Cập nhật giá &amp; chỉ báo tự động</div>'
-                '<div class="vp-disc">Tổng điểm = Score của app × 10 (hạng A ≥ 75, B ≥ 60, C ≥ 40). FA chấm từ ROE, P/E, P/B; TA chấm từ MA20 và RSI. '
+                '<div class="vp-disc">Tổng điểm = Score của app × 10 (hạng A ≥ 75, B ≥ 60, C ≥ 40). FA chấm từ ROE, P/E, P/B; TA chấm từ MA20, MA50, MA200, RSI và khối lượng. '
                 'Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.</div>', unsafe_allow_html=True)
     if on_filter and f2.button("🔽 Mở trong Bộ lọc cổ phiếu", use_container_width=True):
         on_filter()
