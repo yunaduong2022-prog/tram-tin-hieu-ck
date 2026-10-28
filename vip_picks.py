@@ -1,6 +1,12 @@
 """Khuyến nghị khách hàng (VIP): danh mục cổ phiếu do Admin chọn, hiển thị cho khách kèm Điểm mua, Lợi nhuận, Target, Cutloss,
 Điểm bán, điểm FA / TA và khuyến nghị. Khác mục "Cổ phiếu của tôi" (danh mục riêng của người dùng).
 
+Ba nhóm (vòng đời một khuyến nghị): Chờ mua -> Đang nắm giữ -> Đã đóng. Admin chọn "Trạng thái" khi lưu (hoặc dùng nút ▶ Đã mua / ■ Đóng lệnh).
+- Chờ mua: chưa vào lệnh; Điểm mua là vùng canh mua (Admin nhập, hoặc hệ thống tự điền), chưa tính lợi nhuận.
+- Đang nắm giữ: bắt buộc có Điểm mua (giá vào lệnh); tính lợi nhuận, theo dõi cutloss / điểm bán.
+- Đã đóng: có Giá đóng và Ngày đóng; hiện kết quả (% lãi / lỗ) và số ngày kể từ ngày khuyến nghị.
+Mỗi mã có Khung thời gian (Trung hạn / Dài hạn), Ngày khuyến nghị và Luận điểm (một dòng giải thích vì sao khuyến nghị).
+
 Quyền
 - Khách chỉ xem bảng và mở đồ thị. Admin mở khóa bằng mật khẩu (biến môi trường hoặc Secrets VIP_ADMIN_PASSWORD) để thêm / sửa / xóa mã.
   Chưa đặt mật khẩu thì phần Admin luôn khóa (an toàn mặc định).
@@ -27,8 +33,11 @@ from __future__ import annotations
 
 import hmac
 import html as _html
+import io
 import os
 import re
+import unicodedata
+from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
@@ -38,7 +47,10 @@ import action_summary as AS
 
 PATH = "data/khuyen_nghi_khach_hang.csv"
 FOREIGN_PATH = "data/foreign_flow.csv"
-COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán"]
+STATUSES = ("Chờ mua", "Đang nắm giữ", "Đã đóng")
+FRAMES = ("Trung hạn", "Dài hạn")
+COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán", "Trạng thái", "Khung thời gian", "Ngày khuyến nghị", "Luận điểm", "Giá đóng", "Ngày đóng"]
+_ERR = ""                                                    # thông báo lỗi đọc file gần nhất ("" = tốt)
 GRADES = ((75, "A"), (60, "B"), (40, "C"), (0, "D"))        # (điểm tối thiểu, hạng)
 NEAR_BUY = 1.01                                              # giá <= biên trên vùng mua × 1.01 vẫn coi là "trong vùng mua"
 BELOW_BUY = 0.98                                             # giá < biên dưới vùng mua × 0.98 coi là đã lệch khỏi vùng mua
@@ -62,6 +74,35 @@ def parse_price(text) -> float | None:
     return n[0] if n else None
 
 
+def _norm(x) -> str:
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", str(x)).replace("\ufeff", "")).strip().casefold()
+
+
+_COLS_MAP = {_norm(c): c for c in COLS}
+
+
+def _today() -> date:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+    except Exception:  # noqa: BLE001
+        return date.today()
+
+
+def parse_date(text) -> date | None:
+    t = str(text or "").strip()
+    for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(t, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def fmt_date(d: date | None) -> str:
+    return d.strftime("%d/%m/%Y") if d else ""
+
+
 def _clean(d: pd.DataFrame) -> pd.DataFrame:
     d = d.copy()
     for c in COLS:
@@ -70,16 +111,40 @@ def _clean(d: pd.DataFrame) -> pd.DataFrame:
         d[c] = d[c].fillna("").astype(str).str.strip()
     d["Mã"] = d["Mã"].str.upper()
     d = d[d["Mã"].str.fullmatch(r"[A-Z0-9]{2,10}")]
+    d["Trạng thái"] = d["Trạng thái"].where(d["Trạng thái"].isin(STATUSES), "Chờ mua")        # file cũ chưa có cột này -> Chờ mua
+    d["Khung thời gian"] = d["Khung thời gian"].where(d["Khung thời gian"].isin(FRAMES), "Trung hạn")
+    for c in ("Ngày khuyến nghị", "Ngày đóng"):
+        d[c] = d[c].map(lambda x: fmt_date(parse_date(x)) if parse_date(x) else x)
     return d[COLS].drop_duplicates("Mã", keep="last").reset_index(drop=True)
 
 
 def load(path: str = PATH) -> pd.DataFrame:
+    """Đọc danh mục; tự nhận dấu phân cách (, ; Tab), mã hóa và tên cột lệch dấu / hoa thường. Lỗi thì trả bảng rỗng và ghi _ERR."""
+    global _ERR
+    _ERR = ""
     if os.path.exists(path):
         try:
-            return _clean(pd.read_csv(path, dtype=str, encoding="utf-8-sig"))
-        except Exception:  # noqa: BLE001
-            pass
+            raw = open(path, "rb").read()
+            text = next((raw.decode(e) for e in ("utf-8-sig", "utf-16", "cp1258", "cp1252") if _can(raw, e)), raw.decode("utf-8", errors="replace"))
+            first = next((ln for ln in text.splitlines() if ln.strip()), "")
+            sep = max((",", ";", "\t"), key=first.count)
+            d = pd.read_csv(io.StringIO(text), sep=sep, dtype=str, keep_default_na=False)
+            d.columns = [_COLS_MAP.get(_norm(c), str(c).strip()) for c in d.columns]
+            if "Mã" not in d.columns:
+                _ERR = f"thiếu cột Mã; các cột tìm thấy: {', '.join(map(str, d.columns))}"
+            else:
+                return _clean(d)
+        except Exception as e:  # noqa: BLE001
+            _ERR = f"{type(e).__name__}: {e}"
     return _clean(pd.DataFrame(columns=COLS))
+
+
+def _can(raw: bytes, enc: str) -> bool:
+    try:
+        raw.decode(enc)
+        return True
+    except UnicodeError:
+        return False
 
 
 def save(d: pd.DataFrame, path: str = PATH) -> str:
@@ -270,27 +335,33 @@ def _system_levels(code: str, ctx_fn, wbrow: dict) -> dict:
     return {"buy": buy, "stop": stop, "target": t1, "sell": sell}
 
 
-def recommend(price, buy, stop, sell, wbreason: str, buy_auto: bool = False) -> tuple[str, str, str]:
-    """(nhãn, màu, ghi chú). Điểm mua do Admin nhập được coi là giá vào lệnh (giá trên vùng = NẮM GIỮ); điểm mua tự động chỉ là vùng
-    canh mua của hệ thống (giá trên vùng = CHỜ VỀ VÙNG MUA)."""
+def recommend(price, buy, stop, sell, wbreason: str, status: str = "Chờ mua") -> tuple[str, str, str]:
+    """(nhãn, màu, ghi chú) theo trạng thái của khuyến nghị. Đang nắm giữ: Điểm mua là giá vào lệnh (CẮT LỖ / CHỐT LỜI / HẠ TỶ TRỌNG / NẮM GIỮ).
+    Chờ mua: Điểm mua là vùng canh mua (VÙNG MUA / CHỜ VỀ VÙNG MUA / DƯỚI VÙNG MUA / HỦY KỊCH BẢN / CHƯA NÊN MUA)."""
     reason = str(wbreason or "")
+    if status == "Đang nắm giữ":
+        if stop and price <= stop:
+            return "CẮT LỖ", "red", f"Giá thủng cutloss {stop:,.2f}"
+        if sell and price >= sell:
+            return "CHỐT LỜI", "amber", f"Giá đạt điểm bán {sell:,.2f}"
+        if reason.startswith("BÁN"):
+            return "HẠ TỶ TRỌNG", "red", "Hệ thống đang báo bán"
+        if reason.startswith("CHỐT LỜI"):
+            return "CHỐT BỚT", "amber", "Hệ thống đang báo chốt lời"
+        return "NẮM GIỮ", "gold", "Giá còn trên cutloss, chưa tới điểm bán"
     if stop and price <= stop:
-        return "CẮT LỖ", "red", f"Giá thủng cutloss {stop:,.2f}"
+        return "HỦY KỊCH BẢN", "red", f"Giá thủng {stop:,.2f} khi chưa vào lệnh"
     if sell and price >= sell:
-        return "CHỐT LỜI", "amber", f"Giá đạt điểm bán {sell:,.2f}"
+        return "ĐÃ CHẠY QUÁ", "gray", "Giá đã tới điểm bán khi chưa vào lệnh"
     if reason.startswith("BÁN"):
-        return "HẠ TỶ TRỌNG", "red", "Hệ thống đang báo bán"
-    if reason.startswith("CHỐT LỜI"):
-        return "CHỐT BỚT", "amber", "Hệ thống đang báo chốt lời"
+        return "CHƯA NÊN MUA", "red", "Hệ thống đang báo bán"
     if not buy:
-        return "THEO DÕI", "gray", "Chưa có điểm mua"
+        return "THEO DÕI", "gray", "Chưa có vùng mua"
     if price < buy[0] * BELOW_BUY:
-        return "DƯỚI VÙNG MUA", "gray", "Giá đã lệch khỏi vùng mua"
+        return "DƯỚI VÙNG MUA", "gray", "Giá đã lệch xuống dưới vùng mua"
     if price <= buy[1] * NEAR_BUY:
-        return "VÙNG MUA", "green", "Giá trong vùng mua"
-    if buy_auto:
-        return "CHỜ VỀ VÙNG MUA", "gray", "Giá đang cao hơn vùng mua của hệ thống"
-    return "NẮM GIỮ", "gold", "Giá trên vùng mua, đang có lãi"
+        return "VÙNG MUA", "green", "Giá đang trong vùng mua"
+    return "CHỜ VỀ VÙNG MUA", "gray", f"Giá cao hơn vùng mua {(price / buy[1] - 1) * 100:.1f}%"
 
 
 # ------------------------------------------------------------------ BẢNG HIỂN THỊ
@@ -327,14 +398,15 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         sell = sell or target
         if sell and target and sell_auto and sell < target:      # điểm bán tự động không được thấp hơn Target
             sell = target
-        entry = (buy[0] + buy[1]) / 2 if buy and not buy_auto else None      # chỉ tính lợi nhuận khi Admin đã nhập điểm mua
+        status = (p.get("Trạng thái", "Chờ mua") or "Chờ mua")
+        entry = (buy[0] + buy[1]) / 2 if (status == "Đang nắm giữ" and buy and not buy_auto) else None      # chỉ tính lợi nhuận khi đã vào lệnh và Admin nhập điểm mua
         fd = fund_map.get(code, {}) or {}
         fa, fa_tags = fa_score(fd.get("P/E"), fd.get("ROE"), fd.get("P/B"))
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
         total = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
-        rec = recommend(close, buy, stop, sell, wbreason, buy_auto)
+        rec = recommend(close, buy, stop, sell, wbreason, status)
         name, sector = meta_fn(code) if meta_fn else ("", "")
         net5, exch = fgn.get(code, (None, ""))
         rows.append({
@@ -349,6 +421,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             "FA": fa, "FA tags": fa_tags, "TA": ta, "TA tags": ta_tags,
             "RSI": _f(g["RSI"].iat[-1]) if "RSI" in g.columns else None,
             "Khuyến nghị": rec, "Ngoại": net5,
+            "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Luận điểm": p.get("Luận điểm", ""),
         })
     v = pd.DataFrame(rows)
     if "Tổng điểm" in v:
@@ -403,6 +476,11 @@ CSS = """
 .vp-admtag{display:inline-block;padding:5px 12px;border-radius:999px;font-weight:800;font-size:12px;color:var(--accent);border:1px solid var(--accent);background:rgba(245,165,36,.1)}
 .vp-foot{display:flex;align-items:center;gap:10px;margin-top:4px;color:var(--muted);font-size:13px}
 .vp-disc{margin-top:2px;color:var(--muted);font-size:11.5px;opacity:.85}
+.tp-meta{margin-top:5px}
+.tp-chip2{display:inline-block;margin:2px 4px 0 0;padding:1px 8px;border-radius:6px;font-size:11px;background:var(--card2);border:1px solid var(--line2);color:var(--muted)}
+.tp-tb tr.hasth td{border-bottom:none}
+.tp-tb tr.th td{padding:0 12px 14px;text-align:left;color:var(--muted);font-size:12.5px;line-height:1.5}
+.tp-tb tr.th b{color:var(--txt)}
 </style>
 """
 
@@ -432,7 +510,7 @@ def _bar(pct) -> str:
     return f'<div class="tp-bar"><i style="width:{max(0, min(100, float(pct))):.0f}%"></i></div>'
 
 
-def _row_html(i: int, r) -> str:
+def _row_html(i: int, r, mode: str = "hold") -> str:
     nd = r.get("_nodata")
     if isinstance(nd, (bool, np.bool_)) and nd:
         return (f'<tr><td><span class="tp-rank">{i}</span></td><td class="l"><span class="tp-code">{_e(r["Mã"])}</span>'
@@ -451,7 +529,16 @@ def _row_html(i: int, r) -> str:
         buy = f'<span class="tp-pill g">● {bt}</span>{_auto(r["buy_auto"])}'
     else:
         buy = '<span class="tp-mu">—</span>'
-    if pd.notna(r["Lãi %"]):
+    if mode == "wait":
+        profit = '<span class="tp-mu">—</span>'
+        if isinstance(b, tuple):
+            if r["Giá"] > b[1]:
+                profit = f'<span class="tp-pill">{(r["Giá"] / b[1] - 1) * 100:+.1f}%<small>cao hơn vùng</small></span>'
+            elif r["Giá"] < b[0]:
+                profit = f'<span class="tp-pill">{(r["Giá"] / b[0] - 1) * 100:+.1f}%<small>thấp hơn vùng</small></span>'
+            else:
+                profit = '<span class="tp-pill g">0%<small>trong vùng</small></span>'
+    elif pd.notna(r["Lãi %"]):
         pc = "g" if r["Lãi %"] >= 0 else "r"
         profit = f'<span class="tp-pill {pc}">{r["Lãi %"]:+.2f}%<small>{r["Lãi"]:+.2f}</small></span>'
     else:
@@ -476,23 +563,72 @@ def _row_html(i: int, r) -> str:
     foreign = (f'<div class="tp-note">{"Khối ngoại gom ròng" if ng > 0 else "Khối ngoại bán ròng"}</div>'
                if ng is not None and pd.notna(ng) and abs(ng) > 0 else "")
     rec = f'<span class="tp-rec {tone}">{_e(label)}</span><div class="tp-note">{_e(note)}</div>{foreign}'
-    return (f'<tr><td><span class="tp-rank">{i}</span></td>'
-            f'<td class="l"><span class="tp-code">{_e(r["Mã"])}</span>{ex}<div class="tp-name">{_e(r["Tên"])}</div>{sec}</td>'
+    kn = fmt_date(parse_date(r.get("Ngày KN"))) or ""
+    meta = ('<div class="tp-meta">' + (f'<span class="tp-chip2">{_e(r["Khung"])}</span>' if r.get("Khung") else "")
+            + (f'<span class="tp-chip2">KN {_e(kn)}</span>' if kn else "") + "</div>")
+    thesis = str(r.get("Luận điểm") or "").strip()
+    main = (f'<tr class="{"hasth" if thesis else ""}"><td><span class="tp-rank">{i}</span></td>'
+            f'<td class="l"><span class="tp-code">{_e(r["Mã"])}</span>{ex}<div class="tp-name">{_e(r["Tên"])}</div>{sec}{meta}</td>'
             f'<td><span class="tp-px {cls}">{_px(r["Giá"])}</span></td><td>{chg}</td><td style="font-weight:700">{_vol(r["KL"])}</td>'
             f'<td>{tot}</td><td>{buy}</td><td>{profit}</td><td>{lvl(r["Target"], r["target_auto"], "a")}</td>'
             f'<td>{lvl(r["Cutloss"], r["stop_auto"], "r")}</td><td>{sell}</td><td>{fa}</td><td>{ta}</td><td>{rec}</td></tr>')
+    if thesis:
+        main += f'<tr class="th"><td></td><td colspan="13">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
+    return main
 
 
-def table_html(v: pd.DataFrame) -> str:
-    head = ["HẠNG", "MÃ CK", "GIÁ KHỚP", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "ĐIỂM MUA", "LỢI NHUẬN", "TARGET", "CUTLOSS", "ĐIỂM BÁN",
-            "ĐIỂM CƠ BẢN (FA)", "ĐIỂM KỸ THUẬT (TA)", "KHUYẾN NGHỊ"]
+def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
+    """mode="wait": nhóm Chờ mua (cột VÙNG MUA + CÁCH VÙNG MUA); mode="hold": nhóm Đang nắm giữ (cột ĐIỂM MUA + LỢI NHUẬN)."""
+    head = ["HẠNG", "MÃ CK", "GIÁ KHỚP", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "VÙNG MUA" if mode == "wait" else "GIÁ MUA",
+            "CÁCH VÙNG MUA" if mode == "wait" else "LỢI NHUẬN", "TARGET", "CUTLOSS", "ĐIỂM BÁN", "ĐIỂM CƠ BẢN (FA)", "ĐIỂM KỸ THUẬT (TA)", "KHUYẾN NGHỊ"]
     th = "".join(f'<th class="{"l" if h == "MÃ CK" else ""}">{h}</th>' for h in head)
-    body = "".join(_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
+    body = "".join(_row_html(i + 1, r, mode) for i, (_, r) in enumerate(v.iterrows()))
     return f'<div class="tp-wrap"><table class="tp-tb"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
+def closed_html(d: pd.DataFrame, meta_fn) -> str:
+    """Bảng nhóm Đã đóng: giá mua, giá đóng, kết quả (%) và số ngày từ ngày khuyến nghị đến ngày đóng; mới đóng xếp trước."""
+    rows = []
+    for _, p in d.iterrows():
+        e, c = parse_range(p["Điểm mua"]), parse_price(p["Giá đóng"])
+        entry = (e[0] + e[1]) / 2 if e else None
+        res = (c / entry - 1) * 100 if (entry and c) else None
+        d0, d1 = parse_date(p["Ngày khuyến nghị"]), parse_date(p["Ngày đóng"])
+        days = (d1 - d0).days if (d0 and d1) else None
+        name, sector = meta_fn(p["Mã"]) if meta_fn else ("", "")
+        rows.append({"p": p, "res": res, "days": days, "name": name, "sector": sector, "d1": d1 or date.min, "entry": entry, "close": c})
+    rows.sort(key=lambda x: x["d1"], reverse=True)
+    out = []
+    for r in rows:
+        p = r["p"]
+        pill = ('<span class="tp-mu">—</span>' if r["res"] is None
+                else f'<span class="tp-pill {"g" if r["res"] >= 0 else "r"}">{r["res"]:+.2f}%</span>')
+        sec = f'<div><span class="tp-sec">{_e(r["sector"])}</span></div>' if r["sector"] else ""
+        th = str(p["Luận điểm"] or "").strip()
+        out.append(
+            f'<tr class="{"hasth" if th else ""}"><td class="l"><span class="tp-code">{_e(p["Mã"])}</span><div class="tp-name">{_e(r["name"])}</div>{sec}'
+            f'<div class="tp-meta"><span class="tp-chip2">{_e(p["Khung thời gian"])}</span></div></td>'
+            f'<td>{_e(p["Ngày khuyến nghị"]) or "—"}</td><td>{_px(r["entry"]) if r["entry"] else "—"}</td>'
+            f'<td>{_e(p["Ngày đóng"]) or "—"}</td><td>{_px(r["close"]) if r["close"] else "—"}</td><td>{pill}</td>'
+            f'<td>{r["days"] if r["days"] is not None else "—"}</td></tr>'
+            + (f'<tr class="th"><td colspan="7">💡 <b>Luận điểm:</b> {_e(th)}</td></tr>' if th else ""))
+    head = ["MÃ CK", "NGÀY KHUYẾN NGHỊ", "GIÁ MUA", "NGÀY ĐÓNG", "GIÁ ĐÓNG", "KẾT QUẢ", "SỐ NGÀY"]
+    th = "".join(f'<th class="{"l" if h == "MÃ CK" else ""}">{h}</th>' for h in head)
+    return f'<div class="tp-wrap"><table class="tp-tb" style="min-width:760px"><thead><tr>{th}</tr></thead><tbody>{"".join(out)}</tbody></table></div>'
+
+
 # ------------------------------------------------------------------ TRANG
-_FIELDS = {"vp_code": "Mã", "vp_buy": "Điểm mua", "vp_target": "Target", "vp_cut": "Cutloss", "vp_sell": "Điểm bán"}
+_FIELDS = {"vp_code": "Mã", "vp_buy": "Điểm mua", "vp_target": "Target", "vp_cut": "Cutloss", "vp_sell": "Điểm bán",
+           "vp_status": "Trạng thái", "vp_frame": "Khung thời gian", "vp_date": "Ngày khuyến nghị", "vp_note": "Luận điểm",
+           "vp_close": "Giá đóng", "vp_cdate": "Ngày đóng"}
+_DEFAULT = {"vp_status": "Chờ mua", "vp_frame": "Trung hạn"}
+_GROUP_KEY = {"Chờ mua": "wait", "Đang nắm giữ": "hold", "Đã đóng": "closed"}
+_GROUP_ICON = {"Chờ mua": "🎯", "Đang nắm giữ": "📈", "Đã đóng": "✅"}
+_GROUP_HINT = {
+    "Chờ mua": "Cổ phiếu Admin đang theo dõi, chờ giá về vùng mua. Chưa vào lệnh: bạn tự cân nhắc theo vùng mua, cutloss và target.",
+    "Đang nắm giữ": "Các khuyến nghị đã vào lệnh. Lợi nhuận tính từ giá mua khuyến nghị đến giá khớp hiện tại.",
+    "Đã đóng": "Các khuyến nghị đã kết thúc (chốt lời hoặc cắt lỗ). Kết quả tính từ giá mua khuyến nghị đến giá đóng.",
+}
 
 
 def _admin_password() -> str:
@@ -523,36 +659,55 @@ def _lock_cb() -> None:
 
 def _clear_form() -> None:
     for k in _FIELDS:
-        st.session_state[k] = ""
+        st.session_state[k] = _DEFAULT.get(k, "")
 
 
 def _save_cb(available: set) -> None:
     ss = st.session_state
     if not ss.get("vp_admin"):
         return
-    row = {col: str(ss.get(k, "") or "").strip() for k, col in _FIELDS.items()}
+    row = {col: str(ss.get(k, _DEFAULT.get(k, "")) or "").strip() for k, col in _FIELDS.items()}
     row["Mã"] = row["Mã"].upper()
+    row["Luận điểm"] = re.sub(r"\s+", " ", row["Luận điểm"])[:300]
+    err = lambda m: ss.__setitem__("vp_msg", ("err", m))       # noqa: E731
     if not re.fullmatch(r"[A-Z0-9]{2,10}", row["Mã"]):
-        ss["vp_msg"] = ("err", "Nhập mã cổ phiếu hợp lệ vào ô Mã CK.")
-        return
+        return err("Nhập mã cổ phiếu hợp lệ vào ô Mã CK.")
     if row["Mã"] not in available:
-        ss["vp_msg"] = ("err", f"{row['Mã']} chưa có trong dữ liệu của app nên chưa thêm được.")
-        return
-    for col in ("Điểm mua", "Target", "Cutloss", "Điểm bán"):
+        return err(f"{row['Mã']} chưa có trong dữ liệu của app nên chưa thêm được.")
+    for col in ("Điểm mua", "Target", "Cutloss", "Điểm bán", "Giá đóng"):
         if row[col] and not _nums(row[col]):
-            ss["vp_msg"] = ("err", f"Ô {col} cần là số, ví dụ 35.5 hoặc 35.5 - 36.0.")
-            return
+            return err(f"Ô {col} cần là số, ví dụ 35.5 hoặc 35.5 - 36.0.")
     t, c = parse_price(row["Target"]), parse_price(row["Cutloss"])
     if t and c and t <= c:
-        ss["vp_msg"] = ("err", "Target phải cao hơn Cutloss.")
-        return
-    err = save(upsert(load(), row))
-    ss["vp_msg"] = ("ok", f"Đã lưu {row['Mã']}" + (f" (chưa ghi được vào file: {err})" if err else ""))
+        return err("Target phải cao hơn Cutloss.")
+    if row["Trạng thái"] not in STATUSES:
+        row["Trạng thái"] = "Chờ mua"
+    if row["Khung thời gian"] not in FRAMES:
+        row["Khung thời gian"] = "Trung hạn"
+    d0 = parse_date(row["Ngày khuyến nghị"]) if row["Ngày khuyến nghị"] else _today()
+    if d0 is None:
+        return err("Ngày khuyến nghị cần có dạng dd/mm/yyyy, ví dụ 28/10/2026 (để trống = hôm nay).")
+    row["Ngày khuyến nghị"] = fmt_date(d0)
+    if row["Trạng thái"] in ("Đang nắm giữ", "Đã đóng") and not parse_range(row["Điểm mua"]):
+        return err(f"Trạng thái \"{row['Trạng thái']}\" cần có Điểm mua (giá vào lệnh).")
+    if row["Trạng thái"] == "Đã đóng":
+        if not parse_price(row["Giá đóng"]):
+            return err("Trạng thái \"Đã đóng\" cần có Giá đóng.")
+        d1 = parse_date(row["Ngày đóng"]) if row["Ngày đóng"] else _today()
+        if d1 is None:
+            return err("Ngày đóng cần có dạng dd/mm/yyyy (để trống = hôm nay).")
+        if d1 < d0:
+            return err("Ngày đóng không được trước Ngày khuyến nghị.")
+        row["Ngày đóng"] = fmt_date(d1)
+    else:
+        row["Giá đóng"] = row["Ngày đóng"] = ""
+    werr = save(upsert(load(), row))
+    ss["vp_msg"] = ("ok", f"Đã lưu {row['Mã']} ({row['Trạng thái']})" + (f" (chưa ghi được vào file: {werr})" if werr else ""))
     _clear_form()
 
 
 def _add_cb(available: set) -> None:
-    """Thêm nhanh nhiều mã (để trống các mốc: hệ thống tự điền); mã đã có thì giữ nguyên mốc đã nhập."""
+    """Thêm nhanh nhiều mã vào nhóm Chờ mua (các mốc để trống: hệ thống tự điền); mã đã có thì giữ nguyên."""
     ss = st.session_state
     if not ss.get("vp_admin"):
         return
@@ -565,13 +720,12 @@ def _add_cb(available: set) -> None:
     ok = [c for c in dict.fromkeys(codes) if c in available and c not in have]
     dup = [c for c in dict.fromkeys(codes) if c in have]
     bad = [c for c in dict.fromkeys(codes) if c not in available]
+    werr = ""
     if ok:
-        d = _clean(pd.concat([d, pd.DataFrame([{"Mã": c, "Điểm mua": "", "Target": "", "Cutloss": "", "Điểm bán": ""} for c in ok])], ignore_index=True))
-        err = save(d)
-    else:
-        err = ""
-    parts = ([f"Đã thêm: {', '.join(ok)}"] if ok else []) + ([f"Đã có sẵn: {', '.join(dup)}"] if dup else []) \
-        + ([f"Không có trong dữ liệu: {', '.join(bad)}"] if bad else []) + ([f"chưa ghi được vào file: {err}"] if err else [])
+        new = [{"Mã": c, "Trạng thái": "Chờ mua", "Khung thời gian": "Trung hạn", "Ngày khuyến nghị": fmt_date(_today())} for c in ok]
+        werr = save(pd.concat([d, pd.DataFrame(new)], ignore_index=True))
+    parts = ([f"Đã thêm vào Chờ mua: {', '.join(ok)}"] if ok else []) + ([f"Đã có sẵn: {', '.join(dup)}"] if dup else []) \
+        + ([f"Không có trong dữ liệu: {', '.join(bad)}"] if bad else []) + ([f"chưa ghi được vào file: {werr}"] if werr else [])
     ss["vp_msg"] = ("ok" if ok else "err", " · ".join(parts))
     ss["vp_add"] = ""
 
@@ -590,22 +744,49 @@ def _edit_cb(code: str) -> None:
 def _delete_cb(code: str) -> None:
     if not st.session_state.get("vp_admin"):
         return
-    err = remove(code)
-    st.session_state["vp_msg"] = ("ok" if not err else "err", f"Đã xóa {code}" if not err else f"Chưa xóa được {code}: {err}")
+    werr = remove(code)
+    st.session_state["vp_msg"] = ("ok" if not werr else "err", f"Đã xóa {code}" if not werr else f"Chưa xóa được {code}: {werr}")
+
+
+def _bought_cb(code: str) -> None:
+    """Chờ mua -> Đang nắm giữ (cần Điểm mua do Admin nhập: giá vào lệnh)."""
+    ss = st.session_state
+    if not ss.get("vp_admin"):
+        return
+    d = load()
+    hit = d[d["Mã"] == code]
+    if hit.empty:
+        return
+    if not parse_range(hit.iloc[0]["Điểm mua"]):
+        ss["vp_msg"] = ("err", f"{code}: nhập Điểm mua (giá vào lệnh) bằng nút ✏️ Sửa trước khi chuyển sang Đang nắm giữ.")
+        return
+    d.loc[d["Mã"] == code, "Trạng thái"] = "Đang nắm giữ"
+    werr = save(d)
+    ss["vp_msg"] = ("ok" if not werr else "err", f"{code} đã chuyển sang Đang nắm giữ" if not werr else f"Chưa lưu được: {werr}")
+
+
+def _close_prep_cb(code: str) -> None:
+    """Nạp mã vào form với trạng thái Đã đóng để Admin nhập Giá đóng rồi bấm Lưu."""
+    if not st.session_state.get("vp_admin"):
+        return
+    _edit_cb(code)
+    st.session_state["vp_status"] = "Đã đóng"
+    st.session_state["vp_cdate"] = fmt_date(_today())
+    st.session_state["vp_msg"] = ("ok", f"Nhập Giá đóng của {code} ở form phía trên rồi bấm Lưu.")
 
 
 def _hero_html(n: int) -> str:
     return (f'<div class="vp-hero"><div class="vp-ico">🔥</div><div><div class="vp-title">KHUYẾN NGHỊ KHÁCH HÀNG '
-            f'<span class="vp-badge">VIP RECOMMENDATIONS</span><span class="vp-badge n">{n} mã</span></div>'
+            f'<span class="vp-badge">VIP RECOMMENDATIONS</span><span class="vp-badge n">{n} mã đang mở</span></div>'
             f'<div class="vp-sub">Danh mục cổ phiếu chọn lọc bởi Admin • Tự động tính điểm FA, TA và trạng thái khuyến nghị theo dữ liệu cuối phiên</div></div></div>')
 
 
 def _admin_panel(available: set) -> None:
     ss = st.session_state
     for k in _FIELDS:
-        ss.setdefault(k, "")
+        ss.setdefault(k, _DEFAULT.get(k, ""))
     st.markdown('<div class="vp-adm"><span class="vp-admtag">⚡ BẢNG ĐIỀN ĐIỂM MUA - BÁN - TARGET (ADMIN)</span>'
-                '<span>Điền các mức giá bên dưới rồi bấm Lưu, hoặc chọn mã dưới bảng và bấm Sửa. Ô để trống sẽ tự điền theo hệ thống.</span></div>',
+                '<span>Điền các mức giá rồi bấm Lưu, hoặc chọn mã dưới bảng và bấm Sửa. Ô giá để trống sẽ tự điền theo hệ thống.</span></div>',
                 unsafe_allow_html=True)
     c = st.columns([1.1, 1.5, 1.3, 1, 1, 1.3])
     c[0].text_input("Mã CK *", key="vp_code", placeholder="VD: IDC, HPG...")
@@ -614,6 +795,13 @@ def _admin_panel(available: set) -> None:
     c[3].text_input("Target", key="vp_target", placeholder="VD: 42.0")
     c[4].text_input("Cutloss", key="vp_cut", placeholder="VD: 34.0")
     c[5].text_input("Điểm Bán", key="vp_sell", placeholder="VD: ≥ 42.0")
+    c2 = st.columns([1.1, 1.5, 1.3, 1, 1, 1.3])
+    c2[0].selectbox("Trạng thái", STATUSES, key="vp_status")
+    c2[1].selectbox("Khung thời gian", FRAMES, key="vp_frame")
+    c2[2].text_input("Ngày khuyến nghị", key="vp_date", placeholder="dd/mm/yyyy (trống = hôm nay)")
+    c2[3].text_input("Giá đóng", key="vp_close", placeholder="Chỉ khi Đã đóng")
+    c2[4].text_input("Ngày đóng", key="vp_cdate", placeholder="dd/mm/yyyy")
+    st.text_input("Luận điểm", key="vp_note", placeholder="VD: Nền tích lũy pha C, chờ giá vượt MA20 kèm khối lượng (tối đa 300 ký tự)")
     b1, b2, _ = st.columns([1.2, 0.5, 6])
     b1.button("✓ Lưu", type="primary", on_click=_save_cb, args=(available,), use_container_width=True)
     b2.button("↺", on_click=_clear_form, help="Xóa trắng form", use_container_width=True)
@@ -623,6 +811,34 @@ def _admin_panel(available: set) -> None:
     q3.button("🔓 Khóa", on_click=_lock_cb, use_container_width=True, help="Thoát chế độ Admin")
 
 
+def _render_group(status: str, d: pd.DataFrame, res, frames_d, fund_map, wb, meta_fn, ctx_fn, on_chart, admin: bool) -> None:
+    k = _GROUP_KEY[status]
+    st.caption(_GROUP_HINT[status])
+    if d.empty:
+        st.info(f"Chưa có mã nào ở nhóm {status}." + (" Dùng form Admin phía trên để thêm." if admin else ""))
+        return
+    if status == "Đã đóng":
+        d = d.assign(_d=d["Ngày đóng"].map(lambda x: parse_date(x) or date.min)).sort_values("_d", ascending=False, kind="stable")
+        st.markdown(closed_html(d, meta_fn), unsafe_allow_html=True)
+        codes = list(d["Mã"])
+    else:
+        v = build_view(d, res, frames_d, fund_map, wb, meta_fn, ctx_fn)
+        st.markdown(table_html(v, k), unsafe_allow_html=True)
+        codes = list(v["Mã"])
+    n_btn = 1 + (2 if admin else 0) + (1 if admin and status != "Đã đóng" else 0)
+    row = st.columns([1.4] + [1] * n_btn + [4])
+    pick = row[0].selectbox("Mã cần thao tác", codes, key=f"vp_pick_{k}", label_visibility="collapsed")
+    if row[1].button("📈 Đồ thị", key=f"vp_chart_{k}", use_container_width=True):
+        on_chart(pick)                      # on_chart gọi NAV.goto -> st.rerun, nên không dùng on_click
+    if admin:
+        row[2].button("✏️ Sửa", key=f"vp_edit_{k}", on_click=_edit_cb, args=(pick,), use_container_width=True)
+        row[3].button("🗑 Xóa", key=f"vp_del_{k}", on_click=_delete_cb, args=(pick,), use_container_width=True)
+        if status == "Chờ mua":
+            row[4].button("▶ Đã mua", key="vp_bought", on_click=_bought_cb, args=(pick,), use_container_width=True)
+        elif status == "Đang nắm giữ":
+            row[4].button("■ Đóng lệnh", key="vp_closeprep", on_click=_close_prep_cb, args=(pick,), use_container_width=True)
+
+
 def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map: dict, meta_fn, ctx_fn, on_chart, on_filter=None) -> None:
     """res: res_df; frames_d: frames["D"]; wb: bảng Chờ mua; fund_map: {mã: {P/E, ROE, P/B…}}; meta_fn(code)->(tên, ngành);
     ctx_fn(code)->ngữ cảnh "Tóm tắt nhanh" của app; on_chart(code): mở biểu đồ; on_filter(): mở Bộ lọc cổ phiếu."""
@@ -630,7 +846,8 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
     admin = bool(ss.get("vp_admin"))
     available = set(res["Mã"].astype(str).str.upper())
     plans = load()
-    st.markdown(CSS + _hero_html(len(plans)), unsafe_allow_html=True)
+    groups = {s_: plans[plans["Trạng thái"] == s_] for s_ in STATUSES}
+    st.markdown(CSS + _hero_html(len(groups["Chờ mua"]) + len(groups["Đang nắm giữ"])), unsafe_allow_html=True)
 
     if admin:
         _admin_panel(available)
@@ -643,22 +860,17 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
     msg = ss.pop("vp_msg", None)
     if msg:
         (st.success if msg[0] == "ok" else st.error)(msg[1])
+    if _ERR:
+        st.warning(f"Không đọc được {PATH}: {_ERR}. Kiểm tra dòng tiêu đề có cột Mã.")
 
     plans = load()
     if plans.empty:
         st.info("Danh mục khuyến nghị đang trống." + (" Nhập mã ở phần Admin phía trên rồi bấm Lưu." if admin else ""))
     else:
-        v = build_view(plans, res, frames_d, fund_map, wb, meta_fn, ctx_fn)
-        st.markdown(table_html(v), unsafe_allow_html=True)
-        codes = list(v["Mã"])
-        cols = [1.4, 1, 1, 1] if admin else [1.4, 1]
-        row = st.columns(cols + [4])
-        pick = row[0].selectbox("Mã cần thao tác", codes, key="vp_pick", label_visibility="collapsed")
-        if row[1].button("📈 Đồ thị", use_container_width=True):
-            on_chart(pick)                      # on_chart gọi NAV.goto -> st.rerun, nên không dùng on_click
-        if admin:
-            row[2].button("✏️ Sửa", on_click=_edit_cb, args=(pick,), use_container_width=True)
-            row[3].button("🗑 Xóa", on_click=_delete_cb, args=(pick,), use_container_width=True)
+        tabs = st.tabs([f"{_GROUP_ICON[s_]} {s_} ({len(groups[s_])})" for s_ in STATUSES])
+        for tab, s_ in zip(tabs, STATUSES):
+            with tab:
+                _render_group(s_, groups[s_], res, frames_d, fund_map, wb, meta_fn, ctx_fn, on_chart, admin)
 
     f1, f2 = st.columns([5, 1.6])
     f1.markdown('<div class="vp-foot">🛡️ Danh mục Khuyến nghị độc quyền dành cho khách hàng VIP • Cập nhật giá &amp; chỉ báo tự động</div>'
