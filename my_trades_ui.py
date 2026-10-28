@@ -136,18 +136,23 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, asof, lots: pd.DataFrame, save_l
             def _d(col, default=0.0):
                 return float(z[col].iat[0]) if len(z) and col in z.columns and pd.notna(z[col].iat[0]) else default
             a = st.columns(4)
-            lo = a[0].number_input("Vùng mua từ", 0.0, step=0.05, format="%.2f", value=_d("Vùng mua từ"), key=f"mt_lo_{code}_{ver}")
-            hi = a[1].number_input("Vùng mua đến", 0.0, step=0.05, format="%.2f", value=_d("Vùng mua đến"), key=f"mt_hi_{code}_{ver}")
+            lo = a[0].number_input("Vùng mua từ", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_lo_{code}_{ver}", help="Để 0 = dùng vùng mua của máy")
+            hi = a[1].number_input("Vùng mua đến", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_hi_{code}_{ver}", help="Để 0 = dùng vùng mua của máy")
             wgt = a[2].number_input("Tỷ trọng (%)", 0.0, 100.0, 30.0, 5.0, key=f"mt_wg_{code}_{ver}", help="Phần vốn dự định dành cho mã này")
-            sl = a[3].number_input("Cắt lỗ", 0.0, step=0.05, format="%.2f", value=_d("Cắt lỗ"), key=f"mt_sl_{code}_{ver}")
+            sl = a[3].number_input("Cắt lỗ", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_sl_{code}_{ver}", help="Để 0 = dùng cắt lỗ của máy")
             b = st.columns([1, 1, 3])
-            m1 = b[0].number_input("Mục tiêu 1", 0.0, step=0.05, format="%.2f", value=_d("Mục tiêu 1"), key=f"mt_t1_{code}_{ver}")
-            m2 = b[1].number_input("Mục tiêu 2", 0.0, step=0.05, format="%.2f", value=_d("Mục tiêu 2"), key=f"mt_t2_{code}_{ver}")
+            m1 = b[0].number_input("Mục tiêu 1", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_t1_{code}_{ver}", help="Để 0 = dùng mục tiêu 1 của máy")
+            m2 = b[1].number_input("Mục tiêu 2", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_t2_{code}_{ver}", help="Để 0 = dùng mục tiêu 2 của máy")
             note = b[2].text_input("Ghi chú", key=f"mt_wn_{ver}")
-            if len(z):
-                st.caption("Vùng mua, cắt lỗ, mục tiêu được điền sẵn từ bảng Chờ mua của app; sửa nếu bạn muốn khác.")
+            if len(z) and _d("Vùng mua từ") > 0:
+                st.caption(f"Mặc định của máy (mục Chờ mua): vùng mua {_d('Vùng mua từ'):.2f} - {_d('Vùng mua đến'):.2f} · cắt lỗ {_d('Cắt lỗ'):.2f} · "
+                           f"mục tiêu 1 {_d('Mục tiêu 1'):.2f} · mục tiêu 2 {_d('Mục tiêu 2'):.2f}. Ô nào bạn không điền (để 0) thì dùng số này.")
+            else:
+                st.caption("Mã này chưa có vùng mua trong mục Chờ mua của máy: bạn cần tự điền vùng mua.")
             if st.button("➕ Thêm vào chờ mua", key=f"mt_wadd_{ver}"):
-                p2, err = MT.add_plan(plans, code, asof, (lo, hi), wgt or None, sl or None, m1 or None, m2 or None, scores_for(code, res), note)
+                lo_, hi_ = lo or _d("Vùng mua từ"), hi or _d("Vùng mua đến")        # bạn không điền thì lấy số mặc định của máy
+                sl_, m1_, m2_ = sl or _d("Cắt lỗ"), m1 or _d("Mục tiêu 1"), m2 or _d("Mục tiêu 2")
+                p2, err = MT.add_plan(plans, code, asof, (lo_, hi_), wgt or None, sl_ or None, m1_ or None, m2_ or None, scores_for(code, res), note)
                 if err:
                     st.warning(err)
                 else:
@@ -158,14 +163,19 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, asof, lots: pd.DataFrame, save_l
             with st.expander("✅ Khớp lệnh mua / ✖ Hủy kế hoạch"):
                 pick = st.selectbox("Mã", list(wait["Mã"]), key=f"mt_bpick_{ver}")
                 cur = float(wait.loc[wait["Mã"] == pick, "Giá hiện tại"].iat[0]) if pd.notna(wait.loc[wait["Mã"] == pick, "Giá hiện tại"].iat[0]) else 0.0
+                _wz = wb[wb["Mã"].astype(str).str.upper() == pick].head(1)
+                _gv = float(_wz["Giá vào"].iat[0]) if len(_wz) and "Giá vào" in _wz.columns and pd.notna(_wz["Giá vào"].iat[0]) else 0.0
+                sys_px = _gv or cur                                                  # mặc định của máy: Giá vào ở mục Chờ mua, thiếu thì giá hiện tại
                 c = st.columns(4)
                 q = c[0].number_input("Số lượng (cp)", 0, step=100, value=0, key=f"mt_bq_{ver}")
-                px = c[1].number_input("Giá khớp (nghìn đồng)", 0.0, step=0.05, format="%.2f", value=cur, key=f"mt_bp_{pick}_{ver}")
+                px = c[1].number_input("Giá khớp (nghìn đồng)", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_bp_{pick}_{ver}",
+                                       help=f"Để 0 = dùng giá mặc định của máy ({sys_px:.2f})")
                 dt = c[2].date_input("Ngày mua", value=pd.Timestamp(asof).date(), key=f"mt_bd_{ver}")
                 bn = c[3].text_input("Ghi chú", key=f"mt_bn_{ver}")
+                st.caption(f"Giá khớp để 0 sẽ dùng giá mặc định của máy: {sys_px:.2f}." if sys_px else "Máy chưa có giá cho mã này: hãy điền giá khớp.")
                 x = st.columns([1, 1, 3])
                 if x[0].button("✅ Ghi nhận đã mua", key=f"mt_buy_{ver}"):
-                    p2, t2_, l2, err = MT.record_buy(plans, trades, lots, pick, int(q), float(px), pd.Timestamp(dt), scores_for(pick, res),
+                    p2, t2_, l2, err = MT.record_buy(plans, trades, lots, pick, int(q), float(px or sys_px), pd.Timestamp(dt), scores_for(pick, res),
                                                      str(wait.loc[wait["Mã"] == pick, "Lệnh"].iat[0]), bn)
                     if err:
                         st.warning(err)
@@ -198,12 +208,13 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, asof, lots: pd.DataFrame, save_l
                 held = int(row["Khối lượng"])
                 c = st.columns(4)
                 q = c[0].number_input(f"Số lượng bán (đang giữ {held:,})", 0, held, 0, 100, key=f"mt_sq_{pick}_{ver}")
-                px = c[1].number_input("Giá bán (nghìn đồng)", 0.0, step=0.05, format="%.2f",
-                                       value=float(row["Giá hiện tại"]) if pd.notna(row["Giá hiện tại"]) else 0.0, key=f"mt_sp_{pick}_{ver}")
+                cur_px = float(row["Giá hiện tại"]) if pd.notna(row["Giá hiện tại"]) else 0.0
+                px = c[1].number_input("Giá bán (nghìn đồng)", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_sp_{pick}_{ver}",
+                                       help=f"Để 0 = dùng giá hiện tại của máy ({cur_px:.2f})")
                 dt = c[2].date_input("Ngày bán", value=pd.Timestamp(asof).date(), key=f"mt_sd_{ver}")
                 sn = c[3].text_input("Ghi chú", key=f"mt_sn_{ver}", placeholder="Đạt mục tiêu / cắt lỗ...")
                 if st.button("🔴 Ghi nhận đã bán", key=f"mt_sell_{ver}"):
-                    p2, t2_, l2, err = MT.record_sell(plans, trades, lots, pick, int(q), float(px), pd.Timestamp(dt), scores_for(pick, res),
+                    p2, t2_, l2, err = MT.record_sell(plans, trades, lots, pick, int(q), float(px or cur_px), pd.Timestamp(dt), scores_for(pick, res),
                                                       str(row["Tín hiệu hiện tại"]), sn)
                     if err:
                         st.warning(err)
