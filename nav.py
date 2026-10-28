@@ -7,7 +7,7 @@ MENU = {
     "Vĩ mô": [],
     "Thị trường": ["Tổng quan", "Góc nhìn thị trường", "Nhận định VNINDEX", "Nhóm vốn hóa", "Dòng tiền khối ngoại", "Dòng tiền tự doanh", "Thanh khoản & độ rộng",
                    "Nhóm ngành", "Kết quả kinh doanh"],
-    "Ngành": ["Tổng quan ngành", "Cảnh báo luân chuyển dòng tiền", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
+    "Ngành": ["Tổng quan ngành", "Dòng dẫn sóng", "Cảnh báo luân chuyển dòng tiền", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Biểu đồ", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
                  "Thanh khoản", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Mua ngay", "Chờ mua", "Tăng mạnh", "Lọc tất cả CP", "Bộ lọc Realtime", "Giảm mạnh", "Cạn cung", "Đang phục hồi",

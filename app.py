@@ -42,6 +42,8 @@ import my_watchlist as MW
 import my_portfolio as MP
 import vip_picks as VP
 import xep_hang_nganh as XH
+import nhom_nganh_homnay as NNH          # Thị trường > Nhóm ngành: xếp hạng sức mạnh nhóm ngành hôm nay
+import dong_dan_song as DDS              # Ngành > Dòng dẫn sóng
 import sell_card
 import dry_supply as DS
 import stock_map as SM
@@ -3179,6 +3181,11 @@ def _route_inner():
         return CG.render(raw, DATA_KEY, vn30=VN30_LIST, on_open=_cap_open, openable=set(res_df["Mã"]))
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
+    if main == "Thị trường" and sub == "Nhóm ngành":
+        _live = data_mode == MODE_LIVE          # giá trực tiếp: đổi khoá cache theo phút để số liệu nhóm luôn mới
+        return NNH.render(raw, mkt, WL.GROUPS, DATA_KEY + (pd.Timestamp.now().strftime("|%H%M") if _live else ""), live=_live, asof=f"{latest_date:%d/%m/%Y}")
+    if main == "Ngành" and sub == "Dòng dẫn sóng":
+        return DDS.render(raw, mkt, WL.GROUPS, DATA_KEY, name_of=_chart_name, on_open=_cap_open, openable=set(res_df["Mã"]))
     if main == "Ngành" and sub == "Tổng quan ngành":
         import inspect  # sector_dashboard.py bản cũ chỉ nhận (raw): không truyền thêm số liệu để khỏi báo TypeError
         if len(inspect.signature(SD.render).parameters) >= 3:
