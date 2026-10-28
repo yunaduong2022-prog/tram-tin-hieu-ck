@@ -78,6 +78,30 @@ def _inline(t: str) -> str:
 COMMENT_MAX_H = 380      # chiều cao tối đa (px) của phần nội dung nhận định; dài hơn thì cuộn dọc ngay trong khung
 
 
+NOTE_STARTS = ("mẹo điều phối", "ghi chú cho người dẫn")
+
+
+def _note_details(title: str, lines: list[str]) -> str:
+    """Ghi chú cho người dẫn: khối <details> đóng sẵn; gạch đầu dòng ("* ", "- ", "•", "👉 *") hiện thành ý riêng, dòng giải thích ngay sau ý thì thụt vào."""
+    body, after_bullet = [], False
+    muted = "color:#8fa1b8;font-size:13px;line-height:1.7"
+    for ln in lines:
+        if not ln:
+            after_bullet = False
+            continue
+        m = re.match(r"^(👉\s*)?(?:•|[-*–])\s+(.*)$", ln)
+        if m:
+            mark = "👉" if m.group(1) else "•"
+            body.append(f"<div style='{muted};margin-top:8px;padding-left:16px;text-indent:-14px'><span style='color:#43d6a1'>{mark}</span>&nbsp;{_inline(m.group(2))}</div>")
+            after_bullet = True
+        else:
+            body.append(f"<div style='{muted};margin-top:6px;padding-left:{16 if after_bullet else 0}px'>{_inline(ln)}</div>")
+    label = "🎙️ Ghi chú cho người dẫn" + (f" · {_inline(title)}" if title else "")
+    return ("<details style='margin-top:14px;border:1px dashed #3b4d66;border-radius:8px;padding:6px 11px'>"
+            f"<summary style='cursor:pointer;color:#8fa1b8;font-size:12.5px'>{label} <span style='opacity:.7'>(bấm để mở, khán giả không thấy khi đóng)</span></summary>"
+            f"{''.join(body)}</details>")
+
+
 def _comment_html(text: str) -> tuple[str, str]:
     """Đổi nội dung file nhận định thành (tiêu đề, phần thân HTML).
 
@@ -85,7 +109,8 @@ def _comment_html(text: str) -> tuple[str, str]:
     dòng bắt đầu bằng "•", "- ", "* " hoặc "– " (và các ý nối nhau bằng " • " trên cùng một dòng) = gạch đầu dòng;
     các dòng thường liên tiếp = một đoạn;
     khối bắt đầu bằng "Vị thế" (đến dòng trống kế tiếp) = khung nổi bật, gồm cả các gạch đầu dòng và câu kết trong khối;
-    từ dòng bắt đầu bằng "Mẹo điều phối" đến tiêu đề / khối "Vị thế" kế tiếp = ghi chú cho người dẫn, thu gọn sẵn (không hiện trên màn hình livestream).
+    ghi chú cho người dẫn (thu gọn sẵn, không hiện trên màn hình livestream): bắt đầu từ dòng "Ghi chú cho người dẫn: <tiêu đề>" hoặc "Mẹo điều phối ...",
+    kéo dài đến tiêu đề phần "##", khối "Vị thế" hoặc ghi chú kế tiếp; đặt ở đâu trong file thì hiện ở đúng chỗ đó; có thể có nhiều ghi chú.
     """
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     title, out, para = "", [], []
@@ -133,16 +158,21 @@ def _comment_html(text: str) -> tuple[str, str]:
             title, first = ln.lstrip("#").strip(), False
             continue
         first = False
-        if ln.casefold().startswith("mẹo điều phối"):          # ghi chú cho người dẫn: thu gọn sẵn
+        low = ln.casefold()
+        if low.startswith(NOTE_STARTS):                          # ghi chú cho người dẫn: thu gọn sẵn
             flush(out)
-            note = [ln]
-            while i < n and not re.match(r"^#{1,6}\s", lines[i].strip()) and not lines[i].strip().casefold().startswith("vị thế"):
-                note.append(lines[i].strip())
+            if low.startswith("ghi chú cho người dẫn"):
+                note_title = ln.partition(":")[2].strip()
+                note = []
+            else:
+                note_title, note = "", [ln]
+            while i < n:
+                nx = lines[i].strip()
+                if re.match(r"^#{1,6}\s", nx) or nx.casefold().startswith("vị thế") or nx.casefold().startswith(NOTE_STARTS):
+                    break
+                note.append(nx)
                 i += 1
-            inner = "".join(f"<div style='color:#8fa1b8;font-size:13px;line-height:1.7;margin-top:6px'>{_inline(x)}</div>" for x in note if x)
-            out.append("<details style='margin-top:14px;border:1px dashed #3b4d66;border-radius:8px;padding:6px 11px'>"
-                       "<summary style='cursor:pointer;color:#8fa1b8;font-size:12.5px'>🎙️ Ghi chú cho người dẫn (bấm để mở, khán giả không thấy khi đóng)</summary>"
-                       f"{inner}</details>")
+            out.append(_note_details(note_title, note))
             continue
         if ln.casefold().startswith("vị thế"):                 # khung nổi bật: gom cả khối đến dòng trống
             flush(out)
