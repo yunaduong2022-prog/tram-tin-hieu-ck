@@ -7,6 +7,17 @@
 ## [Phần 2: Câu Chuyện Tăng Vốn Lịch Sử]
 Về câu chuyện tăng vốn: TCB được chấp thuận tăng vốn lên 106.593 tỷ – lớn nhất hệ thống ngân hàng! Phương án phát hành cổ phiếu trả cổ tức tỷ lệ 50% sẽ chốt quyền vào ngày 29/10/2026.
 
+Ghi chú cho người dẫn: Vì sao Tăng vốn lại có lợi cho Ngân hàng? (Phá tan định kiến "Nặng mông")
+"AD thấy nhiều anh chị trên khung chat đang comment bảo là: 'GVR hay HDB, TCB chia cổ tức bằng cổ phiếu tận 30% - 50% thế này, lượng cổ phiếu lưu hành phình to ra thì nặng mông lắm, làm sao kéo nổi nữa AD ơi?'
+AD chia sẻ thật với anh chị: Tư duy 'nặng mông' đó chỉ đúng với các ngành sản xuất, bất động sản hay đầu cơ thuần túy. Còn riêng với ngành Ngân hàng, TĂNG VỐN ĐIỀU LỆ LÀ MỘT LỢI THẾ CỰC KỲ KHỦNG vì 3 lý do cốt lõi sau đây:
+* Thứ nhất: Tăng vốn để tăng 'Sức cho vay' (Mở rộng room tín dụng):
+Ngân hàng kinh doanh đặc thù là dùng đòn bẩy – đi vay rồi cho vay lại. Theo quy định của Ngân hàng Nhà nước, một bank muốn cho vay nhiều hơn thì bắt buộc Vốn tự có phải tăng lên để đảm bảo tỷ lệ an toàn vốn (CAR). TCB tăng vốn lên 106.593 tỷ, tức là họ tự mở rộng 'bể chứa vốn' của mình ra. Vốn to hơn đồng nghĩa với việc họ sẽ được NHNN cấp cho room tín dụng khủng hơn, cho vay được nhiều tiền hơn trong mùa cao điểm cuối năm, từ đó mang về lợi nhuận lớn hơn.
+* Thứ hai: Giảm chi phí vốn, tăng biên lãi ròng (NIM):
+Thay vì phải đi huy động tiền gửi từ người dân với lãi suất cao, việc giữ lại lợi nhuận để tăng vốn giúp ngân hàng sở hữu một lượng tiền mặt 'tự có' khổng lồ với chi phí bằng 0. Dùng chính nguồn vốn sòng phẳng này cho vay ra ngoài sẽ giúp biên lãi ròng NIM của TCB và HDB duy trì ở mức rất cao, lợi nhuận sạch đổ về túi cổ đông càng đậm đặc.
+* Thứ ba: Nâng cao năng lực chống chịu rủi ro và thu hút dòng tiền ngoại:
+Khi vốn điều lệ phình to, 'lớp đệm thịt' bảo vệ ngân hàng trước các cú sốc nợ xấu từ thị trường bất động sản hay trái phiếu sẽ dày lên. Các tổ chức định hạng tín nhiệm quốc tế và khối ngoại cực kỳ thích các bank có bộ đệm vốn lớn. Đây chính là lý do vì sao khối ngoại sẵn sàng vào gom ròng hàng chục triệu cổ phiếu TCB hay HDB ngay sát ngày chốt quyền.
+👉 * Chốt lại: Anh chị đừng sợ cổ phiếu loãng hay nặng mông. Đối với bank top đầu như TCB, HDB hay gã khổng lồ đất đai GVR, vốn tăng đến đâu, năng lực làm ra tiền tăng vọt đến đó. Doanh nghiệp chia 30% - 50% cổ phiếu nhưng lợi nhuận năm sau của họ tăng trưởng tương ứng thì giá cổ phiếu sẽ nhanh chóng 'vượt đỉnh' để tìm về giá trị thực thôi. Rung lắc trước chia là cơ hội vàng để anh chị gom hàng giá hời cùng AD nhé!"
+
 ## [Phần 3: Nội Lực Doanh Nghiệp & 5 Chỉ Số Đặc Sản]
 TCB khẳng định vị thế 'ông vua vận hành' và hiệu quả nhờ bộ chỉ số tài chính cực khủng:
 • Hiệu suất ROE vượt trội: Đạt mốc 18%, dẫn đầu nhóm ngân hàng tư nhân quy mô lớn.
