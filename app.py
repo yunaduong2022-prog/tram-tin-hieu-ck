@@ -41,7 +41,7 @@ import market_overview as MO
 import my_watchlist as MW
 import my_portfolio as MP
 import vip_picks as VP
-import bank_ranking as BR
+import bank_ranking as BK
 import sell_card
 import dry_supply as DS
 import stock_map as SM
@@ -1197,7 +1197,7 @@ def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
     cap_map = market_cap_map(_px)
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
-    BR.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, xếp hạng, vốn hóa của ngân hàng (data/xep_hang_ngan_hang.csv), chỉ điền ô còn thiếu
+    BK.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, xếp hạng, vốn hóa của ngân hàng (data/xep_hang_ngan_hang.csv), chỉ điền ô còn thiếu
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
     return cap_map, fund_map
 
@@ -1576,7 +1576,7 @@ def page_sector_ranking(mode: str = "rank"):
 
     SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt, mode=mode)
     if mode == "rank":
-        BR.render_section(st.session_state.get("sr_sector"))   # bảng xếp hạng cơ bản ngành Ngân hàng (Xếp hạng, ROE, ROA, NIM, LLR, CASA...)
+        BK.render_section(st.session_state.get("sr_sector"))   # bảng xếp hạng cơ bản ngành Ngân hàng (Xếp hạng, ROE, ROA, NIM, LLR, CASA...)
 
 
 def _wl_card(r, u, ver):
