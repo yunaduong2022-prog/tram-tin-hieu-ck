@@ -50,7 +50,7 @@ LAYOUT = {
 }
 _LAYOUT_ND = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
               "ROE", "ROA", "DTT", "LNST công ty mẹ"]            # bố cục của các bảng ngành phi ngân hàng
-LAYOUT["Hàng công nghiệp"] = LAYOUT["Bán lẻ"] = LAYOUT["Vật liệu xây dựng"] = _LAYOUT_ND
+LAYOUT["Hàng công nghiệp"] = LAYOUT["Bán lẻ"] = LAYOUT["Vật liệu xây dựng"] = LAYOUT["Điện"] = LAYOUT["Đa ngành"] = LAYOUT["Họ Gelex"] = _LAYOUT_ND
 LAYOUT["Vận tải biển hàng hóa"] = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
                                    "ROE", "ROA", "LNST công ty mẹ", "Tăng trưởng DTT"]
 DEFAULT_LAYOUT = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách", "ROE", "ROA"]

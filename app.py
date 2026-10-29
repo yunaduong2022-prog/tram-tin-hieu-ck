@@ -1242,7 +1242,7 @@ def _cap_rank_note(code: str) -> str:
         return ""
     best = None                                   # (thứ hạng, tỷ trọng hoặc None, tên ngành)
     for sec in MEMBER.get(code, []):
-        if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:     # Họ Vingroup là nhóm tập đoàn, không phải ngành
+        if sec in (WL.VN30, WL.OLD, "Họ Vingroup", "Họ Gelex") or sec not in WL.GROUPS:     # Họ Vingroup, Họ Gelex là nhóm tập đoàn, không phải ngành
             continue
         members = {str(x).upper() for x in WL.GROUPS[sec]} | {code}
         caps = {m: cap_of(m) for m in members}
@@ -1264,7 +1264,7 @@ def _cap_rank_note(code: str) -> str:
 def _roe_rank_note(code: str) -> str:
     """Dưới ô ROE của biểu đồ: "TOP 1 NGÀNH CAO SU." nếu ROE của mã thuộc 5 mã cao nhất ngành.
     Chỉ xếp hạng khi MỌI mã của ngành có trong app đều đã có ROE (thiếu số của vài mã thì thứ hạng không đáng tin, nên không ghi).
-    Ngành phải có ít nhất 3 mã; không tính VN30 / nhóm cũ / Họ Vingroup. Mã thuộc nhiều ngành thì lấy ngành có thứ hạng cao nhất."""
+    Ngành phải có ít nhất 3 mã; không tính VN30 / nhóm cũ / Họ Vingroup / Họ Gelex. Mã thuộc nhiều ngành thì lấy ngành có thứ hạng cao nhất."""
     code = str(code).upper()
     _, fund_map = _wb_meta_maps(WY_KEY)
     def roe_of(c):
@@ -1279,7 +1279,7 @@ def _roe_rank_note(code: str) -> str:
     universe = set(res_df["Mã"].astype(str).str.upper())
     best = None
     for sec in MEMBER.get(code, []):
-        if sec in (WL.VN30, WL.OLD, "Họ Vingroup") or sec not in WL.GROUPS:
+        if sec in (WL.VN30, WL.OLD, "Họ Vingroup", "Họ Gelex") or sec not in WL.GROUPS:
             continue
         members = ({str(x).upper() for x in WL.GROUPS[sec]} & universe) | {code}
         vals = {m: roe_of(m) for m in members}

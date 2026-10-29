@@ -23,7 +23,7 @@ KINDS = ["Động lực", "Đầu vào", "Đầu ra", "Chỉ số theo dõi", "R
 KIND_TITLE = {"Động lực": "Động lực tăng trưởng", "Đầu vào": "Yếu tố đầu vào", "Đầu ra": "Yếu tố đầu ra",
               "Chỉ số theo dõi": "Chỉ số theo dõi", "Rủi ro": "Rủi ro cần để ý"}
 COMMENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "nhan_dinh_ma")
-NOT_SECTORS = {"VN30", "Danh mục cũ của bạn", "Họ Vingroup"}      # nhóm danh mục / tập đoàn, không phải ngành
+NOT_SECTORS = {"VN30", "Danh mục cũ của bạn", "Họ Vingroup", "Họ Gelex"}      # nhóm danh mục / tập đoàn, không phải ngành
 _cache: dict = {"sig": None, "df": None}
 
 

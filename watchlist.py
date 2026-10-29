@@ -20,7 +20,7 @@ GROUPS: dict[str, list[str]] = {
     "Vận tải": ["GSP", "SAS", "VJC", "HVN", "SCS"],
     "Cao su": ["GVR", "DRI", "PHR", "DPR", "TRC", "BRC", "HRC", "DRC", "CSM", "SRC"],
     "Phân bón": ["DPM", "DCM", "BFC", "LAS", "SFG", "VAF", "CSV", "DDV"],
-    "Bán lẻ": ["MWG", "FRT", "PNJ", "DGW", "PET"],
+    "Bán lẻ": ["MWG", "FRT", "PNJ", "DGW", "PET", "MSN"],
     "Ngân hàng": ["VCB", "BID", "CTG", "TCB", "MBB", "VPB", "ACB", "HDB", "STB", "SHB", "TPB", "VIB", "LPB", "MSB", "OCB",
                   "SSB", "EIB", "KLB", "NAB", "VAB", "NVB", "ABB", "BVB", "EVF",
                   "BAB", "VBB", "SGB", "PGB", "PCB", "TIN"],
@@ -33,8 +33,7 @@ GROUPS: dict[str, list[str]] = {
     "Khai khoáng": ["MSR", "KSV", "BMC", "DHM", "KSB", "NNC", "BKC"],
     "Thép": ["HPG", "HSG", "NKG", "SMC", "TLH", "POM", "VGS", "TVN", "HMC"],
     "Thủy sản": ["VHC", "ANV", "FMC", "IDI", "MPC", "CMX", "ACL", "ABT"],
-    "Dược phẩm": ["DCL", "DHG", "IMP", "TRA", "DBD", "DHT", "DVN", "TTD", "DTP", "DP3",
-                 "DMC", "OPC", "TNH", "DHD", "PMC", "AGP", "VDP"],
+    "Dược phẩm": ["DCL", "DHG", "IMP", "TRA", "DBD", "DHT", "DVN", "TTD", "DTP", "DP3"],
     "Nông nghiệp & thực phẩm": ["MCH", "MSN", "VNM", "CLX"],
     "Thịt & chăn nuôi": ["BAF"],
     "Đường": ["SBT", "QNS"],
@@ -46,10 +45,11 @@ GROUPS: dict[str, list[str]] = {
     "Vật liệu xây dựng": ["HT1", "VGC", "NTP", "DHA", "VLB"],
     "Hàng công nghiệp": ["DHC", "HHP", "VEA", "MZG"],
     "Hàng tiêu dùng": ["TLG"],
-    "Điện": ["NT2", "GEE", "POW"],
+    "Điện": ["NT2", "GEE", "POW", "REE"],
     "Nhựa": ["NTP"],
     "Hạ tầng giao thông": ["CII"],
-    "Đa ngành": ["VGC", "SAM"],
+    "Đa ngành": ["VGC", "SAM", "THD"],
+    "Họ Gelex": ["GEX", "GEL", "VIX", "VSC", "EIB"],
 }
 
 # Danh mục cũ của người dùng (giữ lại để chọn khi cần)
