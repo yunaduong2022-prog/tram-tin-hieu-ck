@@ -1135,6 +1135,16 @@ def _render_group(status: str, d: pd.DataFrame, res, frames_d, fund_map, wb, met
     if d.empty:
         st.info(f"Chưa có mã nào ở nhóm {status}." + (" Dùng form Admin phía trên để thêm." if admin else ""))
         return
+    if status == "Đang nắm giữ":
+        # Chia theo Khung thời gian (mỗi mã chỉ thuộc một khung): Tất cả / Trung hạn / Dài hạn
+        cnt = {"all": len(d), **{f_: int((d["Khung thời gian"] == f_).sum()) for f_ in ("Trung hạn", "Dài hạn")}}
+        pick_frame = st.radio("Khung nắm giữ", ["all", "Trung hạn", "Dài hạn"], horizontal=True, key="vp_hold_frame",
+                              format_func=lambda x: f"{'Tất cả' if x == 'all' else x} ({cnt[x]})", label_visibility="collapsed")
+        if pick_frame != "all":
+            d = d[d["Khung thời gian"] == pick_frame]
+            if d.empty:
+                st.info(f"Chưa có mã nào nắm giữ {pick_frame.lower()}.")
+                return
     if status == "Đã đóng":
         d = d.assign(_d=d["Ngày đóng"].map(lambda x: parse_date(x) or date.min)).sort_values("_d", ascending=False, kind="stable")
         st.markdown(closed_html(d, meta_fn, frames_d), unsafe_allow_html=True)
