@@ -218,6 +218,17 @@ Lớp **Dual Ichimoku** (bật mặc định trong "Lớp hiển thị", code �
 - Tự động: workflow `.github/workflows/supertrend_alert.yml` chạy khi bạn đẩy `data/eod_prices.csv` mới lên `main`, hoặc khi workflow dữ liệu cuối phiên chạy xong, hoặc bấm tay ở tab Actions (có tùy chọn chạy thử).
 
 
+## Tín hiệu danh mục Khuyến nghị khách hàng lên Telegram (mới)
+`telegram_vip_alert.py` gửi **tín hiệu của từng cổ phiếu trong trang Khuyến nghị khách hàng** (nhóm *Chờ mua* và *Đang nắm giữ*, nhóm *Đã đóng* bỏ qua) sau mỗi phiên. Số liệu lấy đúng từ `vip_picks.build_view` / `vip_picks.recommend`, nên nhãn trên Telegram khớp cột **Khuyến nghị** trên app (Điểm mua, Cutloss, Target, Điểm bán Admin nhập; ô trống thì tự điền theo hệ thống).
+- Tín hiệu: *Đang nắm giữ* → CẮT LỖ · HẠ TỶ TRỌNG · CHỐT LỜI · CHỐT BỚT · NẮM GIỮ; *Chờ mua* → VÙNG MUA · CHỜ VỀ VÙNG MUA · DƯỚI VÙNG MUA · HỦY KỊCH BẢN · ĐÃ CHẠY QUÁ · CHƯA NÊN MUA · THEO DÕI.
+- Tin nhắn gom theo mức độ chú ý: 🔴 Cần xử lý, 🟡 Chốt lời, 🟢 Vào vùng mua (thẻ đầy đủ: giá, lãi/lỗ, vùng mua, cắt lỗ, mục tiêu, điểm tổng / FA / TA, luận điểm); 📦 Đang nắm giữ và ⏳ Chờ mua (một dòng mỗi mã).
+- Mã đổi tín hiệu so với lần gửi trước đánh dấu 🔄 (kèm tín hiệu cũ), mã mới thêm đánh dấu 🆕, mã rời danh mục được liệt kê ở cuối tin.
+- Không gửi lặp: tín hiệu đã gửi được nhớ trong `data/vip_alert_state.json`. Mặc định chỉ gửi khi có phiên dữ liệu mới hoặc có thay đổi; `--force` để gửi lại, `--changes-only` chỉ gửi các mã đổi tín hiệu.
+- Gửi tới nhóm / kênh khách hàng bằng `VIP_TELEGRAM_BOT_TOKEN` + `VIP_TELEGRAM_CHAT_ID`; không đặt thì dùng `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` của các cảnh báo khác.
+- Danh mục đọc qua `vip_picks.load()`: nếu đã cấu hình đồng bộ GitHub cho app (`VIP_GITHUB_TOKEN` + `VIP_DATA_REPO` hoặc `VIP_GIST_ID`) thì cũng đặt các Secrets đó cho workflow để đọc đúng bản Admin vừa lưu; chưa cấu hình thì đọc `data/khuyen_nghi_khach_hang.csv` trong kho.
+- Chạy thử: `python telegram_vip_alert.py --dry-run` (chỉ in ra, không ghi trạng thái). Tự động: workflow `.github/workflows/vip_alert.yml` chạy khi bạn đẩy `data/eod_prices.csv` mới lên `main`, hoặc khi workflow dữ liệu cuối phiên chạy xong, hoặc bấm tay ở tab Actions.
+
+
 ## Livestream · thông tin theo mã đang phát
 
 Khung bên phải trang Livestream đổi theo mã đang chọn: thẻ **Vốn hóa & định giá** (so với trung vị ngành và trung bình 3 năm), thẻ **Động lực tăng trưởng & yếu tố theo ngành** và thẻ **Cổ phiếu mạnh cùng ngành**.
