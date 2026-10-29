@@ -1,0 +1,89 @@
+name: Tín hiệu danh mục Khuyến nghị khách hàng lên Telegram
+
+on:
+  # Chạy ngay khi bạn đẩy dữ liệu cuối phiên mới lên GitHub (ví dụ từ update_eod.bat)
+  push:
+    branches: [main]
+    paths: ["data/eod_prices.csv"]
+  # Hoặc khi workflow cập nhật dữ liệu cuối phiên chạy xong (bot đẩy bằng GITHUB_TOKEN không kích hoạt được trigger push)
+  workflow_run:
+    workflows: ["Cập nhật dữ liệu cuối phiên"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Chỉ in ra log, không gửi Telegram"
+        type: boolean
+        default: false
+      force:
+        description: "Gửi lại toàn bộ dù phiên này đã gửi và không có thay đổi"
+        type: boolean
+        default: false
+      changes_only:
+        description: "Chỉ gửi các mã đổi tín hiệu / mới thêm"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vip-alert
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Không cần cài streamlit: telegram_vip_alert.py tự dùng bản giả tối thiểu khi máy chưa có
+      - name: Cài thư viện
+        run: pip install pandas numpy
+
+      - name: Gửi tín hiệu danh mục khuyến nghị khách hàng
+        env:
+          # Bot và nhóm / kênh KHÁCH HÀNG. Không đặt VIP_* thì dùng chung TELEGRAM_* của các cảnh báo khác.
+          VIP_TELEGRAM_BOT_TOKEN: ${{ secrets.VIP_TELEGRAM_BOT_TOKEN }}
+          VIP_TELEGRAM_CHAT_ID: ${{ secrets.VIP_TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Đọc danh mục Admin vừa lưu trên app (giống Secrets của app). Bỏ trống thì đọc data/khuyen_nghi_khach_hang.csv trong kho này.
+          VIP_GITHUB_TOKEN: ${{ secrets.VIP_GITHUB_TOKEN }}
+          VIP_DATA_REPO: ${{ secrets.VIP_DATA_REPO }}
+          VIP_GIST_ID: ${{ secrets.VIP_GIST_ID }}
+          VIP_DATA_PATH: ${{ secrets.VIP_DATA_PATH }}
+          VIP_DATA_BRANCH: ${{ secrets.VIP_DATA_BRANCH }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          if [ "${{ inputs.changes_only }}" = "true" ]; then ARGS="$ARGS --changes-only"; fi
+          python telegram_vip_alert.py $ARGS
+
+      - name: Lưu trạng thái đã gửi (tránh báo lặp)
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          git config user.name "alert-bot"
+          git config user.email "alert-bot@users.noreply.github.com"
+          [ -f data/vip_alert_state.json ] && git add data/vip_alert_state.json
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi."
+            exit 0
+          fi
+          git commit -m "Trạng thái tín hiệu khuyến nghị khách hàng $(TZ=Asia/Ho_Chi_Minh date +%d/%m/%Y)"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase --autostash && git push; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 10))
+          done
+          exit 1
