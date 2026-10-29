@@ -12,6 +12,16 @@ Bảng nhóm Chờ mua trình bày theo form riêng (màu và ô Khuyến nghị
 Ví dụ | Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | FA | TA | Tổng điểm | Khuyến nghị. Cột Tỷ trọng và Ví dụ lấy từ hai cột mới của file CSV:
 "Tỷ trọng %" (vd 30) và "Dự định mua" (số cổ phiếu, vd 1000); câu Ví dụ tự ghép: "Dự định mua 1000 CP. Tỷ trọng 30% = 300 CP".
 
+Lưu bền (Streamlit Cloud xóa file ghi lúc chạy mỗi khi app khởi động lại): danh mục được đồng bộ lên GitHub sau mỗi lần Lưu / Xóa / Đóng lệnh
+và được đọc về mỗi khi app khởi động. Bật bằng Secrets (hoặc biến môi trường):
+    VIP_GITHUB_TOKEN = "github_pat_..."          # token chỉ có quyền Contents: Read and write trên đúng kho dữ liệu
+    VIP_DATA_REPO    = "ten-github/kho-du-lieu"   # kho RIÊNG, không phải kho đang chạy app (ghi vào kho chạy app sẽ làm app khởi động lại mỗi lần Lưu)
+    VIP_DATA_PATH    = "khuyen_nghi_khach_hang.csv"   # tùy chọn
+    VIP_DATA_BRANCH  = "main"                     # tùy chọn
+Hoặc dùng Gist riêng tư (token cổ điển có quyền gist): VIP_GITHUB_TOKEN + VIP_GIST_ID (gist cần có sẵn một file tên VIP_DATA_PATH, nội dung là dòng tiêu đề).
+Chưa cấu hình thì chỉ lưu file tại chỗ (mất khi app khởi động lại); Admin luôn có nút Sao lưu CSV / Khôi phục từ CSV.
+Nếu GitHub lỗi, thay đổi mới được giữ tạm trong bộ nhớ app, báo cho Admin và tự thử đẩy lại ở lần tải trang kế tiếp.
+
 Quyền
 - Khách chỉ xem bảng và mở đồ thị. Admin mở khóa bằng mật khẩu (biến môi trường hoặc Secrets VIP_ADMIN_PASSWORD) để thêm / sửa / xóa mã.
   Chưa đặt mật khẩu thì phần Admin luôn khóa (an toàn mặc định).
@@ -36,12 +46,18 @@ Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.
 """
 from __future__ import annotations
 
+import base64
 import hmac
 import html as _html
 import io
+import json
 import os
 import re
+import time
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import date, datetime
 
 import numpy as np
@@ -123,43 +139,221 @@ def _clean(d: pd.DataFrame) -> pd.DataFrame:
     return d[COLS].drop_duplicates("Mã", keep="last").reset_index(drop=True)
 
 
+# --- đồng bộ GitHub (kho riêng hoặc Gist) -------------------------------------------------------------
+_TTL = 60                                     # giây: thời gian giữ bản đọc từ GitHub trong bộ nhớ (tránh gọi API mỗi lần bấm)
+_MEM = {"state": "unknown", "text": None, "sha": None, "ts": 0.0, "err": ""}      # state: unknown | ok | missing | error
+_PENDING = {"text": None, "err": ""}          # thay đổi chưa đẩy được lên GitHub
+
+
+class _GhError(Exception):
+    def __init__(self, code: int, msg: str):
+        super().__init__(msg)
+        self.code, self.msg = code, msg
+
+
+def _secret(name: str, default: str = "") -> str:
+    v = os.environ.get(name, "")
+    if not v:
+        try:
+            v = str(st.secrets.get(name, "") or "")
+        except Exception:  # noqa: BLE001  (chưa có file secrets)
+            v = ""
+    return v.strip() or default
+
+
+def _remote_cfg() -> dict | None:
+    token = _secret("VIP_GITHUB_TOKEN") or _secret("GITHUB_TOKEN")
+    repo, gist = _secret("VIP_DATA_REPO"), _secret("VIP_GIST_ID")
+    if not token or not (repo or gist):
+        return None
+    return {"token": token, "repo": repo, "gist": gist, "kind": "gist" if gist and not repo else "repo",
+            "path": _secret("VIP_DATA_PATH", "khuyen_nghi_khach_hang.csv"), "branch": _secret("VIP_DATA_BRANCH", "main"),
+            "api": _secret("VIP_GITHUB_API", "https://api.github.com").rstrip("/")}
+
+
+def _http(cfg: dict, method: str, url: str, body: dict | None = None):
+    req = urllib.request.Request(url, method=method, data=json.dumps(body).encode("utf-8") if body is not None else None)
+    req.add_header("Authorization", f"Bearer {cfg['token']}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    req.add_header("User-Agent", "min-inv-vip-picks")
+    if body is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            m = json.loads(e.read().decode("utf-8")).get("message", "")
+        except Exception:  # noqa: BLE001
+            m = ""
+        hint = {401: "token không hợp lệ hoặc đã hết hạn", 403: "token thiếu quyền (cần Contents: Read and write) hoặc bị giới hạn lượt gọi",
+                404: "không tìm thấy kho / file / gist (kiểm tra tên và quyền của token)"}.get(e.code, m or "lỗi từ GitHub")
+        raise _GhError(e.code, f"HTTP {e.code}: {hint}") from None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise _GhError(0, f"không kết nối được GitHub ({type(e).__name__})") from None
+
+
+def _gh_get(cfg: dict) -> tuple[str | None, str | None]:
+    """(nội dung, sha); (None, None) nếu file chưa có trên GitHub."""
+    if cfg["kind"] == "gist":
+        g = _http(cfg, "GET", f"{cfg['api']}/gists/{urllib.parse.quote(cfg['gist'])}")
+        f = (g.get("files") or {}).get(cfg["path"])
+        if not f:
+            return None, None
+        if f.get("truncated") and f.get("raw_url"):
+            req = urllib.request.Request(f["raw_url"], headers={"User-Agent": "min-inv-vip-picks"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.read().decode("utf-8"), None
+        return f.get("content") or "", None
+    url = f"{cfg['api']}/repos/{cfg['repo']}/contents/{urllib.parse.quote(cfg['path'])}?ref={urllib.parse.quote(cfg['branch'])}"
+    try:
+        j = _http(cfg, "GET", url)
+    except _GhError as e:
+        if e.code == 404:
+            return None, None
+        raise
+    return base64.b64decode(j.get("content", "")).decode("utf-8-sig"), j.get("sha")
+
+
+def _gh_put(cfg: dict, text: str, sha: str | None) -> str | None:
+    """Ghi file lên GitHub, trả sha mới (kho) hoặc None (gist)."""
+    if cfg["kind"] == "gist":
+        _http(cfg, "PATCH", f"{cfg['api']}/gists/{urllib.parse.quote(cfg['gist'])}", {"files": {cfg["path"]: {"content": text}}})
+        return None
+    body = {"message": f"Cập nhật danh mục khuyến nghị {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            "content": base64.b64encode(text.encode("utf-8")).decode("ascii"), "branch": cfg["branch"]}
+    if sha:
+        body["sha"] = sha
+    j = _http(cfg, "PUT", f"{cfg['api']}/repos/{cfg['repo']}/contents/{urllib.parse.quote(cfg['path'])}", body)
+    return (j.get("content") or {}).get("sha")
+
+
+def _refresh(cfg: dict, force: bool = False) -> None:
+    age = time.time() - _MEM["ts"]
+    if not force and _MEM["state"] != "unknown" and age < (_TTL if _MEM["state"] != "error" else 15):
+        return
+    try:
+        text, sha = _gh_get(cfg)
+        _MEM.update(state="ok" if text is not None else "missing", text=text, sha=sha, err="", ts=time.time())
+    except Exception as e:  # noqa: BLE001
+        _MEM.update(state="error", err=getattr(e, "msg", str(e)), ts=time.time())
+
+
+def _try_push(cfg: dict, text: str) -> str:
+    """Đẩy `text` lên GitHub; trả "" nếu xong, ngược lại là thông báo lỗi (thay đổi vẫn nằm ở _PENDING). Gặp xung đột thì ghi đè theo bản mới nhất."""
+    _refresh(cfg, force=_MEM["state"] in ("unknown", "error"))
+    if _MEM["state"] == "error":
+        _PENDING["err"] = _MEM["err"]
+        return _PENDING["err"]
+    for attempt in (0, 1):
+        try:
+            sha = _gh_put(cfg, text, _MEM["sha"] if _MEM["state"] == "ok" else None)
+            _MEM.update(state="ok", text=text, sha=sha, err="", ts=time.time())
+            _PENDING.update(text=None, err="")
+            return ""
+        except _GhError as e:
+            if e.code in (409, 422) and attempt == 0 and cfg["kind"] == "repo":
+                _refresh(cfg, force=True)                  # sha cũ: lấy sha mới rồi thử lại một lần
+                continue
+            _PENDING["err"] = e.msg
+            return e.msg
+        except Exception as e:  # noqa: BLE001
+            _PENDING["err"] = f"{type(e).__name__}: {e}"
+            return _PENDING["err"]
+    return _PENDING["err"]
+
+
+def sync_status() -> tuple[bool, bool, str]:
+    """(đã bật đồng bộ, đang đồng bộ tốt, mô tả) để Admin xem."""
+    cfg = _remote_cfg()
+    if not cfg:
+        return False, False, ""
+    where = f"Gist {cfg['gist']}" if cfg["kind"] == "gist" else f"{cfg['repo']}/{cfg['path']}"
+    if _PENDING["text"] is not None:
+        return True, False, f"Thay đổi mới chưa lên được GitHub ({_PENDING['err'] or 'đang thử lại'}). Tạm giữ trong bộ nhớ app, có thể mất nếu app khởi động lại."
+    if _MEM["state"] == "error":
+        return True, False, f"Không đọc được GitHub ({_MEM['err']}); đang dùng bản lưu tạm trên máy chủ."
+    return True, True, where
+
+
+def _decode(raw: bytes) -> str:
+    for e in ("utf-8-sig", "utf-16", "cp1258", "cp1252"):
+        try:
+            return raw.decode(e)
+        except UnicodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _parse_text(text: str) -> pd.DataFrame | None:
+    """Đọc nội dung CSV (tự nhận dấu phân cách , ; Tab và tên cột lệch dấu / hoa thường). None + ghi _ERR nếu không đọc được."""
+    global _ERR
+    try:
+        first = next((ln for ln in text.splitlines() if ln.strip()), "")
+        sep = max((",", ";", "\t"), key=first.count)
+        d = pd.read_csv(io.StringIO(text), sep=sep, dtype=str, keep_default_na=False)
+        d.columns = [_COLS_MAP.get(_norm(c), str(c).strip()) for c in d.columns]
+        if "Mã" not in d.columns:
+            _ERR = f"thiếu cột Mã; các cột tìm thấy: {', '.join(map(str, d.columns))}"
+            return None
+        return _clean(d)
+    except pd.errors.EmptyDataError:
+        return _clean(pd.DataFrame(columns=COLS))
+    except Exception as e:  # noqa: BLE001
+        _ERR = f"{type(e).__name__}: {e}"
+        return None
+
+
 def load(path: str = PATH) -> pd.DataFrame:
-    """Đọc danh mục; tự nhận dấu phân cách (, ; Tab), mã hóa và tên cột lệch dấu / hoa thường. Lỗi thì trả bảng rỗng và ghi _ERR."""
+    """Đọc danh mục: ưu tiên bản trên GitHub (nếu đã cấu hình), không được thì file tại chỗ. Lỗi thì trả bảng rỗng và ghi _ERR."""
     global _ERR
     _ERR = ""
+    cfg = _remote_cfg()
+    if cfg:
+        if _PENDING["text"] is not None:
+            _try_push(cfg, _PENDING["text"])                 # thử đẩy lại thay đổi đang chờ
+        if _PENDING["text"] is not None:
+            d = _parse_text(_PENDING["text"])                # vẫn chờ: hiển thị bản mới nhất của Admin
+            if d is not None:
+                return d
+        else:
+            _refresh(cfg)
+            if _MEM["state"] == "ok":
+                d = _parse_text(_MEM["text"])
+                if d is not None:
+                    try:
+                        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+                        d.to_csv(path, index=False, encoding="utf-8-sig")      # bản lưu tạm tại chỗ phòng GitHub gián đoạn
+                    except Exception:  # noqa: BLE001
+                        pass
+                    return d
     if os.path.exists(path):
         try:
-            raw = open(path, "rb").read()
-            text = next((raw.decode(e) for e in ("utf-8-sig", "utf-16", "cp1258", "cp1252") if _can(raw, e)), raw.decode("utf-8", errors="replace"))
-            first = next((ln for ln in text.splitlines() if ln.strip()), "")
-            sep = max((",", ";", "\t"), key=first.count)
-            d = pd.read_csv(io.StringIO(text), sep=sep, dtype=str, keep_default_na=False)
-            d.columns = [_COLS_MAP.get(_norm(c), str(c).strip()) for c in d.columns]
-            if "Mã" not in d.columns:
-                _ERR = f"thiếu cột Mã; các cột tìm thấy: {', '.join(map(str, d.columns))}"
-            else:
-                return _clean(d)
+            d = _parse_text(_decode(open(path, "rb").read()))
+            if d is not None:
+                return d
         except Exception as e:  # noqa: BLE001
             _ERR = f"{type(e).__name__}: {e}"
     return _clean(pd.DataFrame(columns=COLS))
 
 
-def _can(raw: bytes, enc: str) -> bool:
-    try:
-        raw.decode(enc)
-        return True
-    except UnicodeError:
-        return False
-
-
 def save(d: pd.DataFrame, path: str = PATH) -> str:
-    """Trả '' nếu lưu được, ngược lại là thông báo lỗi."""
+    """Lưu tại chỗ rồi đẩy lên GitHub (nếu đã cấu hình). Trả "" nếu xong hết; ngược lại là thông báo lỗi (dữ liệu vẫn được giữ tạm)."""
+    d = _clean(d)
+    err = ""
     try:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        _clean(d).to_csv(path, index=False, encoding="utf-8-sig")
-        return ""
+        d.to_csv(path, index=False, encoding="utf-8-sig")
     except Exception as e:  # noqa: BLE001
-        return str(e)
+        err = str(e)
+    cfg = _remote_cfg()
+    if cfg:
+        _PENDING["text"] = d.to_csv(index=False)
+        gerr = _try_push(cfg, _PENDING["text"])
+        if gerr:
+            return f"chưa đồng bộ được GitHub: {gerr}"
+    return err
 
 
 def upsert(d: pd.DataFrame, row: dict) -> pd.DataFrame:
@@ -1018,7 +1212,7 @@ def _save_cb(available: set) -> None:
                 return err("Ngày mua cần có dạng dd/mm/yyyy (để trống = hôm nay).")
             row["Ngày mua"] = fmt_date(db)
     werr = save(upsert(load(), row))
-    ss["vp_msg"] = ("ok", f"Đã lưu {row['Mã']} ({row['Trạng thái']})" + (f" (chưa ghi được vào file: {werr})" if werr else ""))
+    ss["vp_msg"] = ("err", f"Đã lưu {row['Mã']} tại chỗ nhưng {werr}") if werr else ("ok", f"Đã lưu {row['Mã']} ({row['Trạng thái']})")
     _clear_form()
 
 
@@ -1042,8 +1236,8 @@ def _add_cb(available: set) -> None:
                 "Tỷ trọng %": _DEFAULT["vp_weight"], "Dự định mua": _DEFAULT["vp_qty"]} for c in ok]
         werr = save(pd.concat([d, pd.DataFrame(new)], ignore_index=True))
     parts = ([f"Đã thêm vào Chờ mua: {', '.join(ok)}"] if ok else []) + ([f"Đã có sẵn: {', '.join(dup)}"] if dup else []) \
-        + ([f"Không có trong dữ liệu: {', '.join(bad)}"] if bad else []) + ([f"chưa ghi được vào file: {werr}"] if werr else [])
-    ss["vp_msg"] = ("ok" if ok else "err", " · ".join(parts))
+        + ([f"Không có trong dữ liệu: {', '.join(bad)}"] if bad else []) + ([werr] if werr else [])
+    ss["vp_msg"] = ("ok" if (ok and not werr) else "err", " · ".join(parts))
     ss["vp_add"] = ""
 
 
@@ -1062,7 +1256,7 @@ def _delete_cb(code: str) -> None:
     if not st.session_state.get("vp_admin"):
         return
     werr = remove(code)
-    st.session_state["vp_msg"] = ("ok" if not werr else "err", f"Đã xóa {code}" if not werr else f"Chưa xóa được {code}: {werr}")
+    st.session_state["vp_msg"] = ("ok", f"Đã xóa {code}") if not werr else ("err", f"Đã xóa {code} tại chỗ nhưng {werr}")
 
 
 def _bought_cb(code: str) -> None:
@@ -1081,7 +1275,7 @@ def _bought_cb(code: str) -> None:
     if not str(d.loc[d["Mã"] == code, "Ngày mua"].iat[0]).strip():
         d.loc[d["Mã"] == code, "Ngày mua"] = fmt_date(_today())
     werr = save(d)
-    ss["vp_msg"] = ("ok" if not werr else "err", f"{code} đã chuyển sang Đang nắm giữ" if not werr else f"Chưa lưu được: {werr}")
+    ss["vp_msg"] = ("ok", f"{code} đã chuyển sang Đang nắm giữ") if not werr else ("err", f"{code} đã chuyển sang Đang nắm giữ tại chỗ nhưng {werr}")
 
 
 def _close_prep_cb(code: str) -> None:
@@ -1092,6 +1286,29 @@ def _close_prep_cb(code: str) -> None:
     st.session_state["vp_status"] = "Đã đóng"
     st.session_state["vp_cdate"] = fmt_date(_today())
     st.session_state["vp_msg"] = ("ok", f"Nhập Giá đóng của {code} ở form phía trên rồi bấm Lưu.")
+
+
+def _restore_cb() -> None:
+    """Ghi đè toàn bộ danh mục bằng file CSV Admin tải lên (file đọc được và có ít nhất một mã hợp lệ)."""
+    ss = st.session_state
+    if not ss.get("vp_admin"):
+        return
+    n = ss.get("vp_rn", 0)
+    f = ss.get(f"vp_restore_{n}")
+    if f is None:
+        ss["vp_msg"] = ("err", "Chọn file CSV cần khôi phục trước.")
+        return
+    raw = f.getvalue()
+    if len(raw) > 1_000_000:
+        ss["vp_msg"] = ("err", "File quá lớn (trên 1 MB), không phải file danh mục.")
+        return
+    d = _parse_text(_decode(raw))
+    if d is None or d.empty:
+        ss["vp_msg"] = ("err", f"Không đọc được mã nào trong file ({_ERR or 'file trống'}). Danh mục hiện tại giữ nguyên.")
+        return
+    werr = save(d)
+    ss["vp_rn"] = n + 1                                  # đổi key để ô tải file được làm mới
+    ss["vp_msg"] = ("err", f"Đã khôi phục {len(d)} mã tại chỗ nhưng {werr}") if werr else ("ok", f"Đã khôi phục {len(d)} mã từ file CSV.")
 
 
 def _hero_html(n: int) -> str:
@@ -1134,6 +1351,15 @@ def _admin_panel(available: set) -> None:
     q1.text_input("Nhập mã CP", key="vp_add", placeholder="Nhập mã CP (VD: HPG, IDC, MSH...)", label_visibility="collapsed")
     q2.button("＋ Thêm mã vào VIP", on_click=_add_cb, args=(available,), use_container_width=True)
     q3.button("🔓 Khóa", on_click=_lock_cb, use_container_width=True, help="Thoát chế độ Admin")
+    with st.expander("💾 Sao lưu / Khôi phục"):
+        on, ok, info = sync_status()
+        st.caption(f"☁️ Đồng bộ GitHub: {info}" if (on and ok) else "Chưa bật đồng bộ GitHub: danh mục chỉ lưu tạm trên máy chủ nên mất khi app khởi động lại. "
+                   "Thêm VIP_GITHUB_TOKEN và VIP_DATA_REPO vào Secrets (xem hướng dẫn đầu file vip_picks.py); trong lúc đó hãy bấm Sao lưu thường xuyên."
+                   if not on else info)
+        st.download_button("⬇ Sao lưu CSV", data=load().to_csv(index=False).encode("utf-8-sig"), file_name="khuyen_nghi_khach_hang.csv",
+                           mime="text/csv", key="vp_dl")
+        st.file_uploader("Khôi phục từ file CSV (ghi đè toàn bộ danh mục hiện tại)", type=["csv"], key=f"vp_restore_{ss.get('vp_rn', 0)}")
+        st.button("⬆ Khôi phục", key="vp_restore_btn", on_click=_restore_cb)
 
 
 def _render_group(status: str, d: pd.DataFrame, res, frames_d, fund_map, wb, meta_fn, ctx_fn, on_chart, admin: bool) -> None:
@@ -1195,6 +1421,13 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
     msg = ss.pop("vp_msg", None)
     if msg:
         (st.success if msg[0] == "ok" else st.error)(msg[1])
+    if admin:
+        on, ok, info = sync_status()
+        if on and not ok:
+            st.warning(info)
+        elif not on:
+            st.warning("Chưa bật đồng bộ GitHub: danh mục sẽ mất khi app khởi động lại (đẩy code mới, Reboot, app ngủ lâu). "
+                       "Mở khung 💾 Sao lưu / Khôi phục để xem cách bật.")
     if _ERR:
         st.warning(f"Không đọc được {PATH}: {_ERR}. Kiểm tra dòng tiêu đề có cột Mã.")
 
