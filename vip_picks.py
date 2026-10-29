@@ -428,7 +428,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             "FA": fa, "FA tags": fa_tags, "TA": ta, "TA tags": ta_tags,
             "RSI": _f(g["RSI"].iat[-1]) if "RSI" in g.columns else None,
             "Khuyến nghị": rec, "Ngoại": net5,
-            "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Luận điểm": p.get("Luận điểm", ""),
+            "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Ngày mua": p.get("Ngày mua", ""), "Luận điểm": p.get("Luận điểm", ""),
             "Tỷ trọng": p.get("Tỷ trọng %", ""), "Dự định": p.get("Dự định mua", ""),
             "Giá khớp": fill, "KL nắm": qty,
         })
@@ -743,7 +743,7 @@ def _hold_row_html(i: int, r) -> str:
         return (f'<tr><td class="pl">{i}</td><td></td><td class="pl l"><div class="pl-code">{_e(r["Mã"])}</div></td>'
                 f'<td colspan="12" class="tp-mu" style="text-align:left">Chưa có dữ liệu giá của mã này</td></tr>')
     price = r["Giá"]
-    kn = fmt_date(parse_date(r.get("Ngày KN"))) or ""
+    kn = fmt_date(parse_date(r.get("Ngày mua")) or parse_date(r.get("Ngày KN"))) or ""    # Ngày mua Admin nhập; trống thì lấy ngày lưu (Ngày KN)
     b = r["Điểm mua"]
     if isinstance(b, tuple):
         bt = _px(b[0]) if abs(b[0] - b[1]) < 1e-9 else f"{_px(b[0])} - {_px(b[1])}"
@@ -1012,6 +1012,11 @@ def _save_cb(available: set) -> None:
         row["Ngày đóng"] = fmt_date(d1)
     else:
         row["Giá đóng"] = row["Ngày đóng"] = ""
+        if row["Trạng thái"] == "Đang nắm giữ":      # Ngày mua: theo ngày Admin điền, trống mới lấy hôm nay
+            db = parse_date(row["Ngày mua"]) if row["Ngày mua"] else _today()
+            if db is None:
+                return err("Ngày mua cần có dạng dd/mm/yyyy (để trống = hôm nay).")
+            row["Ngày mua"] = fmt_date(db)
     werr = save(upsert(load(), row))
     ss["vp_msg"] = ("ok", f"Đã lưu {row['Mã']} ({row['Trạng thái']})" + (f" (chưa ghi được vào file: {werr})" if werr else ""))
     _clear_form()
@@ -1073,6 +1078,8 @@ def _bought_cb(code: str) -> None:
         ss["vp_msg"] = ("err", f"{code}: nhập Điểm mua (giá vào lệnh) bằng nút ✏️ Sửa trước khi chuyển sang Đang nắm giữ.")
         return
     d.loc[d["Mã"] == code, "Trạng thái"] = "Đang nắm giữ"
+    if not str(d.loc[d["Mã"] == code, "Ngày mua"].iat[0]).strip():
+        d.loc[d["Mã"] == code, "Ngày mua"] = fmt_date(_today())
     werr = save(d)
     ss["vp_msg"] = ("ok" if not werr else "err", f"{code} đã chuyển sang Đang nắm giữ" if not werr else f"Chưa lưu được: {werr}")
 
