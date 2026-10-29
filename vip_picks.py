@@ -894,7 +894,7 @@ def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
             note = (("Đạt mục tiêu, chốt lời." if top and close >= top * 0.995 else "Chốt lời.") if round(res, 2) > 0
                     else ("Chạm cắt lỗ, cắt theo kế hoạch." if cut and close <= cut * 1.005 else "Cắt lỗ.") if round(res, 2) < 0 else "Hòa vốn.")
         est_any = est_any or (bool(entry) and r["est"])
-        buy_px = _px_inline(entry, _day_chg(frames_d, p["Mã"], r["db"]), r["db"], r["est"]) if entry else mu
+        buy_px = _px_inline(entry, None, r["db"], r["est"]) if entry else mu                 # giá mua: chữ trắng, không kèm % tăng giảm
         close_px = _px_inline(close, _day_chg(frames_d, p["Mã"], r["d1"]), r["d1"]) if close else mu
         thesis = str(p["Luận điểm"] or "").strip()
         note = thesis or note                                              # Admin ghi Luận điểm thì dùng làm Ghi chú, không thì ghi chú tự sinh
