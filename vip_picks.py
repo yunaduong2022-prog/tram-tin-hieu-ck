@@ -850,7 +850,7 @@ def _px_chg(price, chg, star: bool = False) -> str:
 def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
     """Bảng nhóm Đã đóng: STT | Lệnh | Mã CK (+ngày đóng) | Mục tiêu | Giá đóng | Ngày mua | Giá mua | KL | Kết quả | Ghi chú; mới đóng xếp trước.
     Giá mua = Giá khớp nếu có, không thì giữa vùng Điểm mua (có dấu *). Ngày mua trống thì lấy Ngày khuyến nghị.
-    Kết quả bằng đồng chỉ hiện khi có Khối lượng (chưa trừ phí và thuế). Ghi chú tự sinh theo kết quả, mục tiêu và cắt lỗ."""
+    Kết quả bằng đồng chỉ hiện khi có Khối lượng (chưa trừ phí và thuế). Ghi chú = Luận điểm Admin nhập; để trống thì tự sinh theo kết quả, mục tiêu và cắt lỗ."""
     mu = '<span class="tp-mu">—</span>'
     rows = []
     for _, p in d.iterrows():
@@ -883,15 +883,15 @@ def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
         est_any = est_any or (bool(entry) and r["est"])
         buy_px = _px_chg(entry, _day_chg(frames_d, p["Mã"], r["db"]), r["est"]) if entry else mu
         thesis = str(p["Luận điểm"] or "").strip()
+        note = thesis or note                                              # Admin ghi Luận điểm thì dùng làm Ghi chú, không thì ghi chú tự sinh
         out.append(
-            f'<tr class="{"hasth" if thesis else ""}"><td class="pl">{i}</td><td class="pl cmd"><span class="cmd-t red">BÁN</span></td>'
+            f'<tr><td class="pl">{i}</td><td class="pl cmd"><span class="cmd-t red">BÁN</span></td>'
             f'<td class="pl l"><div class="pl-code">{_e(p["Mã"])}</div>' + (f'<div class="pl-date">{_e(fmt_date(r["d1"]))}</div>' if r["d1"] else "") + '</td>'
             f'<td class="pl key">{goal if goal else mu}</td>'
             f'<td class="pl key">{_px_chg(close, _day_chg(frames_d, p["Mã"], r["d1"])) if close else mu}</td>'
             f'<td class="pl">{_e(fmt_date(r["db"])) if r["db"] else "—"}</td><td class="pl key">{buy_px}</td>'
             f'<td class="pl">{f"{qty:.0f}" if qty else "—"}</td><td class="pl rt">{result}</td>'
-            f'<td class="pl ex">{_e(note) if note else mu}</td></tr>'
-            + (f'<tr class="th"><td></td><td colspan="9">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>' if thesis else ""))
+            f'<td class="pl ex">{_e(note) if note else mu}</td></tr>')
     cg = "".join(f'<col style="width:{w}%">' for w in CLOSED_WIDTH)
     th = "".join(f'<th class="{"l" if h == "Mã CK" else ""}">{h}</th>' for h in CLOSED_HEAD)
     foot = '<div class="vp-disc">* Chưa nhập giá khớp: tạm tính theo giữa vùng mua.</div>' if est_any else ""
