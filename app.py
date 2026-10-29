@@ -3325,7 +3325,7 @@ def page_livestream():
         # Cho phép bật/tắt từng lớp chỉ báo ngay trong trang livestream.
         # Mặc định chỉ bật Khối lượng và Dual Ichimoku theo yêu cầu.
         layer_options = [
-            "Khối lượng", "Dual Ichimoku", "EMA 50/200", "Supertrend",
+            "Khối lượng", "Dual Ichimoku", MA_LAYER, "EMA 50/200", "Supertrend",
             "Bollinger", "MACD", "RSI", "StochRSI", "VNINDEX",
             "RS vs VNINDEX", "Vùng giá", "Dự báo", "Elliott",
             "Wyckoff", "Tín hiệu quá khứ", "Hull Suite"
@@ -3333,9 +3333,9 @@ def page_livestream():
         layers = st.multiselect(
             "Chỉ báo hiển thị trên biểu đồ",
             options=layer_options,
-            default=["Khối lượng", "Dual Ichimoku"],
-            key="live_chart_layers",
-            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định chỉ hiển thị Khối lượng và Dual Ichimoku."
+            default=["Khối lượng", "Dual Ichimoku", MA_LAYER],
+            key="live_chart_layers_v2",
+            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định hiển thị Khối lượng, Dual Ichimoku và dòng giá MA20 / MA50 (ngày, tuần)."
         )
         _nD, _nW = len(A["D"]["g"]), len(A["W"]["g"])
         try:
