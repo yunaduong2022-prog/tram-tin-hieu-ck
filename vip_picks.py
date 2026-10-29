@@ -819,8 +819,8 @@ def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
     return f'<div class="tp-wrap"><table class="tp-tb"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
-CLOSED_HEAD = ["STT", "Lệnh", "Mã CK", "Giá mua", "Giá đóng", "Mục tiêu", "KL", "Kết quả", "Ghi chú"]
-CLOSED_WIDTH = [3, 6, 8, 14, 14, 11, 8, 15, 21]                       # % bề rộng từng cột, tổng 100
+CLOSED_HEAD = ["STT", "Lệnh", "Mã CK", "Mục tiêu", "Giá bán", "Giá mua", "KL", "Kết quả", "Ghi chú"]
+CLOSED_WIDTH = [3, 6, 8, 11, 14, 14, 8, 15, 21]                       # % bề rộng từng cột, tổng 100
 
 
 def _day_chg(frames_d, code: str, day) -> float | None:
@@ -860,7 +860,8 @@ def _px_inline(price, chg, day, star: bool = False) -> str:
 
 
 def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
-    """Bảng nhóm Đã đóng: STT | Lệnh | Mã CK | Giá mua (+ngày mua) | Giá đóng (+ngày đóng) | Mục tiêu | KL | Kết quả | Ghi chú; mới đóng xếp trước.
+    """Bảng nhóm Đã đóng: STT | Lệnh | Mã CK | Mục tiêu | Giá bán (+ngày bán) | Giá mua (+ngày mua) | KL | Kết quả | Ghi chú; mới đóng xếp trước.
+    (Giá bán = cột "Giá đóng" trong CSV, ngày bán = "Ngày đóng"; tên hiển thị đổi để khỏi lẫn với giá đóng cửa của phiên.)
     Giá mua = Giá khớp nếu có, không thì giữa vùng Điểm mua (có dấu *). Ngày mua trống thì lấy Ngày khuyến nghị.
     Kết quả bằng đồng chỉ hiện khi có Khối lượng (chưa trừ phí và thuế). Ghi chú = Luận điểm Admin nhập; để trống thì tự sinh theo kết quả, mục tiêu và cắt lỗ."""
     mu = '<span class="tp-mu">—</span>'
@@ -900,7 +901,7 @@ def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
         out.append(
             f'<tr><td class="pl">{i}</td><td class="pl cmd"><span class="cmd-t red">BÁN</span></td>'
             f'<td class="pl l"><div class="pl-code">{_e(p["Mã"])}</div></td>'
-            f'<td class="pl">{buy_px}</td><td class="pl">{close_px}</td><td class="pl key">{goal if goal else mu}</td>'
+            f'<td class="pl key">{goal if goal else mu}</td><td class="pl">{close_px}</td><td class="pl">{buy_px}</td>'
             f'<td class="pl">{f"{qty:.0f}" if qty else "—"}</td><td class="pl rt">{result}</td>'
             f'<td class="pl ex">{_e(note) if note else mu}</td></tr>')
     cg = "".join(f'<col style="width:{w}%">' for w in CLOSED_WIDTH)
