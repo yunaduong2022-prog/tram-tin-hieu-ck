@@ -1,5 +1,5 @@
 """Ngành > Dòng dẫn sóng: bảng xếp hạng các dòng theo biến động giai đoạn (trái) + cổ phiếu đại diện của dòng đang chọn (phải).
-Chọn mốc giai đoạn 1 tuần ... 6 tháng; bấm vào một dòng để xem cổ phiếu đại diện, nút "So sánh các mã" vẽ các mã quy về 100.
+Chọn mốc giai đoạn 1 tuần ... 6 tháng; bấm vào một dòng để xem TẤT CẢ mã của dòng có trong dữ liệu (mạnh nhất lên đầu), nút "So sánh các mã" vẽ các mã mạnh nhất quy về 100.
 Nhãn DẪN SÓNG: dòng nằm trong top theo giai đoạn, mạnh hơn VN-Index và có ít nhất nửa số mã tăng (xem hằng số trong nhom_nganh_data.py).
 Danh sách dòng và mã: data/dong_dan_song.csv (cột Dòng, Mã, Mô tả, Leader); không có file thì dùng nhóm ngành mặc định.
 Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.
@@ -21,7 +21,9 @@ CSS = """
 .dd-card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .dd-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-weight:800;font-size:16px;color:var(--txt)}
 .dd-desc{padding:12px 18px;color:var(--txt2);font-size:13px;border-bottom:1px solid var(--line)}
-.dd-row{display:grid;grid-template-columns:46px 1fr auto auto;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line2)}
+.dd-list{max-height:620px;overflow-y:auto}
+.dd-row{display:grid;grid-template-columns:22px 42px 1fr auto auto;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--line2)}
+.dd-rk{color:var(--muted);font-size:12px;font-weight:700;text-align:center}
 .dd-row:hover{background:var(--card2)}
 .dd-logo{width:42px;height:42px;border-radius:10px;background:var(--card2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
   font-weight:800;font-size:12px;color:var(--txt2)}
@@ -56,11 +58,11 @@ def _styler(df: pd.DataFrame, cols: list[str]):
 
 def _stock_rows(rep: pd.DataFrame, name_of) -> str:
     rows = []
-    for _, r in rep.iterrows():
+    for i, (_, r) in enumerate(rep.iterrows(), 1):
         code = str(r["Mã"])
         tag = '<span class="dd-tag">LEADER</span>' if bool(r["Leader"]) else ""
         nm = _html.escape(str(name_of(code) or ""))
-        rows.append(f'<div class="dd-row"><div class="dd-logo">{_html.escape(code)}</div>'
+        rows.append(f'<div class="dd-row"><div class="dd-rk">{i}</div><div class="dd-logo">{_html.escape(code)}</div>'
                     f'<div><div><span class="dd-code">{_html.escape(code)}</span>{tag}</div><div class="dd-name" title="{nm}">{nm}</div></div>'
                     f'<div class="dd-px {_cls(r["Ngày"]).replace("nn-", "dd-")}">{_px(r["Giá"])}<small>{_pct(r["Ngày"])}</small></div>'
                     f'<div class="dd-per">Giai đoạn<b class="{_cls(r["Giai đoạn"]).replace("nn-", "dd-")}">{_pct(r["Giai đoạn"], 1)}</b></div></div>')
@@ -87,36 +89,58 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
                     f'<span>Ngày <b class="{_cls(bench.get("day")).replace("nn-", "dd-")}">{_pct(bench.get("day"), 1)}</b></span></div>', unsafe_allow_html=True)
         view = pd.DataFrame({"#": d["#"], "Ngành / Dòng": np.where(d["Dẫn sóng"], d["Dòng"] + "  ·  DẪN SÓNG", d["Dòng"]), "Số mã": d["Số mã"],
                              "Biến động giai đoạn": d["Giai đoạn"], "Biến động ngày": d["Ngày"]})
-        sel_rows: list[int] = []
-        try:
-            ev = st.dataframe(_styler(view, ["Biến động giai đoạn", "Biến động ngày"]), hide_index=True, **ND.stretch(st.dataframe), height=min(640, 40 + 36 * len(view)),
-                              on_select="rerun", selection_mode="single-row", key="dds_table")
-            sel_rows = list(ev.selection.rows)
-        except TypeError:           # Streamlit cũ không có on_select: chọn dòng bằng ô chọn bên dưới
-            st.dataframe(_styler(view, ["Biến động giai đoạn", "Biến động ngày"]), hide_index=True, **ND.stretch(st.dataframe), height=min(640, 40 + 36 * len(view)))
-            pick = st.selectbox("Chọn dòng để xem cổ phiếu đại diện", list(d["Dòng"]), key="dds_pick")
-            sel_rows = [int(d.index[d["Dòng"] == pick][0])]
-        st.caption("Bấm vào một dòng trong bảng để xem cổ phiếu đại diện 👉")
+        names = list(d["Dòng"])
+        styler = _styler(view, ["Biến động giai đoạn", "Biến động ngày"])
+        height = min(640, 40 + 36 * len(view))
+        picked = None
+        ev = None
+        for mode in ("single-cell", "single-row"):          # bản Streamlit mới: bấm vào ô bất kỳ trong hàng; bản cũ hơn: tích ô vuông đầu hàng
+            try:
+                ev = st.dataframe(styler, hide_index=True, **ND.stretch(st.dataframe), height=height, on_select="rerun", selection_mode=mode,
+                                  key=f"dds_table_{mode}_{n}")
+                break
+            except Exception:  # noqa: BLE001
+                ev = None
+        if ev is None:                                       # không có on_select: chọn bằng ô chọn
+            st.dataframe(styler, hide_index=True, **ND.stretch(st.dataframe), height=height)
+            picked = st.selectbox("Chọn dòng để xem cổ phiếu", names, key="dds_pick")
+        else:
+            try:
+                cells = list(ev.selection.cells)
+            except Exception:  # noqa: BLE001
+                cells = []
+            rows_sel = list(ev.selection.rows)
+            i0 = (cells[0][0] if isinstance(cells[0], (list, tuple)) else cells[0]) if cells else (rows_sel[0] if rows_sel else None)
+            if i0 is not None and 0 <= int(i0) < len(names):
+                picked = names[int(i0)]
+        if picked:
+            st.session_state["dds_last"] = picked          # nhớ dòng đã chọn (kể cả khi đổi giai đoạn)
+        st.caption("Bấm vào một dòng trong bảng để xem các mã của dòng đó 👉")
 
-    sel = int(sel_rows[0]) if sel_rows and 0 <= int(sel_rows[0]) < len(d) else 0
+    last = st.session_state.get("dds_last")
+    sel = int(d.index[d["Dòng"] == last][0]) if last in set(d["Dòng"]) else 0
     name = str(d.loc[sel, "Dòng"])
     info = meta.get(name, {})
     rep = ND.rep_stocks(P, groups.get(name, []), n, info.get("leaders"))
     with right:
         dot = PALETTE[zlib.crc32(name.encode("utf-8")) % len(PALETTE)]
+        total = len(set(str(c).upper() for c in groups.get(name, [])))
+        k = len(rep)
         body = _stock_rows(rep, name_of) if not rep.empty else '<div class="dd-desc">Chưa đủ dữ liệu của các mã trong dòng này.</div>'
-        desc = f'<div class="dd-desc">{_html.escape(info["desc"])}</div>' if info.get("desc") else ""
+        note = f"Dòng gồm {total} mã, dữ liệu của bạn có {k} mã; xếp từ mạnh nhất xuống yếu nhất theo biến động {period}."
+        desc = (f'<div class="dd-desc">{_html.escape(info["desc"])}<br><span style="color:var(--muted);font-size:12px">{note}</span></div>' if info.get("desc")
+                else f'<div class="dd-desc" style="color:var(--muted);font-size:12px">{note}</div>')
         st.markdown(f'<div class="dd-card"><div class="dd-head"><i style="width:13px;height:13px;border-radius:50%;background:{dot};display:inline-block"></i>'
-                    f'CỔ PHIẾU ĐẠI DIỆN DÒNG: {_html.escape(name.upper())} ({int(d.loc[sel, "Số mã"])} MÃ)</div>{desc}{body}</div>', unsafe_allow_html=True)
+                    f'CỔ PHIẾU TRONG DÒNG: {_html.escape(name.upper())} ({k} MÃ CÓ DỮ LIỆU)</div>{desc}<div class="dd-list">{body}</div></div>', unsafe_allow_html=True)
         if not rep.empty and on_open is not None:
-            st.caption("Xem biểu đồ:")
             ok = [str(c) for c in rep["Mã"] if openable is None or str(c) in openable]
-            cols = st.columns(max(1, len(ok)))
-            for col, code in zip(cols, ok):
-                col.button(f"📈 {code}", key=f"dds_open_{code}", on_click=on_open, args=(code,), **ND.stretch(st.button))
-        if not rep.empty and st.toggle("So sánh các mã", key="dds_cmp", help="Quy giá về 100 tại đầu giai đoạn."):
+            if ok:
+                c1, c2 = st.columns([3, 2])
+                code = c1.selectbox("Xem biểu đồ của mã", ok, key=f"dds_code_{zlib.crc32(name.encode('utf-8'))}")
+                c2.button("📈 Mở biểu đồ", key=f"dds_open_{zlib.crc32(name.encode('utf-8'))}", on_click=on_open, args=(code,), **ND.stretch(st.button))
+        if not rep.empty and st.toggle("So sánh các mã", key="dds_cmp", help=f"Quy giá về 100 tại đầu giai đoạn; vẽ {ND.COMPARE_MAX} mã mạnh nhất."):
             import plotly.graph_objects as go
-            cf = ND.compare_frame(P, rep["Mã"].tolist(), n)
+            cf = ND.compare_frame(P, rep["Mã"].head(ND.COMPARE_MAX).tolist(), n)
             fig = go.Figure()
             for code in cf.columns:
                 fig.add_trace(go.Scatter(x=cf.index, y=cf[code], mode="lines", name=str(code), line=dict(width=1.8)))
@@ -125,4 +149,4 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
                               paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis_title="Quy về 100")
             st.plotly_chart(fig, **ND.stretch(st.plotly_chart))
     st.caption(f"Biến động dòng = trung vị % của các mã trong dòng (dòng dưới {ND.MIN_FOR_MEDIAN} mã dùng trung bình); giai đoạn tính trên {n} phiên. "
-               f"Cổ phiếu đại diện = {ND.REP_MAX} mã có GTGD bình quân 20 phiên lớn nhất. Chỉ để tham khảo, không phải khuyến nghị đầu tư.")
+               f"Danh sách bên phải chỉ gồm các mã có trong dữ liệu của bạn. Chỉ để tham khảo, không phải khuyến nghị đầu tư.")

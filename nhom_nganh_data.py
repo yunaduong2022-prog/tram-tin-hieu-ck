@@ -27,7 +27,7 @@ PERIODS = {"1 tuần": 5, "1 tháng": 21, "2 tháng": 42, "3 tháng": 63, "6 th�
 TOP_LEAD = 6               # nhãn DẪN SÓNG: nằm trong top này theo biến động giai đoạn,
 LEAD_MIN_POS = 0.5         # ... có ít nhất ngần này số mã tăng trong giai đoạn,
 #                            ... và mạnh hơn VN-Index cùng giai đoạn
-REP_MAX = 8                # số cổ phiếu đại diện hiện ở bảng bên phải (chọn theo GTGD bình quân 20 phiên)
+COMPARE_MAX = 10           # số mã mạnh nhất đưa vào biểu đồ "So sánh các mã"
 LEADER_LABELS = {"1", "x", "có", "co", "true", "y", "leader"}
 
 
@@ -142,8 +142,9 @@ def period_stats(P: dict, groups: dict, mkt: pd.Series, n: int) -> tuple[pd.Data
     return d, {"per": bper, "day": bday}
 
 
-def rep_stocks(P: dict, members, n: int, leaders: set | None = None, top: int = REP_MAX) -> pd.DataFrame:
-    """Cổ phiếu đại diện của một dòng: top theo GTGD bình quân 20 phiên, hiện theo biến động giai đoạn giảm dần; LEADER lấy từ CSV, không có thì mã tăng mạnh nhất."""
+def rep_stocks(P: dict, members, n: int, leaders: set | None = None, top: int | None = None) -> pd.DataFrame:
+    """Các mã CÓ DỮ LIỆU của một dòng, xếp theo biến động giai đoạn mạnh nhất lên đầu (top=None: lấy hết).
+    LEADER lấy từ CSV (cột Leader); không có thì là mã mạnh nhất."""
     c, v = P["c"], P.get("v")
     mem = [m for m in _members(members, c.columns) if c[m].notna().sum() > n + 1]
     if not mem:
@@ -156,7 +157,9 @@ def rep_stocks(P: dict, members, n: int, leaders: set | None = None, top: int = 
     else:
         liq = pd.Series(0.0, index=mem)
     d = pd.DataFrame({"Mã": mem, "Giá": last.to_numpy(), "Ngày": day.to_numpy(), "Giai đoạn": per.to_numpy(), "GTGD20": liq.reindex(mem).fillna(0).to_numpy()})
-    d = d.sort_values("GTGD20", ascending=False).head(top).sort_values("Giai đoạn", ascending=False).reset_index(drop=True)
+    d = d.sort_values("Giai đoạn", ascending=False, na_position="last").reset_index(drop=True)
+    if top:
+        d = d.head(top)
     lead = [x for x in d["Mã"] if x in (leaders or set())]
     d["Leader"] = d["Mã"].isin(lead) if lead else (d.index == 0)
     return d
