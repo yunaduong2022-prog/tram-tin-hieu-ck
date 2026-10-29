@@ -1,14 +1,19 @@
 {
- "updated_at": "28/10/2026 20:12 (giờ VN)",
- "latest_date": "2026-10-28",
+ "updated_at": "29/10/2026 16:29 (giờ VN)",
+ "latest_date": "2026-10-29",
  "symbols": 261,
- "symbols_on_latest_date": 229,
- "rows": 483143,
+ "symbols_on_latest_date": 232,
+ "rows": 483375,
  "sources": {
-  "vci": 251
+  "vci": 250,
+  "kbs": 1
  },
  "failed": [],
  "skipped": 0,
- "adjusted": [],
+ "adjusted": [
+  "TCB",
+  "ANV",
+  "NT2"
+ ],
  "stopped": null
 }
