@@ -513,6 +513,9 @@ CSS = """
 .vpb .lv{font-size:15.5px;font-weight:700;line-height:1.4;letter-spacing:.2px}.vpb .lv+.lv{font-size:12px;font-weight:600;letter-spacing:0}
 .vpb .lv.dn{color:#ff5a4d}.vpb .lv.up{color:#4fd18b}.vpb .lv.fl{color:#ffb02e}
 .vpb .st{color:var(--muted);font-weight:500;margin-left:2px}
+.vpb .lvrow{display:flex;align-items:baseline;justify-content:center;gap:8px;white-space:nowrap}
+.vpb .lvrow .lv{line-height:1.4}.vpb .lvrow .lv+.lv{font-size:12px}
+.vpb .lvrow+.pl-date{text-align:center}
 .vpb .tp-mu{color:var(--muted)}
 /* FA / TA / Tổng điểm: điểm + thanh + nhãn hiển thị sẵn (để chụp gửi khách), nhãn viết gọn dạng dòng chữ */
 .vpb .tp-sc{font-size:17px;font-weight:700;color:#fff}.vpb .tp-sc small{font-size:11px;font-weight:500;color:var(--muted)}
@@ -816,8 +819,8 @@ def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
     return f'<div class="tp-wrap"><table class="tp-tb"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
-CLOSED_HEAD = ["STT", "Lệnh", "Mã CK", "Mục tiêu", "Giá đóng", "Ngày mua", "Giá mua", "KL", "Kết quả", "Ghi chú"]
-CLOSED_WIDTH = [3, 6, 8, 11, 10, 10, 10, 8, 14, 20]                       # % bề rộng từng cột, tổng 100
+CLOSED_HEAD = ["STT", "Lệnh", "Mã CK", "Giá mua", "Giá đóng", "Mục tiêu", "KL", "Kết quả", "Ghi chú"]
+CLOSED_WIDTH = [3, 6, 8, 14, 14, 11, 8, 15, 21]                       # % bề rộng từng cột, tổng 100
 
 
 def _day_chg(frames_d, code: str, day) -> float | None:
@@ -847,8 +850,17 @@ def _px_chg(price, chg, star: bool = False) -> str:
     return f'<div class="lv {pc}">{_px(price)}{st_}</div><div class="lv {pc}">{ar} {abs(chg):.2f}%</div>'
 
 
+def _px_inline(price, chg, day, star: bool = False) -> str:
+    """Giá lớn + ▲/▼/■ % nhỏ bên phải (xanh tăng, đỏ giảm, cam vàng đứng giá), ngày giao dịch nhỏ bên dưới."""
+    pc, ar = ("up", "▲") if (chg is not None and round(chg, 2) > 0) else ("dn", "▼") if (chg is not None and round(chg, 2) < 0) else ("fl", "■")
+    pct = f'<span class="lv {pc}">{ar} {abs(chg):.2f}%</span>' if chg is not None else ""
+    cls = pc if chg is not None else ""
+    dt = f'<div class="pl-date">{_e(fmt_date(day))}</div>' if day else ""
+    return f'<div class="lvrow"><span class="lv {cls}" style="color:{"" if cls else "#fff"}">{_px(price)}{_star(star)}</span>{pct}</div>{dt}'
+
+
 def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
-    """Bảng nhóm Đã đóng: STT | Lệnh | Mã CK (+ngày đóng) | Mục tiêu | Giá đóng | Ngày mua | Giá mua | KL | Kết quả | Ghi chú; mới đóng xếp trước.
+    """Bảng nhóm Đã đóng: STT | Lệnh | Mã CK | Giá mua (+ngày mua) | Giá đóng (+ngày đóng) | Mục tiêu | KL | Kết quả | Ghi chú; mới đóng xếp trước.
     Giá mua = Giá khớp nếu có, không thì giữa vùng Điểm mua (có dấu *). Ngày mua trống thì lấy Ngày khuyến nghị.
     Kết quả bằng đồng chỉ hiện khi có Khối lượng (chưa trừ phí và thuế). Ghi chú = Luận điểm Admin nhập; để trống thì tự sinh theo kết quả, mục tiêu và cắt lỗ."""
     mu = '<span class="tp-mu">—</span>'
@@ -881,21 +893,20 @@ def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
             note = (("Đạt mục tiêu, chốt lời." if top and close >= top * 0.995 else "Chốt lời.") if round(res, 2) > 0
                     else ("Chạm cắt lỗ, cắt theo kế hoạch." if cut and close <= cut * 1.005 else "Cắt lỗ.") if round(res, 2) < 0 else "Hòa vốn.")
         est_any = est_any or (bool(entry) and r["est"])
-        buy_px = _px_chg(entry, _day_chg(frames_d, p["Mã"], r["db"]), r["est"]) if entry else mu
+        buy_px = _px_inline(entry, _day_chg(frames_d, p["Mã"], r["db"]), r["db"], r["est"]) if entry else mu
+        close_px = _px_inline(close, _day_chg(frames_d, p["Mã"], r["d1"]), r["d1"]) if close else mu
         thesis = str(p["Luận điểm"] or "").strip()
         note = thesis or note                                              # Admin ghi Luận điểm thì dùng làm Ghi chú, không thì ghi chú tự sinh
         out.append(
             f'<tr><td class="pl">{i}</td><td class="pl cmd"><span class="cmd-t red">BÁN</span></td>'
-            f'<td class="pl l"><div class="pl-code">{_e(p["Mã"])}</div>' + (f'<div class="pl-date">{_e(fmt_date(r["d1"]))}</div>' if r["d1"] else "") + '</td>'
-            f'<td class="pl key">{goal if goal else mu}</td>'
-            f'<td class="pl key">{_px_chg(close, _day_chg(frames_d, p["Mã"], r["d1"])) if close else mu}</td>'
-            f'<td class="pl">{_e(fmt_date(r["db"])) if r["db"] else "—"}</td><td class="pl key">{buy_px}</td>'
+            f'<td class="pl l"><div class="pl-code">{_e(p["Mã"])}</div></td>'
+            f'<td class="pl">{buy_px}</td><td class="pl">{close_px}</td><td class="pl key">{goal if goal else mu}</td>'
             f'<td class="pl">{f"{qty:.0f}" if qty else "—"}</td><td class="pl rt">{result}</td>'
             f'<td class="pl ex">{_e(note) if note else mu}</td></tr>')
     cg = "".join(f'<col style="width:{w}%">' for w in CLOSED_WIDTH)
     th = "".join(f'<th class="{"l" if h == "Mã CK" else ""}">{h}</th>' for h in CLOSED_HEAD)
     foot = '<div class="vp-disc">* Chưa nhập giá khớp: tạm tính theo giữa vùng mua.</div>' if est_any else ""
-    return (f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1300px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead>'
+    return (f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1250px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead>'
             f'<tbody>{"".join(out)}</tbody></table></div>{foot}')
 
 
