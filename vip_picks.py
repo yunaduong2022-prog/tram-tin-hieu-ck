@@ -54,7 +54,7 @@ PATH = "data/khuyen_nghi_khach_hang.csv"
 FOREIGN_PATH = "data/foreign_flow.csv"
 STATUSES = ("Chờ mua", "Đang nắm giữ", "Đã đóng")
 FRAMES = ("Trung hạn", "Dài hạn")
-COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán", "Trạng thái", "Khung thời gian", "Ngày khuyến nghị", "Luận điểm", "Giá đóng", "Ngày đóng", "Tỷ trọng %", "Dự định mua", "Giá khớp", "Khối lượng"]
+COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán", "Trạng thái", "Khung thời gian", "Ngày khuyến nghị", "Luận điểm", "Giá đóng", "Ngày đóng", "Tỷ trọng %", "Dự định mua", "Giá khớp", "Khối lượng", "Ngày mua"]
 _ERR = ""                                                    # thông báo lỗi đọc file gần nhất ("" = tốt)
 GRADES = ((75, "A"), (60, "B"), (40, "C"), (0, "D"))        # (điểm tối thiểu, hạng)
 NEAR_BUY = 1.01                                              # giá <= biên trên vùng mua × 1.01 vẫn coi là "trong vùng mua"
@@ -118,7 +118,7 @@ def _clean(d: pd.DataFrame) -> pd.DataFrame:
     d = d[d["Mã"].str.fullmatch(r"[A-Z0-9]{2,10}")]
     d["Trạng thái"] = d["Trạng thái"].where(d["Trạng thái"].isin(STATUSES), "Chờ mua")        # file cũ chưa có cột này -> Chờ mua
     d["Khung thời gian"] = d["Khung thời gian"].where(d["Khung thời gian"].isin(FRAMES), "Trung hạn")
-    for c in ("Ngày khuyến nghị", "Ngày đóng"):
+    for c in ("Ngày khuyến nghị", "Ngày đóng", "Ngày mua"):
         d[c] = d[c].map(lambda x: fmt_date(parse_date(x)) if parse_date(x) else x)
     return d[COLS].drop_duplicates("Mã", keep="last").reset_index(drop=True)
 
@@ -816,41 +816,93 @@ def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
     return f'<div class="tp-wrap"><table class="tp-tb"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
-def closed_html(d: pd.DataFrame, meta_fn) -> str:
-    """Bảng nhóm Đã đóng: giá mua, giá đóng, kết quả (%) và số ngày từ ngày khuyến nghị đến ngày đóng; mới đóng xếp trước."""
+CLOSED_HEAD = ["STT", "Lệnh", "Mã CK", "Mục tiêu", "Giá đóng", "Ngày mua", "Giá mua", "KL", "Kết quả", "Ghi chú"]
+CLOSED_WIDTH = [3, 6, 8, 11, 10, 10, 10, 8, 14, 20]                       # % bề rộng từng cột, tổng 100
+
+
+def _day_chg(frames_d, code: str, day) -> float | None:
+    """% thay đổi giá đóng cửa của phiên `day` (hoặc phiên gần nhất trước đó) so với phiên liền trước; None nếu không đủ dữ liệu."""
+    if frames_d is None or day is None:
+        return None
+    try:
+        g = frames_d[frames_d["Mã"] == code]
+        if g.empty:
+            return None
+        g = g.assign(_d=pd.to_datetime(g["Ngày"], errors="coerce", dayfirst=True).dt.date).dropna(subset=["_d"]).sort_values("_d")
+        g = g[g["_d"] <= day]
+        if len(g) < 2:
+            return None
+        a, c = float(g["Giá đóng cửa"].iat[-2]), float(g["Giá đóng cửa"].iat[-1])
+        return (c / a - 1) * 100 if a else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _px_chg(price, chg, star: bool = False) -> str:
+    """Giá + dòng ▲/▼/■ % (xanh tăng, đỏ giảm, cam vàng đứng giá); không có % thì chỉ hiện giá."""
+    st_ = _star(star)
+    if chg is None:
+        return _px(price) + st_
+    pc, ar = ("up", "▲") if round(chg, 2) > 0 else ("dn", "▼") if round(chg, 2) < 0 else ("fl", "■")
+    return f'<div class="lv {pc}">{_px(price)}{st_}</div><div class="lv {pc}">{ar} {abs(chg):.2f}%</div>'
+
+
+def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
+    """Bảng nhóm Đã đóng: STT | Lệnh | Mã CK (+ngày đóng) | Mục tiêu | Giá đóng | Ngày mua | Giá mua | KL | Kết quả | Ghi chú; mới đóng xếp trước.
+    Giá mua = Giá khớp nếu có, không thì giữa vùng Điểm mua (có dấu *). Ngày mua trống thì lấy Ngày khuyến nghị.
+    Kết quả bằng đồng chỉ hiện khi có Khối lượng (chưa trừ phí và thuế). Ghi chú tự sinh theo kết quả, mục tiêu và cắt lỗ."""
+    mu = '<span class="tp-mu">—</span>'
     rows = []
     for _, p in d.iterrows():
-        e, c = parse_range(p["Điểm mua"]), parse_price(p["Giá đóng"])
-        entry = (e[0] + e[1]) / 2 if e else None
-        res = (c / entry - 1) * 100 if (entry and c) else None
-        d0, d1 = parse_date(p["Ngày khuyến nghị"]), parse_date(p["Ngày đóng"])
-        days = (d1 - d0).days if (d0 and d1) else None
-        name, sector = meta_fn(p["Mã"]) if meta_fn else ("", "")
-        rows.append({"p": p, "res": res, "days": days, "name": name, "sector": sector, "d1": d1 or date.min, "entry": entry, "close": c})
-    rows.sort(key=lambda x: x["d1"], reverse=True)
-    out = []
-    for r in rows:
-        p = r["p"]
-        pill = ('<span class="tp-mu">—</span>' if r["res"] is None
-                else f'<span class="tp-pill {"g" if r["res"] >= 0 else "r"}">{r["res"]:+.2f}%</span>')
-        sec = f'<div><span class="tp-sec">{_e(r["sector"])}</span></div>' if r["sector"] else ""
-        th = str(p["Luận điểm"] or "").strip()
+        e = parse_range(p["Điểm mua"])
+        fill, qty, close = parse_price(p.get("Giá khớp", "")), parse_price(p.get("Khối lượng", "")), parse_price(p["Giá đóng"])
+        entry = fill or ((e[0] + e[1]) / 2 if e else None)
+        d1 = parse_date(p["Ngày đóng"])
+        db = parse_date(p.get("Ngày mua", "")) or parse_date(p["Ngày khuyến nghị"])
+        rows.append({"p": p, "entry": entry, "est": not fill, "qty": qty, "close": close, "d1": d1, "db": db})
+    rows.sort(key=lambda x: x["d1"] or date.min, reverse=True)
+    out, est_any = [], False
+    for i, r in enumerate(rows, 1):
+        p, entry, close, qty = r["p"], r["entry"], r["close"], r["qty"]
+        res = (close / entry - 1) * 100 if (entry and close) else None
+        t, sl, cut = parse_price(p["Target"]), parse_price(p["Điểm bán"]), parse_price(p["Cutloss"])
+        goal = (f"{_px(min(t, sl))} - {_px(max(t, sl))}" if t and sl and abs(t - sl) > 1e-9 else _px(t or sl)) if (t or sl) else None
+        if res is None:
+            result, note = mu, ""
+        else:
+            pc, ar = ("up", "▲") if round(res, 2) > 0 else ("dn", "▼") if round(res, 2) < 0 else ("fl", "■")
+            pct = f'<div class="lv {pc}">{ar} {abs(res):.2f}%</div>'
+            if qty:
+                amt = (close - entry) * qty * 1000
+                result = f'<div class="lv {pc}">{"+" if amt > 0 else "-" if amt < 0 else ""}{abs(amt):,.0f} đ</div>{pct}'
+            else:
+                result = pct
+            top = max(t or 0, sl or 0)
+            note = (("Đạt mục tiêu, chốt lời." if top and close >= top * 0.995 else "Chốt lời.") if round(res, 2) > 0
+                    else ("Chạm cắt lỗ, cắt theo kế hoạch." if cut and close <= cut * 1.005 else "Cắt lỗ.") if round(res, 2) < 0 else "Hòa vốn.")
+        est_any = est_any or (bool(entry) and r["est"])
+        buy_px = _px_chg(entry, _day_chg(frames_d, p["Mã"], r["db"]), r["est"]) if entry else mu
+        thesis = str(p["Luận điểm"] or "").strip()
         out.append(
-            f'<tr class="{"hasth" if th else ""}"><td class="l"><span class="tp-code">{_e(p["Mã"])}</span><div class="tp-name">{_e(r["name"])}</div>{sec}'
-            f'<div class="tp-meta"><span class="tp-chip2">{_e(p["Khung thời gian"])}</span></div></td>'
-            f'<td>{_e(p["Ngày khuyến nghị"]) or "—"}</td><td>{_px(r["entry"]) if r["entry"] else "—"}</td>'
-            f'<td>{_e(p["Ngày đóng"]) or "—"}</td><td>{_px(r["close"]) if r["close"] else "—"}</td><td>{pill}</td>'
-            f'<td>{r["days"] if r["days"] is not None else "—"}</td></tr>'
-            + (f'<tr class="th"><td colspan="7">💡 <b>Luận điểm:</b> {_e(th)}</td></tr>' if th else ""))
-    head = ["MÃ CK", "NGÀY KHUYẾN NGHỊ", "GIÁ MUA", "NGÀY ĐÓNG", "GIÁ ĐÓNG", "KẾT QUẢ", "SỐ NGÀY"]
-    th = "".join(f'<th class="{"l" if h == "MÃ CK" else ""}">{h}</th>' for h in head)
-    return f'<div class="tp-wrap"><table class="tp-tb" style="min-width:760px"><thead><tr>{th}</tr></thead><tbody>{"".join(out)}</tbody></table></div>'
+            f'<tr class="{"hasth" if thesis else ""}"><td class="pl">{i}</td><td class="pl cmd"><span class="cmd-t red">BÁN</span></td>'
+            f'<td class="pl l"><div class="pl-code">{_e(p["Mã"])}</div>' + (f'<div class="pl-date">{_e(fmt_date(r["d1"]))}</div>' if r["d1"] else "") + '</td>'
+            f'<td class="pl key">{goal if goal else mu}</td>'
+            f'<td class="pl key">{_px_chg(close, _day_chg(frames_d, p["Mã"], r["d1"])) if close else mu}</td>'
+            f'<td class="pl">{_e(fmt_date(r["db"])) if r["db"] else "—"}</td><td class="pl key">{buy_px}</td>'
+            f'<td class="pl">{f"{qty:.0f}" if qty else "—"}</td><td class="pl rt">{result}</td>'
+            f'<td class="pl ex">{_e(note) if note else mu}</td></tr>'
+            + (f'<tr class="th"><td></td><td colspan="9">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>' if thesis else ""))
+    cg = "".join(f'<col style="width:{w}%">' for w in CLOSED_WIDTH)
+    th = "".join(f'<th class="{"l" if h == "Mã CK" else ""}">{h}</th>' for h in CLOSED_HEAD)
+    foot = '<div class="vp-disc">* Chưa nhập giá khớp: tạm tính theo giữa vùng mua.</div>' if est_any else ""
+    return (f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1300px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead>'
+            f'<tbody>{"".join(out)}</tbody></table></div>{foot}')
 
 
 # ------------------------------------------------------------------ TRANG
 _FIELDS = {"vp_code": "Mã", "vp_buy": "Điểm mua", "vp_target": "Target", "vp_cut": "Cutloss", "vp_sell": "Điểm bán",
            "vp_status": "Trạng thái", "vp_frame": "Khung thời gian", "vp_date": "Ngày khuyến nghị", "vp_note": "Luận điểm",
-           "vp_close": "Giá đóng", "vp_cdate": "Ngày đóng", "vp_weight": "Tỷ trọng %", "vp_qty": "Dự định mua", "vp_fill": "Giá khớp", "vp_hold": "Khối lượng"}
+           "vp_close": "Giá đóng", "vp_cdate": "Ngày đóng", "vp_weight": "Tỷ trọng %", "vp_qty": "Dự định mua", "vp_fill": "Giá khớp", "vp_hold": "Khối lượng", "vp_bdate": "Ngày mua"}
 _DEFAULT = {"vp_status": "Chờ mua", "vp_frame": "Trung hạn", "vp_weight": "30", "vp_qty": "1000"}
 _GROUP_KEY = {"Chờ mua": "wait", "Đang nắm giữ": "hold", "Đã đóng": "closed"}
 _GROUP_ICON = {"Chờ mua": "🎯", "Đang nắm giữ": "📈", "Đã đóng": "✅"}
@@ -938,6 +990,12 @@ def _save_cb(available: set) -> None:
             return err("Ngày đóng cần có dạng dd/mm/yyyy (để trống = hôm nay).")
         if d1 < d0:
             return err("Ngày đóng không được trước Ngày khuyến nghị.")
+        db = parse_date(row["Ngày mua"]) if row["Ngày mua"] else None
+        if row["Ngày mua"] and db is None:
+            return err("Ngày mua cần có dạng dd/mm/yyyy (để trống = lấy Ngày khuyến nghị).")
+        if db and db > d1:
+            return err("Ngày mua không được sau Ngày đóng.")
+        row["Ngày mua"] = fmt_date(db) if db else ""
         row["Ngày đóng"] = fmt_date(d1)
     else:
         row["Giá đóng"] = row["Ngày đóng"] = ""
@@ -1047,6 +1105,7 @@ def _admin_panel(available: set) -> None:
     c3[1].text_input("Dự định mua (cổ phiếu)", key="vp_qty", placeholder="VD: 1000")
     c3[2].text_input("Giá khớp lệnh (Đang nắm giữ)", key="vp_fill", placeholder="VD: 20.8 (trống = giữa vùng mua)")
     c3[3].text_input("Khối lượng nắm giữ", key="vp_hold", placeholder="VD: 3000")
+    c3[4].text_input("Ngày mua", key="vp_bdate", placeholder="dd/mm/yyyy (trống = ngày KN)")
     st.text_input("Luận điểm", key="vp_note", placeholder="VD: Nền tích lũy pha C, chờ giá vượt MA20 kèm khối lượng (tối đa 300 ký tự)")
     b1, b2, _ = st.columns([1.2, 0.5, 6])
     b1.button("✓ Lưu", type="primary", on_click=_save_cb, args=(available,), use_container_width=True)
@@ -1065,7 +1124,7 @@ def _render_group(status: str, d: pd.DataFrame, res, frames_d, fund_map, wb, met
         return
     if status == "Đã đóng":
         d = d.assign(_d=d["Ngày đóng"].map(lambda x: parse_date(x) or date.min)).sort_values("_d", ascending=False, kind="stable")
-        st.markdown(closed_html(d, meta_fn), unsafe_allow_html=True)
+        st.markdown(closed_html(d, meta_fn, frames_d), unsafe_allow_html=True)
         codes = list(d["Mã"])
     else:
         v = build_view(d, res, frames_d, fund_map, wb, meta_fn, ctx_fn)
