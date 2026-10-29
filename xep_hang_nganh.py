@@ -26,7 +26,7 @@ import streamlit as st
 PATH = "data/xep_hang_nganh.csv"
 MIN_VON_HOA = 900        # tỷ đồng: chỉ lấy cổ phiếu đại diện ngành có vốn hóa từ mức này trở lên (dòng nhỏ hơn bị bỏ qua khi đọc file)
 _NUM = ["STT", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B", "Giá trị sổ sách",
-        "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ"]
+        "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT"]
 
 # cột -> (tiêu đề, kiểu định dạng, căn lề)
 COLS = {
@@ -42,6 +42,7 @@ COLS = {
     "ROE": ("ROE", "pct", ""), "ROA": ("ROA", "pct", ""), "NIM": ("NIM", "pct", ""), "LLR": ("LLR", "pct", ""), "CASA": ("CASA", "pct", ""),
     "DTT": ("DTT", "eps", ""),
     "LNST công ty mẹ": ("LNST<small>công ty mẹ</small>", "eps", ""),
+    "Tăng trưởng DTT": ("Tăng trưởng DTT<small>YoY</small>", "eps", ""),
 }
 # thứ tự cột theo bảng gốc của từng ngành
 LAYOUT = {
@@ -50,11 +51,13 @@ LAYOUT = {
 _LAYOUT_ND = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
               "ROE", "ROA", "DTT", "LNST công ty mẹ"]            # bố cục của các bảng ngành phi ngân hàng
 LAYOUT["Hàng công nghiệp"] = LAYOUT["Bán lẻ"] = _LAYOUT_ND
+LAYOUT["Vận tải biển hàng hóa"] = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
+                                   "ROE", "ROA", "LNST công ty mẹ", "Tăng trưởng DTT"]
 DEFAULT_LAYOUT = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách", "ROE", "ROA"]
 
 
 _CANON = ["Ngành", "STT", "Mã", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B",
-          "Giá trị sổ sách", "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Kỳ", "Cập nhật nguồn"]
+          "Giá trị sổ sách", "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT", "Kỳ", "Cập nhật nguồn"]
 _ERR = ""          # thông báo lỗi đọc file gần nhất ("" = đọc tốt); render_section hiển thị để dễ sửa file
 
 

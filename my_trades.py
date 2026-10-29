@@ -23,7 +23,7 @@ PLANS_PATH = "data/ke_hoach_giao_dich.csv"
 TRADES_PATH = "data/lich_su_giao_dich.csv"
 WAIT, HOLD, SOLD, CANCEL = "CHỜ MUA", "ĐANG GIỮ", "ĐÃ BÁN", "HỦY"
 PLAN_COLS = ["ID", "Mã", "Trạng thái", "Ngày tạo", "Vùng mua từ", "Vùng mua đến", "Tỷ trọng %", "Cắt lỗ", "Mục tiêu 1", "Mục tiêu 2",
-             "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Ghi chú", "Ngày đóng"]
+             "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Ghi chú", "Ngày đóng", "Khung thời gian", "Điểm bán", "Luận điểm"]
 TRADE_COLS = ["ID kế hoạch", "Mã", "Loại", "Ngày", "Giá", "Số lượng", "Phí và thuế (đồng)", "Lãi/lỗ ròng (đồng)", "Lãi/lỗ %",
               "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Tín hiệu", "Ghi chú"]
 _PLAN_NUM = ["Vùng mua từ", "Vùng mua đến", "Tỷ trọng %", "Cắt lỗ", "Mục tiêu 1", "Mục tiêu 2", "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm"]
@@ -42,7 +42,7 @@ def _plans_clean(d: pd.DataFrame) -> pd.DataFrame:
     for c in ("Ngày tạo", "Ngày đóng"):
         d[c] = pd.to_datetime(d[c], errors="coerce", format="mixed", dayfirst=True)
     d["Mã"] = d["Mã"].astype(str).str.upper().str.strip()
-    for c in ("ID", "Trạng thái", "Ghi chú"):
+    for c in ("ID", "Trạng thái", "Ghi chú", "Khung thời gian", "Điểm bán", "Luận điểm"):
         d[c] = d[c].fillna("").astype(str)
     return d[PLAN_COLS].reset_index(drop=True)
 
@@ -124,7 +124,8 @@ def _scores(scores: dict | None) -> dict:
 
 
 def add_plan(plans: pd.DataFrame, code: str, asof, zone: tuple[float, float], weight: float | None = None, stop: float | None = None,
-             t1: float | None = None, t2: float | None = None, scores: dict | None = None, note: str = "") -> tuple[pd.DataFrame, str]:
+             t1: float | None = None, t2: float | None = None, scores: dict | None = None, note: str = "", horizon: str = "",
+             sell_text: str = "", thesis: str = "") -> tuple[pd.DataFrame, str]:
     """Thêm kế hoạch CHỜ MUA. Trả (bảng mới, thông báo lỗi). Mỗi mã chỉ có một kế hoạch mở."""
     code = str(code).upper().strip()
     lo, hi = sorted((float(zone[0]), float(zone[1])))
@@ -140,7 +141,7 @@ def add_plan(plans: pd.DataFrame, code: str, asof, zone: tuple[float, float], we
         return plans, f"{code} đã có kế hoạch đang mở (chờ mua hoặc đang giữ)."
     row = {"ID": _new_id(plans, code, asof), "Mã": code, "Trạng thái": WAIT, "Ngày tạo": pd.Timestamp(asof), "Vùng mua từ": lo, "Vùng mua đến": hi,
            "Tỷ trọng %": weight, "Cắt lỗ": stop or np.nan, "Mục tiêu 1": t1 or np.nan, "Mục tiêu 2": t2 or np.nan, **_scores(scores),
-           "Ghi chú": note, "Ngày đóng": pd.NaT}
+           "Ghi chú": note, "Ngày đóng": pd.NaT, "Khung thời gian": horizon, "Điểm bán": sell_text, "Luận điểm": thesis}
     return _plans_clean(pd.concat([plans, pd.DataFrame([row])], ignore_index=True)), ""
 
 
@@ -272,3 +273,157 @@ def reconcile(plans: pd.DataFrame, lots: pd.DataFrame, asof) -> pd.DataFrame:
     p.loc[gone, ["Trạng thái", "Ngày đóng"]] = [SOLD, pd.Timestamp(asof)]
     p.loc[(p["Trạng thái"] == WAIT) & p["Mã"].isin(held), "Trạng thái"] = HOLD
     return p
+
+
+# ------------------------------------------------------------------ FORM NHẬP (giống bảng điền khuyến nghị)
+import re
+
+STATUS_UI = ["Chờ mua", "Đang giữ", "Đã đóng"]                  # chữ hiện trên form -> CHỜ MUA / ĐANG GIỮ / ĐÃ BÁN (hoặc HỦY nếu chưa mua)
+HORIZONS = ["Ngắn hạn", "Trung hạn", "Dài hạn"]
+_NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def parse_nums(text) -> list[float]:
+    """Các số trong ô nhập, chấp nhận dấu phẩy thập phân: '35,5 - 36' -> [35.5, 36.0]."""
+    return [float(x.replace(",", ".")) for x in _NUM_RE.findall(str(text or ""))]
+
+
+def parse_num(text) -> float | None:
+    n = parse_nums(text)
+    return n[0] if n else None
+
+
+def parse_zone(text) -> tuple[float, float] | None:
+    """'35.5 - 36.0' -> (35.5, 36.0); một số duy nhất -> (x, x). Trống / không có số -> None."""
+    n = parse_nums(text)
+    if not n:
+        return None
+    return (min(n[0], n[1]), max(n[0], n[1])) if len(n) >= 2 else (n[0], n[0])
+
+
+def parse_date(text) -> pd.Timestamp | None:
+    t = str(text or "").strip()
+    if not t:
+        return None
+    d = pd.to_datetime(t, errors="coerce", dayfirst=True, format="mixed")
+    return None if pd.isna(d) else d.normalize()
+
+
+def update_plan(plans: pd.DataFrame, plan_id: str, **fields) -> tuple[pd.DataFrame, str]:
+    """Sửa các cột của một kế hoạch còn mở (tên cột như PLAN_COLS). Kiểm tra cắt lỗ < vùng mua < mục tiêu 1 < mục tiêu 2 nếu đủ số."""
+    m = plans["ID"] == plan_id
+    if not m.any():
+        return plans, "Không tìm thấy kế hoạch cần sửa."
+    p = plans.copy()
+    for k, v in fields.items():
+        p.loc[m, k] = v
+    r = p[m].iloc[0]
+    lo, hi, sl, t1, t2 = r["Vùng mua từ"], r["Vùng mua đến"], r["Cắt lỗ"], r["Mục tiêu 1"], r["Mục tiêu 2"]
+    if pd.notna(sl) and pd.notna(lo) and sl >= lo:
+        return plans, "Cắt lỗ phải thấp hơn vùng mua."
+    if pd.notna(t1) and pd.notna(hi) and t1 <= hi:
+        return plans, "Target phải cao hơn vùng mua."
+    if pd.notna(t2) and pd.notna(t1) and t2 <= t1:
+        p.loc[m, "Mục tiêu 2"] = np.nan                               # mục tiêu 2 của máy thấp hơn target bạn nhập: bỏ, không báo lỗi
+    return _plans_clean(p), ""
+
+
+def save_entry(plans: pd.DataFrame, trades: pd.DataFrame, lots: pd.DataFrame, e: dict, sysd: dict, today, edit_id: str | None = None,
+               scores: dict | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str, str]:
+    """Nút Lưu của form. e = dữ liệu người dùng nhập (ô trống = chưa điền), sysd = số mặc định của máy; ô giá trống tự lấy theo máy.
+      e: code, zone (chữ), target, stop, sell (chữ), status (STATUS_UI), horizon, rec_date (chữ), close_px, close_date, fill_px, qty, thesis
+      sysd: zone (lo, hi) | None, stop, t1, t2, entry_px (Giá vào), price (giá hiện tại)
+    Chờ mua: tạo / sửa kế hoạch. Đang giữ: ghi nhận mua (cần số lượng) hoặc sửa kế hoạch đang giữ (có số lượng thì mua thêm).
+    Đã đóng: bán hết số đang giữ ở Giá đóng; kế hoạch chưa mua thì chuyển HỦY. Trả (plans, trades, lots, lỗi, thông báo thành công)."""
+    code = str(e.get("code", "")).upper().strip()
+    if not re.fullmatch(r"[A-Z0-9]{2,10}", code):
+        return plans, trades, lots, "Cần nhập Mã CK hợp lệ.", ""
+    status = e.get("status") or "Chờ mua"
+    plan = plans[plans["ID"] == edit_id].iloc[0] if edit_id and (plans["ID"] == edit_id).any() else active_plan(plans, code)
+    today = pd.Timestamp(today).normalize()
+    rec = parse_date(e.get("rec_date"))
+    if e.get("rec_date") and rec is None:
+        return plans, trades, lots, "Ngày khuyến nghị chưa đúng định dạng dd/mm/yyyy.", ""
+    rec = rec or today
+    sysd = sysd or {}
+    num = lambda v: v if v is not None and pd.notna(v) and v > 0 else None      # noqa: E731
+    zone = parse_zone(e.get("zone")) or sysd.get("zone")
+    stop = parse_num(e.get("stop")) or num(sysd.get("stop"))
+    t1 = parse_num(e.get("target")) or num(sysd.get("t1"))
+    t2 = num(sysd.get("t2"))
+    if t2 and t1 and t2 <= t1:
+        t2 = None
+    sell_text = str(e.get("sell") or "").strip() or (f"≥ {t1:.2f}" if t1 else "")
+    horizon = e.get("horizon") or ""
+    thesis = str(e.get("thesis") or "").strip()[:300]
+    qty = int(parse_num(e.get("qty")) or 0)
+    ptype = None if plan is None else plan["Trạng thái"]
+
+    def _fields(z):
+        f = {"Ngày tạo": rec, "Khung thời gian": horizon, "Điểm bán": sell_text, "Luận điểm": thesis, "Cắt lỗ": stop or np.nan,
+             "Mục tiêu 1": t1 or np.nan}
+        if z:
+            f.update({"Vùng mua từ": z[0], "Vùng mua đến": z[1]})
+        if t2:
+            f["Mục tiêu 2"] = t2
+        return f
+
+    if status == "Chờ mua":
+        if ptype == HOLD:
+            return plans, trades, lots, f"{code} đang giữ: chọn Trạng thái Đang giữ để sửa hoặc Đã đóng để bán hết.", ""
+        if not zone:
+            return plans, trades, lots, "Máy chưa có vùng mua cho mã này: hãy nhập Điểm Mua.", ""
+        if ptype == WAIT:
+            p2, err = update_plan(plans, plan["ID"], **_fields(zone))
+            return p2, trades, lots, err, "" if err else f"Đã cập nhật kế hoạch chờ mua {code}."
+        p2, err = add_plan(plans, code, rec, zone, None, stop, t1, t2, scores, "", horizon, sell_text, thesis)
+        return p2, trades, lots, err, "" if err else f"Đã thêm {code} vào chờ mua."
+
+    if status == "Đang giữ":
+        px = parse_num(e.get("fill_px")) or num(sysd.get("entry_px")) or num(sysd.get("price"))
+        if ptype == HOLD:
+            f = _fields(zone if parse_zone(e.get("zone")) else None)
+            p2, err = update_plan(plans, plan["ID"], **f)
+            if err:
+                return plans, trades, lots, err, ""
+            L = lots.copy()
+            m = L["Mã"] == code
+            if stop:
+                L.loc[m, "Cắt lỗ"] = stop
+            if t1:
+                L.loc[m, "Mục tiêu"] = t1
+            if qty > 0:                                                    # có số lượng: mua thêm
+                if not px:
+                    return plans, trades, lots, "Cần giá khớp để ghi mua thêm.", ""
+                p2, trades, L, err = record_buy(p2, trades, L, code, qty, px, rec, scores, "", "", stop=stop, target=t1)
+                return p2, trades, L, err, "" if err else f"Đã ghi mua thêm {qty:,} cp {code} giá {px:.2f}."
+            return p2, trades, L, "", f"Đã cập nhật {code} (cắt lỗ / target cũng áp cho các lô đang giữ)."
+        if qty <= 0:
+            return plans, trades, lots, "Trạng thái Đang giữ cần nhập Số lượng.", ""
+        if not px:
+            return plans, trades, lots, "Cần giá khớp (máy chưa có giá cho mã này).", ""
+        z = zone or (px, px)
+        if ptype == WAIT:
+            p2, err = update_plan(plans, plan["ID"], **_fields(z))
+        else:
+            p2, err = add_plan(plans, code, rec, z, None, stop, t1, t2, scores, "", horizon, sell_text, thesis)
+        if err:
+            return plans, trades, lots, err, ""
+        p2, trades, L, err = record_buy(p2, trades, lots, code, qty, px, rec, scores, "", "", stop=stop, target=t1)
+        return (plans, trades, lots, err, "") if err else (p2, trades, L, "", f"Đã ghi mua {qty:,} cp {code} giá {px:.2f}: chuyển sang Đang giữ.")
+
+    if status == "Đã đóng":
+        if plan is None:
+            return plans, trades, lots, f"{code} chưa có kế hoạch nào để đóng.", ""
+        close_date = parse_date(e.get("close_date")) or today
+        if ptype == WAIT:
+            return cancel_plan(plans, plan["ID"], close_date), trades, lots, "", f"Đã đóng kế hoạch chờ mua {code} (chưa mua, trạng thái HỦY)."
+        held = int(lots.loc[lots["Mã"] == code, "Số lượng"].sum())
+        px = parse_num(e.get("close_px")) or num(sysd.get("price"))
+        if held <= 0:
+            return plans, trades, lots, f"Không còn lô {code} nào để bán.", ""
+        if not px:
+            return plans, trades, lots, "Cần Giá đóng (máy chưa có giá cho mã này).", ""
+        p2, t2_, L, err = record_sell(plans, trades, lots, code, held, px, close_date, scores, "", "Đóng vị thế từ form")
+        return (plans, trades, lots, err, "") if err else (p2, t2_, L, "", f"Đã bán hết {held:,} cp {code} giá {px:.2f}: kế hoạch Đã đóng.")
+    return plans, trades, lots, "Trạng thái không hợp lệ.", ""

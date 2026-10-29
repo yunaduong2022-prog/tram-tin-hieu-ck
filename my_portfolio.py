@@ -278,8 +278,10 @@ def _vnd(x: float) -> str:
     return "—" if pd.isna(x) else f"{x / 1e6:,.1f} tr"
 
 
-def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof) -> None:
-    """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ; asof: ngày dữ liệu mới nhất."""
+def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof, fund_map=None, frames_d=None, ctx_fn=None) -> None:
+    """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ; asof: ngày dữ liệu mới nhất.
+    fund_map, frames_d, ctx_fn (tùy chọn): dữ liệu để chấm điểm cơ bản / kỹ thuật và lấy số mặc định giống Khuyến nghị khách hàng."""
+    MTU.set_context(fund_map, frames_d, ctx_fn)
     ver = st.session_state.setdefault("pf_ver", 0)
     st.caption("Danh mục bạn đang NẮM GIỮ (khác Watchlist chỉ để theo dõi). Mỗi dòng nhập là một lô mua, một mã có thể có nhiều lô. "
                "Chỉ để tham khảo, không phải khuyến nghị đầu tư.")

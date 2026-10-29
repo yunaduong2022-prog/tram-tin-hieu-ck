@@ -1,8 +1,9 @@
 """Giao diện "Cổ phiếu của tôi" theo vòng đời: 🟡 Chờ mua -> 🟢 Đang giữ -> 🔴 Đã bán, kèm lịch sử giao dịch để backtest.
 Logic nằm ở my_trades.py (thuần pandas). Hàm build_* ở đây cũng không gọi Streamlit nên kiểm thử được.
 
-Điểm kỹ thuật tạm lấy từ cột Score của bảng lọc chính (0-10, engine.internal_score). Điểm cơ bản và Tổng điểm CHƯA có công thức
-nên để trống: khi có công thức của mục khuyến nghị khách hàng, sửa duy nhất hàm scores_for().
+Điểm cơ bản / kỹ thuật / tổng chấm đúng như mục Khuyến nghị khách hàng (vip_picks.py): FA = fa_score(P/E, ROE, P/B), TA = ta_score(30 phiên gần nhất),
+Tổng điểm = Score x 10 (tối đa 100). Cần app truyền fund_map, frames_d (và ctx_fn để lấy số mặc định giống Khuyến nghị khách hàng) qua set_context();
+chưa truyền thì điểm FA / TA để trống và số mặc định lấy từ bảng Chờ mua.
 """
 from __future__ import annotations
 
@@ -18,14 +19,41 @@ _DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe).parame
 
 
 # ------------------------------------------------------------------ ĐIỂM
+_CTX: dict = {"fund_map": None, "frames_d": None, "ctx_fn": None}
+
+
+def set_context(fund_map=None, frames_d=None, ctx_fn=None) -> None:
+    """app.py (qua my_portfolio.render) truyền dữ liệu dùng chung với Khuyến nghị khách hàng: fund_map (P/E, ROE, P/B), frames_d (khung Ngày
+    có MA20 / MA50 / MA200 / RSI) và ctx_fn(code) (ngữ cảnh của action_summary)."""
+    _CTX.update(fund_map=fund_map, frames_d=frames_d, ctx_fn=ctx_fn)
+
+
 def scores_for(code: str, res: pd.DataFrame) -> dict:
-    """{"fund", "tech", "total"} của mã. Chỉ có điểm kỹ thuật (Score) vì chưa có công thức điểm cơ bản; thiếu thì NaN."""
-    tech = np.nan
+    """{"fund", "tech", "total"} chấm giống Khuyến nghị khách hàng: FA và TA thang 0-100 (vip_picks.fa_score / ta_score), Tổng điểm = Score x 10
+    (tối đa 100). Thiếu dữ liệu thì NaN."""
+    code = str(code).upper().strip()
+    out = {"fund": np.nan, "tech": np.nan, "total": np.nan}
     if "Score" in res.columns:
-        m = res.loc[res["Mã"].astype(str).str.upper() == code.upper(), "Score"]
-        if len(m) and pd.notna(m.iloc[0]):
-            tech = float(m.iloc[0])
-    return {"fund": np.nan, "tech": tech, "total": np.nan}
+        m = pd.to_numeric(res.loc[res["Mã"].astype(str).str.upper() == code, "Score"], errors="coerce").dropna()
+        if len(m):
+            out["total"] = float(min(100.0, max(0.0, m.iloc[0] * 10)))
+    try:
+        import vip_picks as VP
+        fm, fd = _CTX.get("fund_map"), _CTX.get("frames_d")
+        if fm is not None:
+            f = (fm.get(code) or {})
+            fa, _ = VP.fa_score(f.get("P/E"), f.get("ROE"), f.get("P/B"))
+            if fa is not None:
+                out["fund"] = float(fa)
+        if fd is not None and len(fd):
+            g = fd[fd["Mã"] == code].sort_values("Ngày").tail(30)
+            if len(g):
+                ta, _ = VP.ta_score(g)
+                if ta is not None:
+                    out["tech"] = float(ta)
+    except Exception:  # noqa: BLE001  (thiếu dữ liệu hoặc lỗi chấm điểm thì để trống, không làm hỏng trang)
+        pass
+    return out
 
 
 # ------------------------------------------------------------------ BẢNG (thuần pandas)
@@ -81,7 +109,8 @@ def build_hold(plans: pd.DataFrame, lots: pd.DataFrame, res: pd.DataFrame, wb: p
                      "Giá hiện tại": price, "Lãi/lỗ (đồng)": net, "Lãi/lỗ %": net / cost * 100 if cost > 0 and pd.notna(net) else np.nan,
                      "Cắt lỗ": float(sl.iloc[-1]) if len(sl) else np.nan, "Mục tiêu": float(tp.iloc[-1]) if len(tp) else np.nan,
                      "Điểm cơ bản": p["Điểm cơ bản"], "Điểm kỹ thuật": p["Điểm kỹ thuật"], "Tổng điểm": p["Tổng điểm"],
-                     "Tín hiệu hiện tại": sig.get(p["Mã"], "—")})
+                     "Tín hiệu hiện tại": sig.get(p["Mã"], "—"), "Khung thời gian": p["Khung thời gian"], "Điểm bán": p["Điểm bán"],
+                     "Luận điểm": p["Luận điểm"]})
     out = pd.DataFrame(rows)
     if out.empty:
         return out
@@ -104,9 +133,54 @@ def _save_all(plans, trades, lots, save_lots) -> str:
     return "; ".join(e for e in errs if e)
 
 
+FORM_TEXT = ["mtf_code", "mtf_zone", "mtf_target", "mtf_stop", "mtf_sell", "mtf_rec", "mtf_closepx", "mtf_closedate", "mtf_fill", "mtf_qty", "mtf_thesis"]
+
+
+def sys_defaults(code: str, wb: pd.DataFrame, res: pd.DataFrame) -> dict:
+    """Số mặc định của máy cho mã (mục Chờ mua): vùng mua, cắt lỗ, mục tiêu 1-2, Giá vào và giá hiện tại. Thiếu thì None."""
+    code = str(code or "").upper().strip()
+    z = wb[wb["Mã"].astype(str).str.upper() == code].head(1) if code and "Mã" in wb.columns else pd.DataFrame()
+
+    def g(col):
+        v = pd.to_numeric(z[col].iat[0], errors="coerce") if len(z) and col in z.columns else np.nan
+        return float(v) if pd.notna(v) and v > 0 else None
+    lo, hi = g("Vùng mua từ"), g("Vùng mua đến")
+    out = {"zone": (lo, hi) if lo and hi else None, "stop": g("Cắt lỗ"), "t1": g("Mục tiêu 1"), "t2": g("Mục tiêu 2"),
+           "entry_px": g("Giá vào"), "price": _prices(res, wb).get(code)}
+    if _CTX.get("ctx_fn") and code:                              # cùng mốc hệ thống với Khuyến nghị khách hàng (vip_picks._system_levels)
+        try:
+            import vip_picks as VP
+            row = z.iloc[0].to_dict() if len(z) else {}
+            lv = VP._system_levels(code, _CTX["ctx_fn"], row)
+            out["zone"] = lv.get("buy") or out["zone"]
+            out["stop"] = lv.get("stop") or out["stop"]
+            out["t1"] = lv.get("target") or out["t1"]
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def _table(df: pd.DataFrame, cfg: dict, key: str):
+    """Hiện bảng cho chọn một dòng; trả chỉ số dòng (theo df.index) hoặc None. Streamlit cũ không có chọn dòng thì dùng ô chọn mã."""
+    try:
+        ev = st.dataframe(df, hide_index=True, column_config=cfg, on_select="rerun", selection_mode="single-row", key=key, **_DF)
+        rows = ev.selection.rows
+        return int(df.index[rows[0]]) if rows else None
+    except TypeError:
+        st.dataframe(df, hide_index=True, column_config=cfg, **_DF)
+        code = st.selectbox("Chọn mã để sửa", [""] + list(df["Mã"]), key=key + "_sb")
+        return int(df.index[df["Mã"] == code][0]) if code else None
+
+
 def render(wb: pd.DataFrame, res: pd.DataFrame, asof, lots: pd.DataFrame, save_lots) -> None:
     """Gọi ở đầu trang Cổ phiếu của tôi. lots: bảng lô hiện có; save_lots(df) -> '' hoặc lỗi (my_portfolio.save)."""
-    ver = st.session_state.setdefault("mt_ver", 0)
+    ss = st.session_state
+    ver = ss.setdefault("mt_ver", 0)
+    ss.setdefault("mtf_status", "Chờ mua")
+    ss.setdefault("mtf_horizon", "Trung hạn")
+    ss.setdefault("mtf_edit", None)
+    for k in FORM_TEXT:
+        ss.setdefault(k, "")
     plans, trades = MT.load_plans(), MT.load_trades()
     fixed = MT.reconcile(plans, lots, asof)                       # lô bị sửa ngoài sổ (xóa ở bảng quản lý) thì kế hoạch tự theo
     if not fixed.equals(plans):
@@ -115,100 +189,123 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, asof, lots: pd.DataFrame, save_l
 
     wait, hold = build_wait(plans, res, wb), build_hold(plans, lots, res, wb)
     rt = MT.round_trips(plans, trades)
+
+    # ---------- callbacks (chạy trước khi vẽ lại, nên được phép đặt giá trị cho các ô của form)
+    def _reset():
+        for k in FORM_TEXT:
+            ss[k] = ""
+        ss["mtf_status"], ss["mtf_horizon"], ss["mtf_edit"] = "Chờ mua", "Trung hạn", None
+
+    def _load(pid: str):
+        r = plans[plans["ID"] == pid].iloc[0]
+        f2 = lambda v: "" if pd.isna(v) else f"{v:.2f}"      # noqa: E731
+        _reset()
+        ss["mtf_code"] = r["Mã"]
+        lo, hi = r["Vùng mua từ"], r["Vùng mua đến"]
+        ss["mtf_zone"] = "" if pd.isna(lo) else (f"{lo:.2f}" if lo == hi else f"{lo:.2f} - {hi:.2f}")
+        ss["mtf_target"], ss["mtf_stop"], ss["mtf_sell"] = f2(r["Mục tiêu 1"]), f2(r["Cắt lỗ"]), r["Điểm bán"]
+        ss["mtf_status"] = "Đang giữ" if r["Trạng thái"] == MT.HOLD else "Chờ mua"
+        ss["mtf_horizon"] = r["Khung thời gian"] if r["Khung thời gian"] in MT.HORIZONS else "Trung hạn"
+        ss["mtf_rec"] = "" if pd.isna(r["Ngày tạo"]) else f"{r['Ngày tạo']:%d/%m/%Y}"
+        ss["mtf_thesis"] = r["Luận điểm"]
+        ss["mtf_edit"] = pid
+
+    def _on_save():
+        code = str(ss.get("mtf_code", "")).upper().strip()
+        e = {"code": code, "zone": ss["mtf_zone"], "target": ss["mtf_target"], "stop": ss["mtf_stop"], "sell": ss["mtf_sell"],
+             "status": ss["mtf_status"], "horizon": ss["mtf_horizon"], "rec_date": ss["mtf_rec"], "close_px": ss["mtf_closepx"],
+             "close_date": ss["mtf_closedate"], "fill_px": ss["mtf_fill"], "qty": ss["mtf_qty"], "thesis": ss["mtf_thesis"]}
+        p2, t2_, l2, err, ok = MT.save_entry(plans, trades, lots, e, sys_defaults(code, wb, res), pd.Timestamp.today(), ss.get("mtf_edit"),
+                                             scores_for(code, res) if code else None)
+        if err:
+            ss["mtf_msg"] = ("warn", err)
+            return
+        e2 = _save_all(p2, t2_, l2, save_lots)
+        if e2:
+            ss["mtf_msg"] = ("warn", f"Chưa lưu được vào file: {e2}")
+            return
+        ss["mtf_msg"] = ("ok", ok)
+        ss["mt_ver"] = ss.get("mt_ver", 0) + 1
+        _reset()
+
+    # ---------- FORM NHẬP
+    st.markdown("**⚡ BẢNG ĐIỀN ĐIỂM MUA - BÁN - TARGET**")
+    st.caption("Điền các mức giá rồi bấm Lưu, hoặc chọn mã ở bảng bên dưới và bấm Sửa. Ô giá để trống sẽ tự điền theo hệ thống.")
+    editing = ss.get("mtf_edit")
+    if editing:
+        st.info(f"Đang sửa {ss.get('mtf_code', '')}. Sửa xong bấm Lưu, hoặc bấm ↺ để thôi sửa.")
+    profit = ""
+    if editing and not hold.empty and (hold["ID"] == editing).any():
+        v = hold.loc[hold["ID"] == editing, "Lãi/lỗ %"].iat[0]
+        profit = "" if pd.isna(v) else f"{v:+.2f}%"
+    r1 = st.columns([1.1, 1.7, 1.4, 1.1, 1.1, 1.2])
+    r1[0].text_input("Mã CK *", placeholder="VD: IDC, HPG...", key="mtf_code", disabled=bool(editing))
+    r1[1].text_input("Điểm Mua", placeholder="VD: 35.5 - 36.0", key="mtf_zone")
+    r1[2].text_input("Lợi Nhuận", value=profit, placeholder="Tự tính theo giá khớp", disabled=True, key=f"mtf_profit_{editing}")
+    r1[3].text_input("Target", placeholder="VD: 42.0", key="mtf_target")
+    r1[4].text_input("Cutloss", placeholder="VD: 34.0", key="mtf_stop")
+    r1[5].text_input("Điểm Bán", placeholder="VD: ≥ 42.0", key="mtf_sell")
+    r2 = st.columns([1.1, 1.1, 1.4, 1.1, 1.1, 1.1, 1.0])
+    r2[0].selectbox("Trạng thái", MT.STATUS_UI, key="mtf_status")
+    r2[1].selectbox("Khung thời gian", MT.HORIZONS, key="mtf_horizon")
+    r2[2].text_input("Ngày khuyến nghị", placeholder="dd/mm/yyyy (trống = hôm nay)", key="mtf_rec")
+    r2[3].text_input("Giá đóng", placeholder="Chỉ khi Đã đóng", key="mtf_closepx")
+    r2[4].text_input("Ngày đóng", placeholder="dd/mm/yyyy", key="mtf_closedate")
+    r2[5].text_input("Giá khớp", placeholder="Chỉ khi Đang giữ", key="mtf_fill", help="Để trống = Giá vào của máy (mục Chờ mua), thiếu thì giá hiện tại")
+    r2[6].text_input("Số lượng", placeholder="Khi Đang giữ", key="mtf_qty", help="Số cổ phiếu mua. Đang giữ mà nhập số lượng khi sửa = mua thêm")
+    st.text_input("Luận điểm", placeholder="VD: Nền tích lũy pha C, chờ giá vượt MA20 kèm khối lượng (tối đa 300 ký tự)", max_chars=300, key="mtf_thesis")
+    code_now = str(ss.get("mtf_code", "")).upper().strip()
+    sd = sys_defaults(code_now, wb, res) if code_now else {}
+    if code_now:
+        zt = f"{sd['zone'][0]:.2f} - {sd['zone'][1]:.2f}" if sd.get("zone") else "—"
+        f2 = lambda v: "—" if not v else f"{v:.2f}"      # noqa: E731
+        st.caption(f"Mặc định của máy cho {code_now}: Điểm mua {zt} · Target {f2(sd.get('t1'))} · Cutloss {f2(sd.get('stop'))} · "
+                   f"Giá vào {f2(sd.get('entry_px'))} · Giá hiện tại {f2(sd.get('price'))}. Ô nào để trống thì dùng số này.")
+    b = st.columns([1.6, 0.7, 6])
+    b[0].button("✓ Lưu", key="mtf_save", on_click=_on_save, use_container_width=True)
+    b[1].button("↺", key="mtf_reset", on_click=_reset, help="Xóa form / thôi sửa", use_container_width=True)
+    msg = ss.pop("mtf_msg", None)
+    if msg:
+        (st.success if msg[0] == "ok" else st.warning)(msg[1])
+
+    # ---------- CÁC BẢNG
     t1, t2, t3 = st.tabs([f"🟡 Chờ mua ({len(wait)})", f"🟢 Đang giữ ({len(hold)})", f"🔴 Đã bán · Lịch sử ({len(rt)})"])
     nc = st.column_config.NumberColumn
 
-    # ---------- CHỜ MUA
     with t1:
         if wait.empty:
-            st.info("Chưa có mã nào chờ mua. Thêm ở phần bên dưới.")
+            st.info("Chưa có mã nào chờ mua. Nhập mã ở bảng điền phía trên (Trạng thái: Chờ mua) rồi bấm Lưu.")
         else:
-            cols = ["Lệnh", "Mã", "Vùng mua", "Giá hiện tại", "Cách vùng mua %", "Tỷ trọng %", "Cắt lỗ", "Mục tiêu 1", "Mục tiêu 2",
-                    "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Hành động"]
-            st.dataframe(wait[cols], hide_index=True, column_config={
-                "Giá hiện tại": nc(format="%.2f"), "Cách vùng mua %": nc(format="%+.1f%%"), "Tỷ trọng %": nc(format="%.0f%%"),
-                "Cắt lỗ": nc(format="%.2f"), "Mục tiêu 1": nc(format="%.2f"), "Mục tiêu 2": nc(format="%.2f"),
-                "Điểm cơ bản": nc(format="%.1f"), "Điểm kỹ thuật": nc(format="%.1f"), "Tổng điểm": nc(format="%.1f")}, **_DF)
-        with st.expander("➕ Thêm mã chờ mua", expanded=wait.empty):
-            codes = sorted(set(wb["Mã"].astype(str).str.upper())) if "Mã" in wb.columns else []
-            code = st.selectbox("Mã", codes, key=f"mt_wcode_{ver}") if codes else st.text_input("Mã", key=f"mt_wcode_{ver}").upper().strip()
-            z = wb[wb["Mã"].astype(str).str.upper() == code].head(1) if codes and code else pd.DataFrame()
-            def _d(col, default=0.0):
-                return float(z[col].iat[0]) if len(z) and col in z.columns and pd.notna(z[col].iat[0]) else default
-            a = st.columns(4)
-            lo = a[0].number_input("Vùng mua từ", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_lo_{code}_{ver}", help="Để 0 = dùng vùng mua của máy")
-            hi = a[1].number_input("Vùng mua đến", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_hi_{code}_{ver}", help="Để 0 = dùng vùng mua của máy")
-            wgt = a[2].number_input("Tỷ trọng (%)", 0.0, 100.0, 30.0, 5.0, key=f"mt_wg_{code}_{ver}", help="Phần vốn dự định dành cho mã này")
-            sl = a[3].number_input("Cắt lỗ", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_sl_{code}_{ver}", help="Để 0 = dùng cắt lỗ của máy")
-            b = st.columns([1, 1, 3])
-            m1 = b[0].number_input("Mục tiêu 1", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_t1_{code}_{ver}", help="Để 0 = dùng mục tiêu 1 của máy")
-            m2 = b[1].number_input("Mục tiêu 2", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_t2_{code}_{ver}", help="Để 0 = dùng mục tiêu 2 của máy")
-            note = b[2].text_input("Ghi chú", key=f"mt_wn_{ver}")
-            if len(z) and _d("Vùng mua từ") > 0:
-                st.caption(f"Mặc định của máy (mục Chờ mua): vùng mua {_d('Vùng mua từ'):.2f} - {_d('Vùng mua đến'):.2f} · cắt lỗ {_d('Cắt lỗ'):.2f} · "
-                           f"mục tiêu 1 {_d('Mục tiêu 1'):.2f} · mục tiêu 2 {_d('Mục tiêu 2'):.2f}. Ô nào bạn không điền (để 0) thì dùng số này.")
-            else:
-                st.caption("Mã này chưa có vùng mua trong mục Chờ mua của máy: bạn cần tự điền vùng mua.")
-            if st.button("➕ Thêm vào chờ mua", key=f"mt_wadd_{ver}"):
-                lo_, hi_ = lo or _d("Vùng mua từ"), hi or _d("Vùng mua đến")        # bạn không điền thì lấy số mặc định của máy
-                sl_, m1_, m2_ = sl or _d("Cắt lỗ"), m1 or _d("Mục tiêu 1"), m2 or _d("Mục tiêu 2")
-                p2, err = MT.add_plan(plans, code, asof, (lo_, hi_), wgt or None, sl_ or None, m1_ or None, m2_ or None, scores_for(code, res), note)
-                if err:
-                    st.warning(err)
-                else:
-                    e2 = MT.save_plans(p2)
-                    st.session_state["mt_ver"] = ver + 1
-                    st.warning(f"Chưa lưu được: {e2}") if e2 else st.rerun()
-        if not wait.empty:
-            with st.expander("✅ Khớp lệnh mua / ✖ Hủy kế hoạch"):
-                pick = st.selectbox("Mã", list(wait["Mã"]), key=f"mt_bpick_{ver}")
-                cur = float(wait.loc[wait["Mã"] == pick, "Giá hiện tại"].iat[0]) if pd.notna(wait.loc[wait["Mã"] == pick, "Giá hiện tại"].iat[0]) else 0.0
-                _wz = wb[wb["Mã"].astype(str).str.upper() == pick].head(1)
-                _gv = float(_wz["Giá vào"].iat[0]) if len(_wz) and "Giá vào" in _wz.columns and pd.notna(_wz["Giá vào"].iat[0]) else 0.0
-                sys_px = _gv or cur                                                  # mặc định của máy: Giá vào ở mục Chờ mua, thiếu thì giá hiện tại
-                c = st.columns(4)
-                q = c[0].number_input("Số lượng (cp)", 0, step=100, value=0, key=f"mt_bq_{ver}")
-                px = c[1].number_input("Giá khớp (nghìn đồng)", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_bp_{pick}_{ver}",
-                                       help=f"Để 0 = dùng giá mặc định của máy ({sys_px:.2f})")
-                dt = c[2].date_input("Ngày mua", value=pd.Timestamp(asof).date(), key=f"mt_bd_{ver}")
-                bn = c[3].text_input("Ghi chú", key=f"mt_bn_{ver}")
-                st.caption(f"Giá khớp để 0 sẽ dùng giá mặc định của máy: {sys_px:.2f}." if sys_px else "Máy chưa có giá cho mã này: hãy điền giá khớp.")
-                x = st.columns([1, 1, 3])
-                if x[0].button("✅ Ghi nhận đã mua", key=f"mt_buy_{ver}"):
-                    p2, t2_, l2, err = MT.record_buy(plans, trades, lots, pick, int(q), float(px or sys_px), pd.Timestamp(dt), scores_for(pick, res),
-                                                     str(wait.loc[wait["Mã"] == pick, "Lệnh"].iat[0]), bn)
-                    if err:
-                        st.warning(err)
-                    else:
-                        e2 = _save_all(p2, t2_, l2, save_lots)
-                        st.session_state["mt_ver"] = ver + 1
-                        st.warning(f"Chưa lưu được: {e2}") if e2 else st.rerun()
-                if x[1].button("✖ Hủy kế hoạch", key=f"mt_cancel_{ver}"):
-                    pid = wait.loc[wait["Mã"] == pick, "ID"].iat[0]
-                    e2 = MT.save_plans(MT.cancel_plan(plans, pid, asof))
-                    st.session_state["mt_ver"] = ver + 1
-                    st.warning(f"Chưa lưu được: {e2}") if e2 else st.rerun()
+            cols = ["Lệnh", "Mã", "Vùng mua", "Giá hiện tại", "Cách vùng mua %", "Cắt lỗ", "Mục tiêu 1", "Mục tiêu 2", "Điểm bán", "Khung thời gian",
+                    "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Hành động", "Luận điểm"]
+            i = _table(wait[cols], {"Giá hiện tại": nc(format="%.2f"), "Cách vùng mua %": nc(format="%+.1f%%"), "Cắt lỗ": nc(format="%.2f"),
+                                    "Mục tiêu 1": nc(format="%.2f"), "Mục tiêu 2": nc(format="%.2f"), "Điểm cơ bản": nc(format="%.1f"),
+                                    "Điểm kỹ thuật": nc(format="%.1f"), "Tổng điểm": nc(format="%.1f")}, "mtf_tbl_wait")
+            if i is not None:
+                st.button(f"✏️ Sửa {wait.loc[i, 'Mã']}", key="mtf_edit_w", on_click=_load, args=(wait.loc[i, "ID"],))
 
-    # ---------- ĐANG GIỮ
     with t2:
         if hold.empty:
-            st.info("Chưa có mã nào đang giữ. Mã chờ mua sau khi bạn ghi nhận khớp lệnh mua sẽ chuyển sang đây và được theo dõi tới khi bán hết.")
+            st.info("Chưa có mã nào đang giữ. Mã chờ mua sau khi bạn Lưu với Trạng thái Đang giữ (kèm Số lượng) sẽ chuyển sang đây "
+                    "và được theo dõi tới khi đóng.")
         else:
-            cols = ["Mã", "Ngày mua", "Khối lượng", "Giá vốn", "Giá hiện tại", "Lãi/lỗ (đồng)", "Lãi/lỗ %", "Cắt lỗ", "Mục tiêu",
-                    "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Tín hiệu hiện tại", "Hành động"]
-            st.dataframe(hold[cols], hide_index=True, column_config={
-                "Ngày mua": st.column_config.DateColumn(format="DD/MM/YYYY"), "Khối lượng": nc(format="%d"), "Giá vốn": nc(format="%.2f"),
-                "Giá hiện tại": nc(format="%.2f"), "Lãi/lỗ (đồng)": nc(format="%+,.0f"), "Lãi/lỗ %": nc(format="%+.2f%%"),
-                "Cắt lỗ": nc(format="%.2f"), "Mục tiêu": nc(format="%.2f"), "Điểm cơ bản": nc(format="%.1f"),
-                "Điểm kỹ thuật": nc(format="%.1f"), "Tổng điểm": nc(format="%.1f")}, **_DF)
-            st.caption("Lãi/lỗ ròng tạm tính đã trừ phí mua, phí bán và thuế bán. Giá vốn là bình quân các lô chưa gồm phí.")
-            with st.expander("🔴 Ghi nhận bán"):
+            cols = ["Mã", "Ngày mua", "Khối lượng", "Giá vốn", "Giá hiện tại", "Lãi/lỗ (đồng)", "Lãi/lỗ %", "Cắt lỗ", "Mục tiêu", "Điểm bán",
+                    "Khung thời gian", "Điểm cơ bản", "Điểm kỹ thuật", "Tổng điểm", "Tín hiệu hiện tại", "Hành động", "Luận điểm"]
+            i = _table(hold[cols], {"Ngày mua": st.column_config.DateColumn(format="DD/MM/YYYY"), "Khối lượng": nc(format="%d"),
+                                    "Giá vốn": nc(format="%.2f"), "Giá hiện tại": nc(format="%.2f"), "Lãi/lỗ (đồng)": nc(format="%+,.0f"),
+                                    "Lãi/lỗ %": nc(format="%+.2f%%"), "Cắt lỗ": nc(format="%.2f"), "Mục tiêu": nc(format="%.2f"),
+                                    "Điểm cơ bản": nc(format="%.1f"), "Điểm kỹ thuật": nc(format="%.1f"), "Tổng điểm": nc(format="%.1f")}, "mtf_tbl_hold")
+            if i is not None:
+                st.button(f"✏️ Sửa {hold.loc[i, 'Mã']}", key="mtf_edit_h", on_click=_load, args=(hold.loc[i, "ID"],))
+            st.caption("Lãi/lỗ ròng tạm tính đã trừ phí mua, phí bán và thuế bán. Giá vốn là bình quân các lô chưa gồm phí. "
+                       "Đóng toàn bộ: Sửa → Trạng thái Đã đóng → Lưu (Giá đóng để trống = giá hiện tại).")
+            with st.expander("🔴 Bán một phần"):
                 pick = st.selectbox("Mã", list(hold["Mã"]), key=f"mt_spick_{ver}")
                 row = hold[hold["Mã"] == pick].iloc[0]
                 held = int(row["Khối lượng"])
+                cur_px = float(row["Giá hiện tại"]) if pd.notna(row["Giá hiện tại"]) else 0.0
                 c = st.columns(4)
                 q = c[0].number_input(f"Số lượng bán (đang giữ {held:,})", 0, held, 0, 100, key=f"mt_sq_{pick}_{ver}")
-                cur_px = float(row["Giá hiện tại"]) if pd.notna(row["Giá hiện tại"]) else 0.0
                 px = c[1].number_input("Giá bán (nghìn đồng)", 0.0, step=0.05, format="%.2f", value=0.0, key=f"mt_sp_{pick}_{ver}",
                                        help=f"Để 0 = dùng giá hiện tại của máy ({cur_px:.2f})")
                 dt = c[2].date_input("Ngày bán", value=pd.Timestamp(asof).date(), key=f"mt_sd_{ver}")
@@ -220,10 +317,9 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, asof, lots: pd.DataFrame, save_l
                         st.warning(err)
                     else:
                         e2 = _save_all(p2, t2_, l2, save_lots)
-                        st.session_state["mt_ver"] = ver + 1
+                        ss["mt_ver"] = ver + 1
                         st.warning(f"Chưa lưu được: {e2}") if e2 else st.rerun()
 
-    # ---------- ĐÃ BÁN · LỊCH SỬ
     with t3:
         sm = MT.summary(rt)
         m = st.columns(4)

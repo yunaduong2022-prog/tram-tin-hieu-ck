@@ -1643,7 +1643,8 @@ def page_my_portfolio():
             st.session_state[_k] = code
         NAV.goto("Cổ phiếu", "Biểu đồ")
 
-    MP.render(_wb_table(), res_df, _open_chart, latest_date)
+    cap_map, fund_map = _wb_meta_maps(WY_KEY)
+    MP.render(_wb_table(), res_df, _open_chart, latest_date, fund_map=fund_map, frames_d=frames["D"], ctx_fn=_action_ctx)
 
 
 def page_realtime_filter():
