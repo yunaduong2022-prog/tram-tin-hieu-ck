@@ -1,19 +1,18 @@
 {
- "updated_at": "29/10/2026 16:29 (giờ VN)",
- "latest_date": "2026-10-29",
- "symbols": 261,
- "symbols_on_latest_date": 232,
- "rows": 483375,
+ "updated_at": "30/10/2026 21:27 (giờ VN)",
+ "latest_date": "2026-10-30",
+ "symbols": 266,
+ "symbols_on_latest_date": 222,
+ "rows": 490151,
  "sources": {
-  "vci": 250,
-  "kbs": 1
+  "vci": 164,
+  "kbs": 72
  },
  "failed": [],
- "skipped": 0,
+ "skipped": 13,
  "adjusted": [
-  "TCB",
-  "ANV",
-  "NT2"
+  "VDS",
+  "MSR"
  ],
- "stopped": null
+ "stopped": "Quá 80 phút, dừng ở mã thứ 237/249"
 }
