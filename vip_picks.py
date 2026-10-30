@@ -38,7 +38,8 @@ Dữ liệu
   Target / Cutloss tính % so với giá hiện tại.
 
 Cách chấm điểm (sửa các hằng số / hàm fa_score, ta_score nếu muốn đổi):
-- Tổng điểm = Score sẵn có của app (thang 0-10) × 10; hạng A ≥ 75, B ≥ 60, C ≥ 40, còn lại D.
+- Tổng điểm = 30% FA + 40% TA + 30% điểm hệ thống (Score sẵn có của app, thang 0-10, × 10) — đổi W_FA / W_TA / W_SYS ở đầu file.
+  Thiếu thành phần nào thì chia lại trọng số cho các thành phần còn lại. Hạng A ≥ 75, B ≥ 60, C ≥ 40, còn lại D.
 - FA (0-100) chấm từ ROE, P/E, P/B (data/fundamentals.csv); chỉ tính các chỉ số có số liệu, cần ít nhất 2 chỉ số.
 - TA (0-100) chấm từ MA20, MA50, MA200, RSI(14) và khối lượng khung Ngày (chi tiết ở docstring của ta_score).
 - Dòng "Khối ngoại gom / bán ròng" chỉ hiện khi có data/foreign_flow.csv (tổng 5 phiên gần nhất).
@@ -73,6 +74,7 @@ FRAMES = ("Trung hạn", "Dài hạn")
 COLS = ["Mã", "Điểm mua", "Target", "Cutloss", "Điểm bán", "Trạng thái", "Khung thời gian", "Ngày khuyến nghị", "Luận điểm", "Giá đóng", "Ngày đóng", "Tỷ trọng %", "Dự định mua", "Giá khớp", "Khối lượng", "Ngày mua"]
 _ERR = ""                                                    # thông báo lỗi đọc file gần nhất ("" = tốt)
 GRADES = ((75, "A"), (60, "B"), (40, "C"), (0, "D"))        # (điểm tối thiểu, hạng)
+W_FA, W_TA, W_SYS = 0.30, 0.40, 0.30                         # trọng số Tổng điểm: điểm cơ bản FA, kỹ thuật TA, điểm hệ thống (Score × 10)
 NEAR_BUY = 1.01                                              # giá <= biên trên vùng mua × 1.01 vẫn coi là "trong vùng mua"
 BELOW_BUY = 0.98                                             # giá < biên dưới vùng mua × 0.98 coi là đã lệch khỏi vùng mua
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
@@ -415,7 +417,7 @@ FA_BANDS: dict[str, dict[str, tuple]] = {
         "P/E": ("lo", [(8, 1.0), (12, 0.87), (16, 0.67), (22, 0.4), (30, 0.2)], 0.0),
     },
 }
-FA_WEAK = 30                # điểm FA dưới mức này: gắn nhãn "Cơ bản yếu" (chỉ cảnh báo, KHÔNG trừ vào Tổng điểm hay hạng)
+FA_WEAK = 30                # điểm FA dưới mức này: gắn nhãn "Cơ bản yếu" (chỉ gắn nhãn cảnh báo; điểm FA đã được tính vào Tổng điểm theo W_FA)
 FA_MIN_WEIGHT = 60          # cần các chỉ tiêu có số cộng lại >= 60 điểm trọng số mới chấm (thiếu thì bỏ khỏi cả điểm đạt lẫn điểm tối đa)
 FA_MARGIN_FLAG = 150        # Chứng khoán: Margin/VCSH (%) trên mức này chỉ gắn nhãn rủi ro, không trừ điểm
 FA_BASE_LOW_CAP = 0.8       # tăng trưởng LNST > 200% thường do nền thấp: không chấm tối đa
@@ -557,6 +559,15 @@ def ta_score(g: pd.DataFrame) -> tuple[int | None, list[str]]:
     return (int(round(got / mx * 100)), tags) if mx >= 40 else (None, [])
 
 
+def total_score(fa, ta, sys_pts) -> float | None:
+    """Tổng điểm = bình quân có trọng số của FA, TA và điểm hệ thống (Score của app × 10) theo W_FA / W_TA / W_SYS.
+    Thiếu thành phần nào thì chia lại trọng số cho các thành phần còn lại; không có thành phần nào thì trả về None."""
+    parts = [(w, float(v)) for w, v in ((W_FA, fa), (W_TA, ta), (W_SYS, sys_pts)) if v is not None and np.isfinite(v)]
+    if not parts:
+        return None
+    return float(min(100.0, max(0.0, sum(w * v for w, v in parts) / sum(w for w, _ in parts))))
+
+
 def grade_of(pct: float) -> str:
     return next(g for lo, g in GRADES if pct >= lo)
 
@@ -686,7 +697,8 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             fa_tags = [f"Cơ bản yếu (FA dưới {FA_WEAK})"] + list(fa_tags)
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
-        total = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
+        sys_pts = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
+        total = total_score(fa, ta, sys_pts)
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
         rec = recommend(close, buy, stop, sell, wbreason, status)
         name, sector = meta_fn(code) if meta_fn else ("", "")
@@ -695,7 +707,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             "Mã": code, "Tên": name, "Ngành": sector, "Sàn": exch, "Giá": close,
             "Chg": close - prev if np.isfinite(prev) else np.nan, "Chg %": (close / prev - 1) * 100 if prev else np.nan,
             "KL": float(g["Khối lượng khớp lệnh"].iat[-1]),
-            "Tổng điểm": total, "Hạng": grade_of(total) if total is not None else "",
+            "Tổng điểm": total, "Điểm hệ thống": sys_pts, "Hạng": grade_of(total) if total is not None else "",
             "Điểm mua": buy, "buy_auto": buy_auto, "Entry": entry,
             "Lãi": (close - entry) if entry else np.nan, "Lãi %": (close / entry - 1) * 100 if entry else np.nan,
             "Target": target, "target_auto": target_auto, "Cutloss": stop, "stop_auto": stop_auto,
@@ -833,6 +845,12 @@ def _bar(pct) -> str:
     return f'<div class="tp-bar"><i style="width:{max(0, min(100, float(pct))):.0f}%"></i></div>'
 
 
+def _score_tip(r) -> str:
+    """Chú thích khi rê chuột vào Tổng điểm: các thành phần và trọng số."""
+    f = lambda lab, v: f"{lab} {v:.0f}" if _ok(v) else f"{lab} —"
+    return f"{f('FA', r['FA'])} · {f('TA', r['TA'])} · {f('Hệ thống', r['Điểm hệ thống'])} (trọng số {W_FA:.0%} / {W_TA:.0%} / {W_SYS:.0%})"
+
+
 def _row_html(i: int, r, mode: str = "hold") -> str:
     nd = r.get("_nodata")
     if isinstance(nd, (bool, np.bool_)) and nd:
@@ -844,7 +862,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     sec = f'<div><span class="tp-sec">{_e(r["Ngành"])}</span></div>' if r["Ngành"] else ""
     chg = (f'<div class="{cls}" style="font-weight:700">{r["Chg"]:+.2f}</div><div class="{cls}" style="font-size:12px">{r["Chg %"]:+.2f}%</div>'
            if pd.notna(r["Chg"]) else '<span class="tp-mu">—</span>')
-    tot = (f'<span class="tp-score">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
+    tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else '<span class="tp-mu">—</span>')
     b = r["Điểm mua"]
     if isinstance(b, tuple):
@@ -932,7 +950,7 @@ def _price_html(r) -> str:
 def _score_cells(r) -> tuple[str, str, str, str]:
     """(Tổng điểm, FA, TA, Khuyến nghị) dạng HTML, dùng chung cho nhóm Chờ mua và Đang nắm giữ."""
     mu = '<span class="tp-mu">—</span>'
-    tot = (f'<span class="tp-score">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
+    tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else mu)
     if _ok(r["FA"]):
         fa = f'<span class="tp-sc">{int(r["FA"])}<small>/100</small></span>{_bar(r["FA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["FA tags"][:3])
@@ -1523,7 +1541,8 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
 
     f1, f2 = st.columns([5, 1.6])
     f1.markdown('<div class="vp-foot">🛡️ Danh mục Khuyến nghị độc quyền dành cho khách hàng VIP • Cập nhật giá &amp; chỉ báo tự động</div>'
-                '<div class="vp-disc">Tổng điểm = Score của app × 10 (hạng A ≥ 75, B ≥ 60, C ≥ 40). FA chấm từ ROE, P/E, P/B; TA chấm từ MA20, MA50, MA200, RSI và khối lượng. '
+                f'<div class="vp-disc">Tổng điểm = {W_FA:.0%} FA + {W_TA:.0%} TA + {W_SYS:.0%} điểm hệ thống (Score của app × 10); hạng A ≥ 75, B ≥ 60, C ≥ 40. '
+                'FA chấm từ ROE, P/E, P/B (ngành có bảng riêng thì chấm theo ngành); TA chấm từ MA20, MA50, MA200, RSI và khối lượng. '
                 'Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.</div>', unsafe_allow_html=True)
     if on_filter and f2.button("🔽 Mở trong Bộ lọc cổ phiếu", use_container_width=True):
         on_filter()
