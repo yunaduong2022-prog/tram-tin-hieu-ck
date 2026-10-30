@@ -454,6 +454,8 @@ def screener_cached(_frames: dict, mkt: pd.Series, key: str) -> pd.DataFrame:
 mkt, mkt_src = market_cached(raw, WY_KEY)
 res_df = screener_cached(frames, mkt, WY_KEY + "|" + E.ENGINE_VERSION).copy()
 res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
+_gt = df.groupby("Mã").tail(20)       # GTGD trung bình 20 phiên (tỷ đồng) = giá (nghìn đồng) x khối lượng / 1 triệu; tail() trả về bản sao nên không đụng frames dùng chung
+res_df["GTGD20"] = res_df["Mã"].map((_gt["Giá đóng cửa"] * _gt["Khối lượng khớp lệnh"] / 1e6).groupby(_gt["Mã"]).mean().round(1))
 res_df["_wy"] = res_df["Mã"].map(WY_TABLE.get)
 res_df["Wyckoff"] = res_df["_wy"].map(WYK.label)
 
@@ -569,32 +571,67 @@ def wy_match(w, sel):
                or (s.startswith("Pha ") and w["phase"] == s[-1]) for s in sel)
 
 
+GTGD_DEFAULT = 0.0      # GTGD20 tối thiểu (tỷ đồng) mặc định của ô lọc thanh khoản; 0 = không lọc. Đặt 5-10 nếu muốn mặc định loại mã kém thanh khoản.
+_FP_DEFAULTS = {"fp_alerts": ALERT_OPTS, "fp_zones": ["High", "Mid-Sell", "Low"], "fp_score": 0.0, "fp_rs": 0.80, "fp_vol": 0.0,
+                "fp_gtgd": GTGD_DEFAULT, "fp_align": "Tất cả", "fp_ma": "Tất cả", "fp_pos52": "Tất cả", "fp_groups": [], "fp_wy": [],
+                "fp_flow": [], "fp_search": "", "fp_above200": False}
+# Preset một cú bấm: ngưỡng là gợi ý khởi đầu, hãy chỉnh theo phong cách giao dịch của bạn (nên kiểm tra bằng backtest)
+FILTER_PRESETS = {
+    "Xu hướng khỏe": dict(fp_score=6.0, fp_rs=1.0, fp_above200=True, fp_gtgd=10.0),
+    "Dòng tiền vào sớm": dict(fp_flow=["Dòng tiền sớm (gom ngầm)"], fp_vol=1.2, fp_gtgd=10.0),
+    "Gần đỉnh 52 tuần": dict(fp_pos52="Gần Đỉnh 52 tuần (≤ 5%)", fp_rs=1.0, fp_gtgd=10.0),
+}
+_FP_ADV = ("fp_alerts", "fp_zones", "fp_align", "fp_ma", "fp_pos52", "fp_wy", "fp_flow")      # các ô nằm trong mục "Nâng cao"
+
+
+def _fp_apply(preset):
+    """Callback nút preset / xóa lọc: đặt lại mọi ô về mặc định rồi áp preset (chạy TRƯỚC khi các ô được vẽ lại)."""
+    for k_, v_ in _FP_DEFAULTS.items():
+        st.session_state[k_] = list(v_) if isinstance(v_, list) else v_
+    for k_, v_ in FILTER_PRESETS.get(preset, {}).items():
+        st.session_state[k_] = list(v_) if isinstance(v_, list) else v_
+
+
 def filter_panel():
-    with st.expander("🔍 Bộ lọc nâng cao", expanded=True):
+    ss = st.session_state
+    for k_, v_ in _FP_DEFAULTS.items():
+        ss.setdefault(k_, list(v_) if isinstance(v_, list) else v_)
+    _btn = {"width": "stretch"} if "width" in inspect.signature(st.button).parameters else {"use_container_width": True}
+    all_groups = [g_ for g_ in WL.group_names() if g_ != WL.OLD] + ["Khác"]
+    with st.expander("🔍 Bộ lọc", expanded=True):
+        pc = st.columns(len(FILTER_PRESETS) + 1)
+        pc[0].button("↺ Xóa lọc", key="fp_btn_reset", on_click=_fp_apply, args=(None,), **_btn)
+        for i_, name_ in enumerate(FILTER_PRESETS, start=1):
+            pc[i_].button(name_, key=f"fp_btn_{i_}", on_click=_fp_apply, args=(name_,), **_btn,
+                          help="Ngưỡng gợi ý: " + ", ".join(f"{k_[3:]}={v_}" for k_, v_ in FILTER_PRESETS[name_].items()))
         a1, a2, a3, a4 = st.columns(4)
-        alerts = a1.multiselect("Cảnh báo / Tín hiệu", ALERT_OPTS, default=ALERT_OPTS,
-                                help="MUA/BÁN: giá + khối lượng · Crossover: MACD/Fisher vừa cắt lên (3 phiên) · "
-                                     "Đáy KT: WaveTrend quá bán + RS ổn định")
-        zones = a2.multiselect("Zone", ["High", "Mid-Sell", "Low"], default=["High", "Mid-Sell", "Low"])
-        min_score = a3.slider("Score tối thiểu (0-10)", 0.0, 10.0, 0.0, 0.5, help="≥ 5 = trung bình khá trở lên")
-        min_rs = a4.slider("RS vs VNI tối thiểu", 0.80, 1.50, 0.80, 0.01,
+        min_score = a1.slider("Score tối thiểu (0-10)", 0.0, 10.0, step=0.5, key="fp_score", help="≥ 5 = trung bình khá trở lên")
+        min_rs = a2.slider("RS vs VNI tối thiểu", 0.80, 1.50, step=0.01, key="fp_rs",
                            help="RS = hiệu suất 20 phiên của mã / của thị trường. Đặt 1.00 để chỉ lấy mã mạnh hơn thị trường")
-        b1, b2, b3, b4 = st.columns(4)
-        min_vol = b1.slider("Vol/Avg10 tối thiểu", 0.0, 5.0, 0.0, 0.1, help="Ví dụ 1.2 = bắt đầu có dòng tiền tăng")
-        align = b2.selectbox("MA Alignment (MA10>20>50>100>200)", ["Tất cả", "Đã align", "Chưa align"])
-        ma_trend = b3.selectbox("Khung cấu trúc - MA", MA_OPTS)
-        pos52 = b4.selectbox("Vị trí giá so với 52 tuần", ["Tất cả", "Gần Đỉnh 52 tuần (≤ 5%)", "Gần Đáy 52 tuần (≤ 10%)"])
-        c1, c2, c3, c4 = st.columns(4)
-        all_groups = [g_ for g_ in WL.group_names() if g_ != WL.OLD] + ["Khác"]
-        groups = c1.multiselect("Nhóm ngành", all_groups, default=[], placeholder="Tất cả nhóm",
+        min_vol = a3.slider("Vol/Avg10 tối thiểu", 0.0, 5.0, step=0.1, key="fp_vol", help="Ví dụ 1.2 = bắt đầu có dòng tiền tăng")
+        min_gtgd = a4.number_input("GTGD TB20 tối thiểu (tỷ đồng)", min_value=0.0, step=1.0, format="%.0f", key="fp_gtgd",
+                                   help="Giá trị giao dịch trung bình 20 phiên. Mã kém thanh khoản khó mua bán đúng giá dù tín hiệu đẹp.")
+        b1, b2, b3 = st.columns([2, 1, 1])
+        groups = b1.multiselect("Nhóm ngành", all_groups, placeholder="Tất cả nhóm", key="fp_groups",
                                 help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
-        wy = c2.multiselect("Wyckoff (pha / cấu trúc)", WY_OPTS, default=[], placeholder="Tất cả",
-                            help="Chọn nhiều = khớp bất kỳ mục nào. Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
-        flow = c3.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), default=[],
-                              help="Chọn nhiều mục = phải thoả tất cả")
-        search = c4.text_input("Tìm mã", "").upper()
-        above200 = c4.checkbox("Chỉ lấy mã nằm trên MA200")
-    return dict(alerts=alerts, zones=zones, min_score=min_score, min_rs=min_rs, min_vol=min_vol, align=align,
+        search = b2.text_input("Tìm mã", key="fp_search").upper()
+        above200 = b3.checkbox("Chỉ lấy mã nằm trên MA200", key="fp_above200")
+        _n_adv = sum(ss[k_] != (list(_FP_DEFAULTS[k_]) if isinstance(_FP_DEFAULTS[k_], list) else _FP_DEFAULTS[k_]) for k_ in _FP_ADV)
+        with st.expander("⚙️ Nâng cao" + (f" · đang bật {_n_adv}" if _n_adv else ""), expanded=False):
+            c1, c2, c3 = st.columns(3)
+            alerts = c1.multiselect("Cảnh báo / Tín hiệu", ALERT_OPTS, key="fp_alerts",
+                                    help="MUA/BÁN: giá + khối lượng · Crossover: MACD/Fisher vừa cắt lên (3 phiên) · "
+                                         "Đáy KT: WaveTrend quá bán + RS ổn định")
+            zones = c2.multiselect("Zone", ["High", "Mid-Sell", "Low"], key="fp_zones")
+            wy = c3.multiselect("Wyckoff (pha / cấu trúc)", WY_OPTS, placeholder="Tất cả", key="fp_wy",
+                                help="Chọn nhiều = khớp bất kỳ mục nào. Pha C/D/E = đã có Spring/UT hoặc SOS/SOW.")
+            d1, d2, d3 = st.columns(3)
+            align = d1.selectbox("MA Alignment (MA10>20>50>100>200)", ["Tất cả", "Đã align", "Chưa align"], key="fp_align")
+            ma_trend = d2.selectbox("Khung cấu trúc - MA", MA_OPTS, key="fp_ma")
+            pos52 = d3.selectbox("Vị trí giá so với 52 tuần", ["Tất cả", "Gần Đỉnh 52 tuần (≤ 5%)", "Gần Đáy 52 tuần (≤ 10%)"], key="fp_pos52")
+            flow = st.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), placeholder="Tất cả", key="fp_flow",
+                                  help="Chọn nhiều mục = phải thoả tất cả")
+    return dict(alerts=alerts, zones=zones, min_score=min_score, min_rs=min_rs, min_vol=min_vol, min_gtgd=min_gtgd, align=align,
                 ma_trend=ma_trend, pos52=pos52, groups=groups, wy=wy, flow=flow, search=search, above200=above200)
 
 
@@ -612,6 +649,8 @@ def apply_filters(d: pd.DataFrame, p: dict) -> pd.DataFrame:
         f = f[f["RS20"] >= p["min_rs"]]
     if p["min_vol"] > 0:
         f = f[f["Vol/Avg10"].fillna(0) >= p["min_vol"]]
+    if p.get("min_gtgd", 0) > 0 and "GTGD20" in f.columns:
+        f = f[f["GTGD20"].fillna(0) >= p["min_gtgd"]]
     if p["align"] != "Tất cả":
         f = f[f["MA align"] == p["align"]]
     if p["ma_trend"] != "Tất cả":
@@ -1049,7 +1088,8 @@ def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua - Cắt lỗ - Mục tiêu (wb-*)
-    st.caption("Giữ nguyên các điều kiện lọc hiện tại. Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
+    st.caption("Chọn một bộ lọc nhanh hoặc tự chỉnh các ô bên dưới (mục Nâng cao có thêm điều kiện Cảnh báo, Zone, MA, Wyckoff, Dòng tiền). "
+               "Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
     f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
     st.divider()
     st.subheader("📋 Kết quả lọc")
