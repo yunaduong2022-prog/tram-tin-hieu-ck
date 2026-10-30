@@ -1,6 +1,7 @@
 # TCB - SIÊU CỔ PHIẾU NGÂN HÀNG HÀNG ĐẦU & CÂU CHUYỆN TĂNG VỐN LỊCH SỬ
 
 ## [Phần 1: Xu Hướng Kỹ Thuật Tổng Quan]
+* TCB sau khi chia xong 50% thì giá giảm còn 32.5 giảm còn 21.5, chia xong thì 1 cây sàn nhưng cũng chẳng ai mua bán, quỹ nó cơ cấu nên thế. Có hàng chúng ta cứ cầm sang 2027 rồi tính.
 • Ngắn hạn, TCB đang giao dịch giằng co tích lũy nền phẳng cực chặt quanh mốc thị giá 33.55. Áp lực bán đã hoàn toàn cạn kiệt với khối lượng thấp, luôn có lực cầu âm thầm đỡ giá ở các dải hỗ trợ.
 • Điểm cộng là xu hướng trung hạn của cổ phiếu vẫn đang giữ vững trạng thái tái tích lũy nền tảng vô cùng vững chãi (hệ thống đang hiển thị vùng nền màu xám quanh giá hiện tại). Chỉ cần một phiên dòng tiền lớn kích hoạt, TCB sẽ bứt phá ngay. Anh chị có hàng cứ tự tin nắm giữ vùng này!
 
