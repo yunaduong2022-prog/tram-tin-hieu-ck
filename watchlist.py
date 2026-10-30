@@ -25,7 +25,7 @@ GROUPS: dict[str, list[str]] = {
                   "SSB", "EIB", "KLB", "NAB", "VAB", "NVB", "ABB", "BVB", "EVF",
                   "BAB", "VBB", "SGB", "PGB", "PCB", "TIN"],
     "Chứng khoán": ["SSI", "VND", "VCI", "HCM", "VIX", "SHS", "MBS", "FTS", "BSI", "CTS", "ORS", "TCX", "AGR", "TVS", "VDS",
-                    "VFS", "APG", "DSC", "BMS", "BVS", "IVS", "SBS", "PSI", "VPX", "LPS", "APS", "DSE", "AAS", "VIG", "VCK"],
+                    "VFS", "APG", "DSC", "BMS", "BVS", "IVS", "SBS", "PSI", "VPX", "LPS", "APS", "DSE", "AAS", "VIG", "VCK", "ABW"],
     "Bảo hiểm": ["BVH"],
     "Bất động sản": ["VHM", "VIC", "VRE", "NVL", "KDH", "DXG", "DIG", "CEO", "PDR", "NLG", "KBC", "IDC", "SZC", "BCM", "TCH",
                      "HDG", "AGG", "IJC", "HTN", "NTL", "HQC", "DXS", "SGR", "HHS", "HPX", "HDC", "LDG", "NBB", "SCR", "QCG",
