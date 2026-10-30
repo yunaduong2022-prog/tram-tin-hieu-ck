@@ -8,6 +8,8 @@ Và em ko thấy nó có tin gì bền vững để mua sau cái tin này cả. 
 
 # Mô hình KD của VIN em thấy trong 3-5 năm tới ko có vấn đề gì đâu mn.
 
+VIN thì nó xây rất là nhanh & nó đáp ứng đầy đủ tiến độ. Nên nếu những đề xuất này được thông qua thì nó sẽ có lợi cho VIN.
+
 Có vẻ càng ngày nó càng vững chắc hơn thì phải.
 
 ## Còn những Luật siết về BĐ gần đây thì nó sẽ tác động dần dần
