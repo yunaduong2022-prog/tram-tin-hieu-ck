@@ -650,7 +650,8 @@ def _script(code: str, tf: str) -> str:
 
 def inject(code: str, tf: str):
     """Gắn thanh công cụ vẽ vào biểu đồ nến của `code` ở khung `tf` (D/W/M). Cùng cách gắn với crosshair.inject()."""
-    html = _script(code, tf)
+    tfs = [tf] if isinstance(tf, str) else list(tf)                  # inject(code, ("D", "W")): một iframe chứa nhiều bản (Livestream có cả biểu đồ Ngày và Tuần)
+    html = "".join(_script(code, t) for t in tfs)
     try:
         import streamlit.components.v1 as components
         components.html(html, height=0)
