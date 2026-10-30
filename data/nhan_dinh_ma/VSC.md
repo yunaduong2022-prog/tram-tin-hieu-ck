@@ -1,4 +1,4 @@
-# VSC - Đánh theo tín hiệu kỹ thuật
+# VSC - Đánh theo tín hiệu kỹ thuật - Tuần này nếu nó lủng hỗ trợ 12.5 thì lại dò đáy
 
 Con này thì em không KN mn vào dài làm gì cả. Đánh theo tín hiệu, mua break, nó xịt thì bán.
 
