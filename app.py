@@ -259,23 +259,31 @@ def drop_small_caps(raw: pd.DataFrame, min_bn: float = MIN_CAP_BN) -> pd.DataFra
     return raw[~raw["Mã"].isin(small)] if small else raw
 
 
+W_KEEP = 260           # số nến TUẦN gần nhất được giữ trong bộ nhớ (khoảng 5 năm). 0 = giữ hết.
+KEEP_F64 = {"Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh", "AD",
+            "Resistance_20", "Support_20", "Tenkan", "Kijun", "SpanA", "SpanB", "Chikou_ref"}   # cột giá / mức giá / tích lũy: giữ float64 để so sánh bằng không bị lệch
 DAILY_KEEP = 750       # số phiên gần nhất của khung Ngày được giữ trong bộ nhớ (khoảng 3 năm). Tuần / Tháng vẫn giữ toàn bộ lịch sử. 0 = giữ hết.
 
 
-@st.cache_data(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...")
+@st.cache_resource(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...", max_entries=2)
 def build_frames(raw: pd.DataFrame, ver: str = "") -> dict:
     parts = {"D": [], "W": [], "M": []}
     for _, g in raw.groupby("Mã"):
         base = g[["Mã", "Ngày"] + E.NUMERIC_COLS]
         for tf in parts:
             f_ = E.add_indicators(E.resample_ohlcv(base, tf))      # chỉ báo luôn tính trên TOÀN BỘ lịch sử (EMA200, Ichimoku... không đổi giá trị)
-            parts[tf].append(f_.tail(DAILY_KEEP) if tf == "D" and DAILY_KEEP else f_)   # rồi chỉ giữ lại phần đuôi của khung Ngày để đỡ tốn RAM
+            keep_ = DAILY_KEEP if tf == "D" else W_KEEP if tf == "W" else 0
+            parts[tf].append(f_.tail(keep_) if keep_ else f_)   # rồi chỉ giữ lại phần đuôi của khung Ngày / Tuần để đỡ tốn RAM
     frames = {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
     frames["D"] = E.mask_chg_gaps(frames["D"])     # % thay đổi chỉ tính so với phiên kề trước, thiếu phiên thì hiện "—"
-    return frames
+    for f_ in frames.values():                      # cột chỉ báo float64 -> float32 (giá, khối lượng, mức giá giữ float64)
+        for c_ in f_.select_dtypes("float64").columns:
+            if c_ not in KEEP_F64:
+                f_[c_] = f_[c_].astype("float32")
+    return frames       # cache_resource: mọi phiên dùng chung MỘT bản này, KHÔNG được sửa trực tiếp (cần sửa thì .copy() trước)
 
 
-@st.cache_data(show_spinner="Đang phân tích...")
+@st.cache_data(show_spinner="Đang phân tích...", max_entries=30)
 def analyze_cached(_frames: dict, code: str, tf: str, key: str) -> dict:
     g = _frames[tf]
     return E.analyze_frame(g[g["Mã"] == code], tf)
@@ -296,7 +304,7 @@ def load_vnstock_quotes(symbols_tuple: tuple[str, ...]):
 def load_vn30():
     return WL.fetch_vn30()
 
-@st.cache_data(show_spinner="Đang nhận diện cấu trúc Wyckoff cho cả rổ...")
+@st.cache_data(show_spinner="Đang nhận diện cấu trúc Wyckoff cho cả rổ...", max_entries=2)
 def wyckoff_table(_df: pd.DataFrame, key: str) -> dict:
     out = {}
     for code, g in _df.groupby("Mã"):
@@ -314,6 +322,11 @@ HAS_EOD = os.path.exists(EOD_CSV)
 
 with st.sidebar:
     st.caption(f"Engine {E.ENGINE_VERSION}")
+    try:                                    # đồng hồ RAM tạm thời để đo hiệu quả tối ưu; xóa khối này khi không cần
+        import psutil
+        st.caption(f"🧠 RAM tiến trình: {psutil.Process(os.getpid()).memory_info().rss / 1e6:.0f} MB")
+    except Exception:  # noqa: BLE001
+        pass
     st.header("📂 Dữ liệu")
     data_mode = st.radio("Nguồn dữ liệu", [MODE_EOD, MODE_XLS, MODE_LIVE], index=0 if HAS_EOD else 1,
                          help="Cuối phiên: file data/eod_prices.csv do lịch tự động cập nhật sau giờ đóng cửa (khuyến nghị). "
@@ -418,12 +431,12 @@ elif data_mode == MODE_EOD:
                + (" · ⚠ có vẻ chưa cập nhật phiên gần nhất, kiểm tra tab Actions trên GitHub" if _stale > 4 else ""))
 
 # ------------------------------------------------------------------ BẢNG THEO DÕI
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=2)
 def market_cached(_raw: pd.DataFrame, key: str):
     return E.market_series(_raw)
 
 
-@st.cache_data(show_spinner="Đang tính Score, RS, MACD/Fisher, MA...")
+@st.cache_resource(show_spinner="Đang tính Score, RS, MACD/Fisher, MA...", max_entries=2)
 def screener_cached(_frames: dict, mkt: pd.Series, key: str) -> pd.DataFrame:
     return E.build_screener(_frames, mkt)
 
@@ -438,7 +451,7 @@ res_df["Wyckoff"] = res_df["_wy"].map(WYK.label)
 INDEX_LIST = sorted({str(c_) for c_ in df["Mã"].unique() if str(c_).upper() in E.INDEX_CODES} - set(res_df["Mã"]))
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=10)
 def index_row_cached(_frames: dict, _mkt: pd.Series, code: str, key: str):
     sub_ = {tf_: g_[g_["Mã"] == code] for tf_, g_ in _frames.items()}
     r_ = E.build_screener(sub_, _mkt, skip_index=False)
@@ -473,7 +486,7 @@ def _lean_html(code) -> str:
     return ""
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=3)
 def _wb_rows(key: str) -> dict:
     """Trạng thái chờ mua / lý do / vùng mua của từng mã (từ bảng Chờ mua), dùng cho khối Tóm tắt nhanh."""
     t = _wb_table()
@@ -883,13 +896,13 @@ def res_text(r):
 _TREND_CLS = {"Tăng": "c-green", "Giảm": "c-red"}      # còn lại (Tích lũy) màu vàng
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=30)
 def divergence_cached(_frames: dict, code: str, key: str) -> list:
     """Phân kỳ RSI/giá khung D và W của một mã (xem rsi_divergence.py)."""
     return DV.analyze(_frames, code, ("M", "W", "D"))
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=30)
 def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     pick = lambda tf: _frames[tf][_frames[tf]["Mã"] == code]
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
@@ -1162,7 +1175,7 @@ def page_filter():
                         NAV.goto("Cổ phiếu", "Biểu đồ")
 
 # ------------------------------------------------------------------ TRANG: CỔ PHIẾU CHỜ MUA TRONG TUẦN
-@st.cache_data(show_spinner="Đang nhận diện trạng thái chờ mua cho cả rổ...")
+@st.cache_data(show_spinner="Đang nhận diện trạng thái chờ mua cho cả rổ...", max_entries=3)
 def waiting_cached(_frames: dict, _screener: pd.DataFrame, key: str) -> pd.DataFrame:
     return WB.build_waiting_buy(_frames, _screener)
 
