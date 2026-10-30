@@ -87,22 +87,23 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
     with left:
         st.markdown(f'<div class="dd-bench"><b>VNINDEX (chỉ số cơ sở)</b><span>Giai đoạn <b class="{_cls(bench.get("per")).replace("nn-", "dd-")}">{_pct(bench.get("per"), 1)}</b></span>'
                     f'<span>Ngày <b class="{_cls(bench.get("day")).replace("nn-", "dd-")}">{_pct(bench.get("day"), 1)}</b></span></div>', unsafe_allow_html=True)
-        view = pd.DataFrame({"#": d["#"], "Ngành / Dòng": np.where(d["Dẫn sóng"], d["Dòng"] + "  ·  DẪN SÓNG", d["Dòng"]), "Số mã": d["Số mã"],
-                             "Biến động giai đoạn": d["Giai đoạn"], "Biến động ngày": d["Ngày"]})
-        names = list(d["Dòng"])
+        view = pd.DataFrame({"Hạng": d["#"], "Ngành / Dòng": np.where(d["Dẫn sóng"], d["Dòng"] + "  ·  DẪN SÓNG", d["Dòng"]), "Số mã": d["Số mã"],
+                             "Biến động giai đoạn": d["Giai đoạn"], "Biến động ngày": d["Ngày"]}).sort_values("Hạng").reset_index(drop=True)   # xếp theo Hạng 1, 2, 3...
+        names = list(d.sort_values("#")["Dòng"])             # cùng thứ tự với bảng để chọn dòng đúng
+        cfg = {"Hạng": st.column_config.NumberColumn("Hạng", width="small", format="%d"), "Số mã": st.column_config.NumberColumn("Số mã", width="small", format="%d")}
         styler = _styler(view, ["Biến động giai đoạn", "Biến động ngày"])
         height = min(640, 40 + 36 * len(view))
         picked = None
         ev = None
         for mode in ("single-cell", "single-row"):          # bản Streamlit mới: bấm vào ô bất kỳ trong hàng; bản cũ hơn: tích ô vuông đầu hàng
             try:
-                ev = st.dataframe(styler, hide_index=True, **ND.stretch(st.dataframe), height=height, on_select="rerun", selection_mode=mode,
+                ev = st.dataframe(styler, hide_index=True, **ND.stretch(st.dataframe), height=height, on_select="rerun", selection_mode=mode, column_config=cfg,
                                   key=f"dds_table_{mode}_{n}")
                 break
             except Exception:  # noqa: BLE001
                 ev = None
         if ev is None:                                       # không có on_select: chọn bằng ô chọn
-            st.dataframe(styler, hide_index=True, **ND.stretch(st.dataframe), height=height)
+            st.dataframe(styler, hide_index=True, **ND.stretch(st.dataframe), height=height, column_config=cfg)
             picked = st.selectbox("Chọn dòng để xem cổ phiếu", names, key="dds_pick")
         else:
             try:
