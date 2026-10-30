@@ -9,3 +9,13 @@ Và việc giá nó bị giảm như vậy có thể làm cho những thành vi�
 Thì cái khả năng những người đang sở hữu tăng gấp đôi lượng cp lên làm vi phạm tỷ lệ sở hữu, có khả năng cướp cty.
 
 Mà bà Dung, là chủ, linh hồn của PNJ mà lại hành động như vậy thì cái mà mọi người mua chỉ là "hào quang của quá khứ"
+
+## Và PNJ hiện tại nó phải trích lập ra 6000-7000 tỷ để phòng cái trường hợp ngta đem hàng ra bán lại, thì cái mô hình hiện tại của nó rất là rủi ro:
+
+Khi nó mua hàng lại thì cái hàng đó nó bán cho ai? Tồn kho của PNJ đang rất cao, và bài toán làm sao để nó giải quyết đc lượng tồn kho đó là vấn đề ko phải ngày 1 ngày 2.
+
+## Và cái người đem hàng ra PNJ bán, họ phải bán với giá thấp hơn rất là nhiều, thì mn nghĩ sau này họ có quay lại mua hàng của PNJ nữa ko?
+
+Là em thì e ko quay lại. Đã mua hàng đắt tiền nghĩ là tích trữ cho đời con cháu trong tương lai, mà h đem ra bán chưa dc 1 nửa, còn ko có thanh khoản, phải chờ tiền về.
+
+## Khi chúng ta đã kinh doanh 1 thương hiệu, mất chữ tín là mất tất
