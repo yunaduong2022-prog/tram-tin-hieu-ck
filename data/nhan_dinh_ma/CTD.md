@@ -2,8 +2,7 @@
 
 ## Xu hướng kỹ thuật
 
-Nhìn vào biểu đồ, CTD hiện đang giao dịch quanh vùng 67.000 – 68.000 đồng sau nhịp giảm từ vùng đỉnh trước đó.
-Ngắn hạn, cổ phiếu đang tích lũy trở lại với thanh khoản giảm nhẹ, cho thấy áp lực bán đang dịu đi. Dòng tiền mua chủ động cần gia tăng để xác nhận nhịp hồi phục rõ nét.
+Sau cây break ngày 7/10 thì nó có 1 cái nhịp tăng dài khá là đẹp. Ngắn hạn, nó giảm gần đung MA20(D) thì chúng ta nên bán đi, thì bán T6 vừa rồi hay tuần này cũng được. Nhưng hôm qua khi em thấy nó thủng MA20 khung 1h thì chúng ta đã nên bán đi rồi. Đây là 1 cổ phiếu rất là khỏe trong giai đoạn vừa rồi nhưng cũng bị gãy, nên là hiện tại chúng ta cần quan sát thêm.
 
 ## Về trung hạn:
 
