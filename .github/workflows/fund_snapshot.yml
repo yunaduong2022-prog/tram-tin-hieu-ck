@@ -1,0 +1,52 @@
+name: Chụp dữ liệu cơ bản hàng tháng
+
+on:
+  # Ngày 1 hằng tháng, 10:00 giờ Việt Nam (UTC+7). Chụp đúng số đang có trong kho tại thời điểm đó.
+  schedule:
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Chụp lại dù tháng này đã có ảnh chụp"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fund-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Không cần cài streamlit: telegram_vip_alert.py tự dùng bản giả tối thiểu khi máy chưa có
+      - name: Cài thư viện
+        run: pip install pandas numpy
+
+      - name: Chụp dữ liệu cơ bản
+        run: python snapshot_fundamentals.py ${{ inputs.force && '--force' || '' }}
+
+      - name: Ghi lại vào kho
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/fundamentals_history.csv
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi để ghi."
+          else
+            git commit -m "Chụp dữ liệu cơ bản $(date +%Y-%m)"
+            git pull --rebase origin main
+            git push origin main
+          fi
