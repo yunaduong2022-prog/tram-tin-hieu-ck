@@ -2,11 +2,11 @@
 
 Em khá là kỳ vọng hiện tại là đáy của thanh khoản thị trường.
 
-* Thị trường có thể yếu hơn, có thể giảm thêm
+## Thị trường có thể yếu hơn, có thể giảm thêm
 
 nhưng mà với mức thanh khoản hiện tại nó phù hợp với cái Giai đoạn hiện tại của nền Kinh tế rồi.
 
-* Chúng ta cũng đã trải qua rất nhiều Các vấn đề cải cách từ năm ngoái:
+## Chúng ta cũng đã trải qua rất nhiều Các vấn đề cải cách từ năm ngoái:
 
 Cải cách về THUẾ, cải cách Những quy định Siết chặt của Pháp luật. Xong rồi bắt bớ rất nhiều những cái vụ "đào lửa".
 
@@ -18,7 +18,7 @@ Nếu mà Thanh khoản Trung bình của Quý 3 vừa rồi là 18.000 tỷ. Nh
 
 Thì hiện tại mức thanh khoản này mang tính chất ổn định - Bởi vì Để mà Đục sâu tới Cái mức Thanh khoản hiện tại như thế này đã là KHÓ rồi.
 
-* Nên em đánh giá hiện tại Nhóm Chứng khoán  là đang ở vùng TIỆM CẬN ĐÁY CỦA THANH KHOẢN rồi.
+## Nên em đánh giá hiện tại Nhóm Chứng khoán  là đang ở vùng TIỆM CẬN ĐÁY CỦA THANH KHOẢN rồi.
 
 Còn lúc nào thanh khoản tăng trở lại thì em không biết. Nhưng mà Nhóm Chứng Khoán _ hoạt động kinh doanh của nó gắn chặt với thanh khoản thị trường.
 
