@@ -1,5 +1,7 @@
 # HDB – Ngân hàng tăng trưởng cao, hiệu quả sinh lời nổi bật
 
+## STB, HDB: đang chạy game. TCB, MBB: dạng nắm giữ hàng cơ bản => Ưu tiên STB, TCB
+
 Chào anh chị cổ đông HDB! AD đánh giá nhanh siêu cổ phiếu bank triệu tỷ này dựa trên các tiêu chí ngành hiển thị trên màn hình nhé:
 
 • Về kỹ thuật: HDB ngắn hạn đang giằng co vùng 21.500 - 22.500 sau chia cổ tức 30%, áp lực bán đã cạn kiệt với vol thấp và nến rút chân rất đẹp. Xu hướng trung hạn vẫn đang tái tích lũy tốt.
