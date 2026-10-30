@@ -2,7 +2,7 @@
 
 Nguồn số liệu: data/xep_hang_nganh.csv, nhập tay theo các bảng xếp hạng ngành. Mỗi dòng là một mã; cột "Ngành" phải trùng tên nhóm ngành trong
 watchlist.GROUPS (vd. "Ngân hàng", "Hàng công nghiệp"); cột "STT" giữ đúng thứ tự dòng của bảng gốc; "Kỳ" và "Cập nhật nguồn" ghi kỳ và ngày của bảng gốc.
-Chỉ lấy cổ phiếu đại diện ngành có vốn hóa từ MIN_VON_HOA (900 tỷ) trở lên. Ô trống = bảng gốc không có số ("-"). Đơn vị: Vốn hóa tỷ đồng, EPS và Giá trị sổ sách đồng/cổ phiếu, các tỷ lệ tính theo %.
+Chỉ lấy cổ phiếu có vốn hóa từ MIN_VON_HOA trở lên (hiện 0 = lấy đủ). Ô trống = bảng gốc không có số ("-"). Đơn vị: Vốn hóa tỷ đồng, EPS và Giá trị sổ sách đồng/cổ phiếu, các tỷ lệ tính theo %.
 Muốn thêm ngành mới: thêm dòng vào CSV, và (nếu muốn đúng thứ tự cột của bảng gốc) khai báo thêm một mục trong LAYOUT bên dưới.
 
 Hai việc của module:
@@ -24,9 +24,10 @@ import pandas as pd
 import streamlit as st
 
 PATH = "data/xep_hang_nganh.csv"
-MIN_VON_HOA = 900        # tỷ đồng: chỉ lấy cổ phiếu đại diện ngành có vốn hóa từ mức này trở lên (dòng nhỏ hơn bị bỏ qua khi đọc file)
+MIN_VON_HOA = 0          # tỷ đồng: chỉ lấy cổ phiếu có vốn hóa từ mức này trở lên (0 = hiện đủ mọi mã trong bảng gốc; muốn lọc mã nhỏ thì đặt lại, vd. 900)
 _NUM = ["STT", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B", "Giá trị sổ sách",
-        "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT"]
+        "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT",
+        "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "Tăng trưởng tín dụng", "Tăng trưởng huy động", "CIR", "LDR"]
 
 # cột -> (tiêu đề, kiểu định dạng, căn lề)
 COLS = {
@@ -42,22 +43,35 @@ COLS = {
     "ROE": ("ROE", "pct", ""), "ROA": ("ROA", "pct", ""), "NIM": ("NIM", "pct", ""), "LLR": ("LLR", "pct", ""), "CASA": ("CASA", "pct", ""),
     "DTT": ("DTT", "eps", ""),
     "LNST công ty mẹ": ("LNST<small>công ty mẹ</small>", "eps", ""),
-    "Tăng trưởng DTT": ("Tăng trưởng DTT<small>YoY</small>", "eps", ""),
+    "Tăng trưởng DTT": ("Tăng trưởng DTT<small>YoY</small>", "pct", ""),
+    "Tăng trưởng LNST": ("Tăng trưởng LNST<small>công ty mẹ</small>", "pct", ""),
+    "BLN môi giới": ("BLN<small>môi giới</small>", "pct", ""),
+    "Margin/VCSH": ("Margin/VCSH", "pct", ""),
+    "Tăng trưởng tín dụng": ("Tăng trưởng<small>tín dụng</small>", "pct", ""),
+    "Tăng trưởng huy động": ("Tăng trưởng<small>huy động</small>", "pct", ""),
+    "CIR": ("CIR", "pct", ""), "LDR": ("LDR", "pct", ""),
 }
 # thứ tự cột theo bảng gốc của từng ngành
 LAYOUT = {
-    "Ngân hàng": ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B", "ROE", "ROA", "NIM", "LLR", "CASA"],
+    "Ngân hàng": ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B",
+                  "Tăng trưởng tín dụng", "Tăng trưởng huy động", "ROE", "ROA", "NIM", "LLR", "CASA", "CIR", "LDR"],
+    "Chứng khoán": ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B",
+                    "LNST công ty mẹ", "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "ROE"],
 }
 _LAYOUT_ND = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
               "ROE", "ROA", "DTT", "LNST công ty mẹ"]            # bố cục của các bảng ngành phi ngân hàng
-LAYOUT["Hàng công nghiệp"] = LAYOUT["Bán lẻ"] = LAYOUT["Vật liệu xây dựng"] = LAYOUT["Điện"] = LAYOUT["Đa ngành"] = LAYOUT["Họ Gelex"] = _LAYOUT_ND
+LAYOUT["Khu công nghiệp"] = LAYOUT["Hàng công nghiệp"] = LAYOUT["Bán lẻ"] = LAYOUT["Vật liệu xây dựng"] = LAYOUT["Điện"] = LAYOUT["Đa ngành"] = LAYOUT["Họ Gelex"] = _LAYOUT_ND
 LAYOUT["Vận tải biển hàng hóa"] = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
                                    "ROE", "ROA", "LNST công ty mẹ", "Tăng trưởng DTT"]
+LAYOUT["Dầu khí"] = LAYOUT["Khai khoáng"] = [\
+    "Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
+    "ROE", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT"]
 DEFAULT_LAYOUT = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách", "ROE", "ROA"]
 
 
 _CANON = ["Ngành", "STT", "Mã", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B",
-          "Giá trị sổ sách", "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT", "Kỳ", "Cập nhật nguồn"]
+          "Giá trị sổ sách", "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT", "Kỳ", "Cập nhật nguồn",
+          "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "Tăng trưởng tín dụng", "Tăng trưởng huy động", "CIR", "LDR"]
 _ERR = ""          # thông báo lỗi đọc file gần nhất ("" = đọc tốt); render_section hiển thị để dễ sửa file
 
 
@@ -245,6 +259,6 @@ def render_section(sector: str | None) -> None:
     with st.expander("ℹ️ Cách đọc"):
         st.markdown("- **Xếp hạng** là thứ hạng tổng hợp trong ngành; **tài chính** và **kinh doanh** là hạng theo từng nhóm chỉ tiêu (số nhỏ là tốt hơn). "
                     "Thứ tự dòng (STT) giữ đúng như bảng gốc.\n"
-                    "- **ROE, ROA** tính theo %. Với ngân hàng: **NIM** là biên lãi ròng, **LLR** là tỷ lệ bao phủ nợ xấu, **CASA** là tỷ lệ tiền gửi không kỳ hạn.\n"
+                    "- **ROE, ROA** tính theo %. Với ngân hàng: **NIM** là biên lãi ròng, **LLR** là tỷ lệ bao phủ nợ xấu, **CASA** là tỷ lệ tiền gửi không kỳ hạn, **CIR** là tỷ lệ chi phí trên thu nhập, **LDR** là tỷ lệ cho vay trên huy động. Với chứng khoán: **BLN môi giới** là biên lợi nhuận mảng môi giới, **Margin/VCSH** là dư nợ margin trên vốn chủ sở hữu.\n"
                     "- P/E, P/B, ROE, EPS, Giá trị sổ sách và Vốn hóa cũng được đưa vào dữ liệu cơ bản của app (thẻ Chờ mua, điểm FA ở Khuyến nghị khách hàng) "
                     "cho những ô app chưa có số; số nhập tay ở data/nhap_tay.csv luôn được ưu tiên.")
