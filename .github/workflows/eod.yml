@@ -30,7 +30,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 130
     steps:
       - uses: actions/checkout@v4
 
@@ -68,26 +68,55 @@ jobs:
           if [ -n "${{ inputs.start }}" ]; then ARGS="$ARGS --start ${{ inputs.start }}"; fi
           python eod_fetch.py $ARGS
 
+      - name: Lưu dữ liệu giá ngay (trước các bước phụ)
+        if: ${{ always() && inputs.probe == '' }}
+        timeout-minutes: 10
+        run: |
+          git config user.name "eod-bot"
+          git config user.email "eod-bot@users.noreply.github.com"
+          for f in data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv data/index_prices.csv data/nhom_von_hoa_gia.csv; do
+            [ -f "$f" ] && git add "$f"
+          done || true
+          if git diff --cached --quiet; then
+            echo "Không có thay đổi dữ liệu."
+            exit 0
+          fi
+          git commit -m "Dữ liệu cuối phiên $(TZ=Asia/Ho_Chi_Minh date +%d/%m/%Y)"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase --autostash && git push; then
+              echo "Push thành công."
+              exit 0
+            fi
+            echo "Push lỗi, thử lại lần $i sau $((i * 15)) giây..."
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 15))
+          done
+          echo "Push thất bại sau 5 lần thử."
+          exit 1
+
       - name: Cập nhật chỉ số nhóm vốn hóa (VN30, VNMidcap, VNSmallcap, VN100)
         if: ${{ always() && inputs.probe == '' }}
         continue-on-error: true
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        run: python update_index.py
+        timeout-minutes: 14
+        run: python update_index.py --member-minutes 8
 
       - name: Cập nhật vốn hóa (Mã, Vốn hóa TT)
         if: ${{ always() && inputs.probe == '' }}
         continue-on-error: true
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        run: python update_metadata.py
+        timeout-minutes: 10
+        run: python update_metadata.py --max-minutes 6
 
       - name: Cập nhật tên công ty, P/B, ROE
         if: ${{ always() && inputs.probe == '' }}
         continue-on-error: true
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        run: python update_fundamentals.py
+        timeout-minutes: 14
+        run: python update_fundamentals.py --max-minutes 9
 
       - name: Sao lưu dữ liệu ra artifact (phòng khi push lỗi)
         if: ${{ always() && inputs.probe == '' }}
@@ -99,11 +128,13 @@ jobs:
 
       - name: Lưu vào repo
         if: ${{ always() && inputs.probe == '' }}
+        timeout-minutes: 10
         run: |
           git config user.name "eod-bot"
           git config user.email "eod-bot@users.noreply.github.com"
-          git add data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv data/index_prices.csv
-          for f in data/nhom_von_hoa_gia.csv; do [ -f "$f" ] && git add "$f"; done || true
+          for f in data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/fundamentals.csv data/index_prices.csv data/nhom_von_hoa_gia.csv; do
+            [ -f "$f" ] && git add "$f"
+          done || true
           if git diff --cached --quiet; then
             echo "Không có thay đổi dữ liệu."
             exit 0
