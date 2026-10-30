@@ -1,0 +1,32 @@
+{
+ "latest": "2026-10-29",
+ "state": {
+  "BSR": "Đang nắm giữ|HẠ TỶ TRỌNG",
+  "CTD": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "DCL": "Đang nắm giữ|CHỐT BỚT",
+  "GMD": "Đang nắm giữ|HẠ TỶ TRỌNG",
+  "GVR": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "HCM": "Đang nắm giữ|NẮM GIỮ",
+  "HDB": "Đang nắm giữ|NẮM GIỮ",
+  "IDC": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "KBC": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "MSN": "Đang nắm giữ|NẮM GIỮ",
+  "MSR": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "MVN": "Đang nắm giữ|HẠ TỶ TRỌNG",
+  "MWG": "Đang nắm giữ|CHỐT BỚT",
+  "MZG": "Đang nắm giữ|HẠ TỶ TRỌNG",
+  "NVB": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "ORS": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "PHP": "Chờ mua|CHƯA NÊN MUA",
+  "PVS": "Chờ mua|CHƯA NÊN MUA",
+  "PVT": "Chờ mua|CHƯA NÊN MUA",
+  "SSI": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "TCB": "Đang nắm giữ|NẮM GIỮ",
+  "TPB": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "VCK": "Chờ mua|VÙNG MUA",
+  "VHM": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "VIC": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "VIX": "Chờ mua|CHỜ VỀ VÙNG MUA",
+  "VNM": "Đang nắm giữ|NẮM GIỮ"
+ }
+}
