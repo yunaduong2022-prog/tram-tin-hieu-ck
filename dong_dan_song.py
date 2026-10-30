@@ -131,7 +131,7 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
         desc = (f'<div class="dd-desc">{_html.escape(info["desc"])}<br><span style="color:var(--muted);font-size:12px">{note}</span></div>' if info.get("desc")
                 else f'<div class="dd-desc" style="color:var(--muted);font-size:12px">{note}</div>')
         st.markdown(f'<div class="dd-card"><div class="dd-head"><i style="width:13px;height:13px;border-radius:50%;background:{dot};display:inline-block"></i>'
-                    f'CỔ PHIẾU TRONG DÒNG: {_html.escape(name.upper())} ({k} MÃ CÓ DỮ LIỆU)</div>{desc}<div class="dd-list">{body}</div></div>', unsafe_allow_html=True)
+                    f'CỔ PHIẾU ĐẠI DIỆN NHÓM {_html.escape(name.upper())}</div>{desc}<div class="dd-list">{body}</div></div>', unsafe_allow_html=True)
         if not rep.empty and on_open is not None:
             ok = [str(c) for c in rep["Mã"] if openable is None or str(c) in openable]
             if ok:
