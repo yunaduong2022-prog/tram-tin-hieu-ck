@@ -1,8 +1,9 @@
 name: Tin Telegram Phân loại trạng thái
 
 on:
-  schedule:
-    - cron: "0 12 * * 1-5"      # 19:00 giờ Việt Nam (UTC+7), thứ Hai đến thứ Sáu
+  # TẠM TẮT (chỉ gửi nhóm VIP): bỏ dấu # ở các dòng bên dưới để bật lại tự chạy. Vẫn chạy tay được ở tab Actions > Run workflow.
+  # schedule:
+  #   - cron: "0 12 * * 1-5"      # 19:00 giờ Việt Nam (UTC+7), thứ Hai đến thứ Sáu
   workflow_dispatch:           # chạy tay: tab Actions > Run workflow
 
 permissions:

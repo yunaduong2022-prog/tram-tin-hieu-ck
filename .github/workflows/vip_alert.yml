@@ -9,6 +9,12 @@ on:
   workflow_run:
     workflows: ["Cập nhật dữ liệu cuối phiên"]
     types: [completed]
+  # Lịch dự phòng mỗi ngày (thứ Hai đến thứ Sáu), giờ Việt Nam = UTC+7. Không tải dữ liệu: chỉ gửi nếu kho đã có phiên mới hoặc danh mục / tín hiệu có thay đổi,
+  # nên chạy nhiều lần trong ngày cũng không gửi lặp (trạng thái đã gửi lưu ở data/vip_alert_state.json). GitHub có thể trễ vài phút.
+  schedule:
+    - cron: "30 9 * * 1-5"      # 16:30
+    - cron: "30 10 * * 1-5"     # 17:30
+    - cron: "30 11 * * 1-5"     # 18:30
   workflow_dispatch:
     inputs:
       dry_run:

@@ -2,13 +2,14 @@ name: Cảnh báo Wyckoff lên Telegram (tích lũy / phân phối)
 
 on:
   # Chạy ngay khi bạn đẩy dữ liệu cuối phiên mới lên GitHub (ví dụ từ update_eod.bat)
-  push:
-    branches: [main]
-    paths: ["data/eod_prices.csv"]
+  # TẠM TẮT (chỉ gửi nhóm VIP): bỏ dấu # ở các dòng bên dưới để bật lại tự chạy. Vẫn chạy tay được ở tab Actions > Run workflow.
+  # push:
+  #   branches: [main]
+  #   paths: ["data/eod_prices.csv"]
   # Hoặc khi workflow cập nhật dữ liệu cuối phiên chạy xong (bot đẩy bằng GITHUB_TOKEN không kích hoạt được trigger push)
-  workflow_run:
-    workflows: ["Cập nhật dữ liệu cuối phiên"]
-    types: [completed]
+  # workflow_run:
+  #   workflows: ["Cập nhật dữ liệu cuối phiên"]
+  #   types: [completed]
   workflow_dispatch:
     inputs:
       dry_run:
