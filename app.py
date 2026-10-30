@@ -152,9 +152,9 @@ TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GIÁ TRỊ MA20/MA50 ngày + tuần dưới dòng chỉ số, không vẽ đường
 CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
-LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "Bollinger",
+LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "MA20", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "MA20", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
@@ -2503,6 +2503,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     def line(col, name, color, w=1.2, dash=None):
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
 
+    if "MA20" in layers:              # ĐƯỜNG MA20 (trung bình giá đóng cửa 20 nến của khung đang xem); khác lớp MA_LAYER chỉ hiện giá trị. Dùng chung cho trang Cổ phiếu và Livestream
+        fig.add_trace(line("MA20", "MA20", "#F5A524", 1.6), row=1, col=1)
     if "EMA 50/200" in layers:
         fig.add_trace(line("EMA50", "EMA50", "#8B5CF6"), row=1, col=1)
         fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
@@ -3388,7 +3390,7 @@ def page_livestream():
         # Cho phép bật/tắt từng lớp chỉ báo ngay trong trang livestream.
         # Mặc định chỉ bật Khối lượng và Dual Ichimoku theo yêu cầu.
         layer_options = [
-            "Khối lượng", "Dual Ichimoku", MA_LAYER, "EMA 50/200", "Supertrend",
+            "Khối lượng", "Dual Ichimoku", MA_LAYER, "MA20", "EMA 50/200", "Supertrend",
             "Bollinger", "MACD", "RSI", "StochRSI", "VNINDEX",
             "RS vs VNINDEX", "Vùng giá", "Dự báo", "Elliott",
             "Wyckoff", "Tín hiệu quá khứ", "Hull Suite"
@@ -3396,9 +3398,9 @@ def page_livestream():
         layers = st.multiselect(
             "Chỉ báo hiển thị trên biểu đồ",
             options=layer_options,
-            default=["Khối lượng", "Dual Ichimoku", MA_LAYER],
+            default=["Khối lượng", "Dual Ichimoku", MA_LAYER, "MA20"],
             key="live_chart_layers_v2",
-            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định hiển thị Khối lượng, Dual Ichimoku và dòng giá MA20 / MA50 (ngày, tuần)."
+            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định hiển thị Khối lượng, Dual Ichimoku, dòng giá MA20 / MA50 (ngày, tuần) và đường MA20 trên biểu đồ."
         )
         _nD, _nW = len(A["D"]["g"]), len(A["W"]["g"])
         try:
