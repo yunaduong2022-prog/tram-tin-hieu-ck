@@ -415,6 +415,7 @@ FA_BANDS: dict[str, dict[str, tuple]] = {
         "P/E": ("lo", [(8, 1.0), (12, 0.87), (16, 0.67), (22, 0.4), (30, 0.2)], 0.0),
     },
 }
+FA_WEAK = 30                # điểm FA dưới mức này: gắn nhãn "Cơ bản yếu" (chỉ cảnh báo, KHÔNG trừ vào Tổng điểm hay hạng)
 FA_MIN_WEIGHT = 60          # cần các chỉ tiêu có số cộng lại >= 60 điểm trọng số mới chấm (thiếu thì bỏ khỏi cả điểm đạt lẫn điểm tối đa)
 FA_MARGIN_FLAG = 150        # Chứng khoán: Margin/VCSH (%) trên mức này chỉ gắn nhãn rủi ro, không trừ điểm
 FA_BASE_LOW_CAP = 0.8       # tăng trưởng LNST > 200% thường do nền thấp: không chấm tối đa
@@ -681,6 +682,8 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         entry = (fill or mid) if status == "Đang nắm giữ" else None      # chỉ tính lợi nhuận khi đã vào lệnh; ưu tiên Giá khớp, không có thì giữa vùng Điểm mua do Admin nhập
         fd = fund_map.get(code, {}) or {}
         fa, fa_tags = fa_score_fd(fd)
+        if fa is not None and fa < FA_WEAK:
+            fa_tags = [f"Cơ bản yếu (FA dưới {FA_WEAK})"] + list(fa_tags)
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
         total = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
