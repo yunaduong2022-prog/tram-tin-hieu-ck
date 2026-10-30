@@ -42,7 +42,7 @@ def scores_for(code: str, res: pd.DataFrame) -> dict:
         fm, fd = _CTX.get("fund_map"), _CTX.get("frames_d")
         if fm is not None:
             f = (fm.get(code) or {})
-            fa, _ = VP.fa_score(f.get("P/E"), f.get("ROE"), f.get("P/B"))
+            fa, _ = VP.fa_score_fd(f)
             if fa is not None:
                 out["fund"] = float(fa)
         if fd is not None and len(fd):

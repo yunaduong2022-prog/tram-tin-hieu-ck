@@ -24,10 +24,11 @@ import pandas as pd
 import streamlit as st
 
 PATH = "data/xep_hang_nganh.csv"
+FA_SECTORS = {"Chứng khoán"}   # ngành được chấm điểm cơ bản riêng (khớp các khóa trong vip_picks.FA_WEIGHTS)
 MIN_VON_HOA = 0          # tỷ đồng: chỉ lấy cổ phiếu có vốn hóa từ mức này trở lên (0 = hiện đủ mọi mã trong bảng gốc; muốn lọc mã nhỏ thì đặt lại, vd. 900)
 _NUM = ["STT", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B", "Giá trị sổ sách",
         "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT",
-        "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "Tăng trưởng tín dụng", "Tăng trưởng huy động", "CIR", "LDR"]
+        "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "Tăng trưởng tín dụng", "Tăng trưởng huy động", "CIR", "LDR", "YEA", "COF"]
 
 # cột -> (tiêu đề, kiểu định dạng, căn lề)
 COLS = {
@@ -50,13 +51,14 @@ COLS = {
     "Tăng trưởng tín dụng": ("Tăng trưởng<small>tín dụng</small>", "pct", ""),
     "Tăng trưởng huy động": ("Tăng trưởng<small>huy động</small>", "pct", ""),
     "CIR": ("CIR", "pct", ""), "LDR": ("LDR", "pct", ""),
+    "YEA": ("YEA", "pct", ""), "COF": ("COF", "pct", ""),
 }
 # thứ tự cột theo bảng gốc của từng ngành
 LAYOUT = {
     "Ngân hàng": ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B",
                   "Tăng trưởng tín dụng", "Tăng trưởng huy động", "ROE", "ROA", "NIM", "LLR", "CASA", "CIR", "LDR"],
     "Chứng khoán": ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B",
-                    "LNST công ty mẹ", "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "ROE"],
+                    "LNST công ty mẹ", "Tăng trưởng DTT", "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "ROE", "ROA", "YEA", "COF", "NIM"],
 }
 _LAYOUT_ND = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa (tỷ)", "Số CP lưu hành", "EPS", "P/E", "P/B", "Giá trị sổ sách",
               "ROE", "ROA", "DTT", "LNST công ty mẹ"]            # bố cục của các bảng ngành phi ngân hàng
@@ -71,7 +73,7 @@ DEFAULT_LAYOUT = ["Xếp hạng", "XH tài chính", "XH kinh doanh", "Vốn hóa
 
 _CANON = ["Ngành", "STT", "Mã", "Xếp hạng", "XH tài chính", "XH kinh doanh", "Số CP lưu hành", "Vốn hóa (tỷ)", "EPS", "P/E", "P/B",
           "Giá trị sổ sách", "ROE", "ROA", "NIM", "LLR", "CASA", "DTT", "LNST công ty mẹ", "Tăng trưởng DTT", "Kỳ", "Cập nhật nguồn",
-          "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "Tăng trưởng tín dụng", "Tăng trưởng huy động", "CIR", "LDR"]
+          "Tăng trưởng LNST", "BLN môi giới", "Margin/VCSH", "Tăng trưởng tín dụng", "Tăng trưởng huy động", "CIR", "LDR", "YEA", "COF"]
 _ERR = ""          # thông báo lỗi đọc file gần nhất ("" = đọc tốt); render_section hiển thị để dễ sửa file
 
 
@@ -157,6 +159,7 @@ def apply_to_maps(fund_map: dict, cap_map: dict, df: pd.DataFrame | None = None)
 
 
 def _apply(fund_map: dict, cap_map: dict, d: pd.DataFrame) -> None:
+    d = pd.concat([d[d["Ngành"].isin(FA_SECTORS)], d[~d["Ngành"].isin(FA_SECTORS)]])     # mã thuộc nhiều nhóm (vd. VIX): số của ngành chấm riêng được ưu tiên
     for _, r in d.iterrows():
         code = str(r["Mã"]).upper()
         fm = fund_map.setdefault(code, {})
@@ -166,6 +169,10 @@ def _apply(fund_map: dict, cap_map: dict, d: pd.DataFrame) -> None:
             if v is not None and ok(v) and _missing(fm.get(key)):
                 fm[key] = v
 
+        if r["Ngành"] in FA_SECTORS:
+            fm["FA ngành"] = r["Ngành"]
+            for k in ("ROA", "NIM", "Tăng trưởng LNST", "Margin/VCSH"):
+                put(k, r[k])
         put("P/E", r["P/E"], lambda v: 0 < v < 1000)
         put("P/B", r["P/B"], lambda v: 0 < v < 200)
         put("ROE", r["ROE"])
@@ -259,6 +266,6 @@ def render_section(sector: str | None) -> None:
     with st.expander("ℹ️ Cách đọc"):
         st.markdown("- **Xếp hạng** là thứ hạng tổng hợp trong ngành; **tài chính** và **kinh doanh** là hạng theo từng nhóm chỉ tiêu (số nhỏ là tốt hơn). "
                     "Thứ tự dòng (STT) giữ đúng như bảng gốc.\n"
-                    "- **ROE, ROA** tính theo %. Với ngân hàng: **NIM** là biên lãi ròng, **LLR** là tỷ lệ bao phủ nợ xấu, **CASA** là tỷ lệ tiền gửi không kỳ hạn, **CIR** là tỷ lệ chi phí trên thu nhập, **LDR** là tỷ lệ cho vay trên huy động. Với chứng khoán: **BLN môi giới** là biên lợi nhuận mảng môi giới, **Margin/VCSH** là dư nợ margin trên vốn chủ sở hữu.\n"
+                    "- **ROE, ROA** tính theo %. Với ngân hàng: **NIM** là biên lãi ròng, **LLR** là tỷ lệ bao phủ nợ xấu, **CASA** là tỷ lệ tiền gửi không kỳ hạn, **CIR** là tỷ lệ chi phí trên thu nhập, **LDR** là tỷ lệ cho vay trên huy động. Với chứng khoán: **BLN môi giới** là biên lợi nhuận mảng môi giới, **Margin/VCSH** là dư nợ margin trên vốn chủ sở hữu, **YEA** là lợi suất tài sản sinh lãi, **COF** là chi phí vốn, **NIM** là biên lãi ròng (xấp xỉ YEA trừ COF).\n"
                     "- P/E, P/B, ROE, EPS, Giá trị sổ sách và Vốn hóa cũng được đưa vào dữ liệu cơ bản của app (thẻ Chờ mua, điểm FA ở Khuyến nghị khách hàng) "
                     "cho những ô app chưa có số; số nhập tay ở data/nhap_tay.csv luôn được ưu tiên.")

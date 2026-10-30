@@ -397,6 +397,84 @@ def fa_score(pe, roe, pb) -> tuple[int | None, list[str]]:
     return int(round(got / mx * 100)), tags
 
 
+# Điểm cơ bản theo ngành. Ngành có trong FA_WEIGHTS thì chấm bằng trọng số + ngưỡng riêng ở dưới; ngành khác vẫn dùng fa_score (ROE 40, P/E 30, P/B 30).
+# Muốn chỉnh: sửa số trong FA_WEIGHTS (tổng 100) hoặc FA_BANDS. Thêm ngành mới (vd. Ngân hàng) = thêm một mục ở cả hai bảng, rồi thêm tên ngành vào
+# xep_hang_nganh.FA_SECTORS để bảng xếp hạng ngành đưa đủ chỉ số vào dữ liệu cơ bản của mã.
+FA_WEIGHTS: dict[str, dict[str, int]] = {
+    "Chứng khoán": {"ROE": 30, "P/B": 25, "ROA": 15, "NIM": 10, "Tăng trưởng LNST": 10, "P/E": 10},
+}
+# chỉ tiêu -> ("hi", [(ngưỡng, tỷ lệ điểm), ...], tỷ lệ còn lại): giá trị >= ngưỡng thì nhận tỷ lệ điểm đó (ngưỡng xếp giảm dần);
+#             ("lo", [...], tỷ lệ còn lại): giá trị < ngưỡng thì nhận tỷ lệ điểm đó (ngưỡng xếp tăng dần; chỉ số càng thấp càng tốt)
+FA_BANDS: dict[str, dict[str, tuple]] = {
+    "Chứng khoán": {
+        "ROE": ("hi", [(18, 1.0), (13, 0.8), (9, 0.6), (5, 0.35), (0, 0.15)], 0.0),
+        "ROA": ("hi", [(6, 1.0), (4, 0.8), (3, 0.6), (2, 0.4), (1, 0.2), (0, 0.1)], 0.0),
+        "NIM": ("hi", [(6, 1.0), (4.5, 0.8), (3.5, 0.6), (2.5, 0.4), (0, 0.2)], 0.0),
+        "Tăng trưởng LNST": ("hi", [(50, 1.0), (20, 0.8), (0, 0.55), (-20, 0.35), (-50, 0.15)], 0.0),
+        "P/B": ("lo", [(1, 1.0), (1.5, 0.83), (2.2, 0.6), (3.2, 0.33)], 0.1),
+        "P/E": ("lo", [(8, 1.0), (12, 0.87), (16, 0.67), (22, 0.4), (30, 0.2)], 0.0),
+    },
+}
+FA_MIN_WEIGHT = 60          # cần các chỉ tiêu có số cộng lại >= 60 điểm trọng số mới chấm (thiếu thì bỏ khỏi cả điểm đạt lẫn điểm tối đa)
+FA_MARGIN_FLAG = 150        # Chứng khoán: Margin/VCSH (%) trên mức này chỉ gắn nhãn rủi ro, không trừ điểm
+FA_BASE_LOW_CAP = 0.8       # tăng trưởng LNST > 200% thường do nền thấp: không chấm tối đa
+FA_SANITY = {"ROE": 40, "ROA": 25}      # ROE / ROA vượt mức này coi là số bất thường, bỏ qua không chấm
+
+
+def _band(v: float, spec: tuple) -> float:
+    kind, steps, rest = spec
+    for thr, frac in steps:
+        if (v >= thr) if kind == "hi" else (v < thr):
+            return frac
+    return rest
+
+
+def fa_score_sector(sector: str, fd: dict) -> tuple[int | None, list[str]]:
+    """Điểm cơ bản 0-100 của một mã thuộc ngành có trong FA_WEIGHTS. fd = dữ liệu cơ bản của mã (P/E, P/B, ROE, ROA, NIM, Tăng trưởng LNST, Margin/VCSH)."""
+    w, bands = FA_WEIGHTS[sector], FA_BANDS[sector]
+    got, mx, tags = 0.0, 0.0, []
+    for key, weight in w.items():
+        v = _f(fd.get(key))
+        if v is None:
+            continue
+        if key in FA_SANITY and abs(v) > FA_SANITY[key]:
+            tags.append(f"{key} bất thường ({v:.1f}%), bỏ qua")
+            continue
+        frac = 0.0 if (key in ("P/E", "P/B") and v <= 0) else _band(v, bands[key])
+        if key == "Tăng trưởng LNST" and v > 200:
+            frac = min(frac, FA_BASE_LOW_CAP)
+        mx += weight
+        got += weight * frac
+        if key == "ROE":
+            tags.append(f"ROE {v:.1f}%")
+        elif key == "ROA":
+            tags.append(f"ROA {v:.1f}%")
+        elif key == "NIM":
+            tags.append(f"NIM {v:.1f}%")
+        elif key == "Tăng trưởng LNST":
+            tags.append(f"LNST {'tăng' if v >= 0 else 'giảm'} {abs(v):,.0f}% YoY" + (" (nền thấp)" if v > 200 else ""))
+        elif key == "P/B" and 0 < v < 1:
+            tags.append(f"P/B dưới sổ sách ({v:.2f})")
+        elif key == "P/E":
+            tags.append(f"P/E rẻ ({v:.2f})" if 0 < v < 8 else f"P/E cao ({v:.2f})" if v >= 25 else f"P/E {v:.2f}")
+    if sector == "Chứng khoán":
+        mg = _f(fd.get("Margin/VCSH"))
+        if mg is not None and mg > FA_MARGIN_FLAG:
+            tags.append(f"Đòn bẩy margin cao ({mg:,.0f}% VCSH)")
+    if mx < FA_MIN_WEIGHT:
+        return None, []
+    return int(round(got / mx * 100)), tags
+
+
+def fa_score_fd(fd: dict | None) -> tuple[int | None, list[str]]:
+    """Chấm điểm cơ bản từ dữ liệu cơ bản của một mã: ngành có bảng riêng (khóa "FA ngành" do xep_hang_nganh điền) thì chấm theo ngành, còn lại dùng fa_score."""
+    fd = fd or {}
+    sec = fd.get("FA ngành")
+    if sec in FA_WEIGHTS:
+        return fa_score_sector(sec, fd)
+    return fa_score(fd.get("P/E"), fd.get("ROE"), fd.get("P/B"))
+
+
 def ta_score(g: pd.DataFrame) -> tuple[int | None, list[str]]:
     """Điểm kỹ thuật 0-100 chấm trên khung Ngày từ MA20, MA50, MA200, RSI(14) và khối lượng. g = các phiên gần nhất của một mã (cần ≥ 26 phiên
     để chấm khối lượng), có cột Giá đóng cửa, Khối lượng khớp lệnh, MA20, MA50, MA200, RSI.
@@ -602,7 +680,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         mid = (buy[0] + buy[1]) / 2 if (status == "Đang nắm giữ" and buy and not buy_auto) else None
         entry = (fill or mid) if status == "Đang nắm giữ" else None      # chỉ tính lợi nhuận khi đã vào lệnh; ưu tiên Giá khớp, không có thì giữa vùng Điểm mua do Admin nhập
         fd = fund_map.get(code, {}) or {}
-        fa, fa_tags = fa_score(fd.get("P/E"), fd.get("ROE"), fd.get("P/B"))
+        fa, fa_tags = fa_score_fd(fd)
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
         total = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
