@@ -265,6 +265,14 @@ KEEP_F64 = {"Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đ
 DAILY_KEEP = 750       # số phiên gần nhất của khung Ngày được giữ trong bộ nhớ (khoảng 3 năm). Tuần / Tháng vẫn giữ toàn bộ lịch sử. 0 = giữ hết.
 
 
+def _slim_f32(f_: pd.DataFrame) -> pd.DataFrame:
+    """Cột chỉ báo float64 -> float32 (giá, khối lượng, mức giá trong KEEP_F64 giữ float64)."""
+    for c_ in f_.select_dtypes("float64").columns:
+        if c_ not in KEEP_F64:
+            f_[c_] = f_[c_].astype("float32")
+    return f_
+
+
 @st.cache_resource(show_spinner="Đang gộp nến Ngày/Tuần/Tháng và tính chỉ báo...", max_entries=2)
 def build_frames(raw: pd.DataFrame, ver: str = "") -> dict:
     parts = {"D": [], "W": [], "M": []}
@@ -273,13 +281,11 @@ def build_frames(raw: pd.DataFrame, ver: str = "") -> dict:
         for tf in parts:
             f_ = E.add_indicators(E.resample_ohlcv(base, tf))      # chỉ báo luôn tính trên TOÀN BỘ lịch sử (EMA200, Ichimoku... không đổi giá trị)
             keep_ = DAILY_KEEP if tf == "D" else W_KEEP if tf == "W" else 0
-            parts[tf].append(f_.tail(keep_) if keep_ else f_)   # rồi chỉ giữ lại phần đuôi của khung Ngày / Tuần để đỡ tốn RAM
+            parts[tf].append(_slim_f32(f_.tail(keep_).copy() if keep_ else f_))   # rồi chỉ giữ lại phần đuôi của khung Ngày / Tuần để đỡ tốn RAM
     frames = {tf: pd.concat(p, ignore_index=True) for tf, p in parts.items()}
     frames["D"] = E.mask_chg_gaps(frames["D"])     # % thay đổi chỉ tính so với phiên kề trước, thiếu phiên thì hiện "—"
-    for f_ in frames.values():                      # cột chỉ báo float64 -> float32 (giá, khối lượng, mức giá giữ float64)
-        for c_ in f_.select_dtypes("float64").columns:
-            if c_ not in KEEP_F64:
-                f_[c_] = f_[c_].astype("float32")
+    for f_ in frames.values():                      # mask_chg_gaps có thể tạo lại cột float64
+        _slim_f32(f_)
     return frames       # cache_resource: mọi phiên dùng chung MỘT bản này, KHÔNG được sửa trực tiếp (cần sửa thì .copy() trước)
 
 
@@ -315,7 +321,9 @@ def wyckoff_table(_df: pd.DataFrame, key: str) -> dict:
         out[code] = WYK.compact(w)
     return out
 
-VN30_LIST, VN30_SRC = load_vn30()
+# KHÔNG gọi vnstock lúc khởi động (nạp thư viện này tốn RAM, dễ vượt giới hạn Streamlit Cloud). Dùng danh sách VN30 trong watchlist.py
+# (cần đối chiếu mỗi kỳ cơ cấu); chỉ ở chế độ "Vnstock tự động" mới lấy rổ VN30 từ nguồn.
+VN30_LIST, VN30_SRC = list(WL.VN30_DU_PHONG), "danh sách trong watchlist.py (VN30_DU_PHONG)"
 MEMBER = WL.membership(VN30_LIST)
 
 HAS_EOD = os.path.exists(EOD_CSV)
@@ -357,6 +365,8 @@ with st.sidebar:
         extra_text = st.text_input("Mã thêm tay (phân cách bằng dấu phẩy)", "",
                                    help="Thêm các mã ngoài rổ đã chọn, ví dụ NTP,BVH.")
         extras = [x.strip().upper() for x in extra_text.split(",") if x.strip()]
+        VN30_LIST, VN30_SRC = load_vn30()
+        MEMBER = WL.membership(VN30_LIST)
         live_symbols = tuple(dict.fromkeys(WL.symbols_for(picked, VN30_LIST) + extras))
         st.caption(f"VN30: {len(VN30_LIST)} mã · nguồn: {VN30_SRC}")
         live_start = st.date_input("Lấy lịch sử từ ngày", value=pd.Timestamp("2024-01-01").date())
