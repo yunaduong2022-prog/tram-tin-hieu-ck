@@ -152,6 +152,7 @@ TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GIÁ TRỊ MA20/MA50 ngày + tuần dưới dòng chỉ số, không vẽ đường
 CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
+MA20_COLOR = "#FF4FD8"          # đường MA20 + nhãn giá bên phải: hồng magenta, không trùng Ichimoku (xanh dương / cam / xanh lá nhạt / hồng cam), Supertrend, Hull, EMA, Bollinger, nến. Muốn đổi màu chỉ sửa dòng này
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "MA20", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
 LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "MA20", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
@@ -2504,7 +2505,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
 
     if "MA20" in layers:              # ĐƯỜNG MA20 (trung bình giá đóng cửa 20 nến của khung đang xem); khác lớp MA_LAYER chỉ hiện giá trị. Dùng chung cho trang Cổ phiếu và Livestream
-        fig.add_trace(line("MA20", "MA20", "#F5A524", 1.6), row=1, col=1)
+        fig.add_trace(line("MA20", "MA20", MA20_COLOR, 1.6), row=1, col=1)
     if "EMA 50/200" in layers:
         fig.add_trace(line("EMA50", "EMA50", "#8B5CF6"), row=1, col=1)
         fig.add_trace(line("EMA200", "EMA200", "#6B7280"), row=1, col=1)
@@ -2812,15 +2813,22 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_layout(meta=dict(vn_code=str(code), vn_tf=tf))      # draw_tools.py dựa vào đây để gắn thanh vẽ đúng biểu đồ (Livestream có cả Ngày và Tuần)
     if hide_legend:
         fig.update_layout(showlegend=False)
+    _tags = []                                              # nhãn giá ở cột giá bên phải: (giá, màu nền, màu chữ)
     if "Dual Ichimoku" in layers:
-        # Nhãn giá của Tenkan / Kijun / Span B / Lead 1 ở cột giá bên phải; tự đẩy lệch (px) để các nhãn gần giá nhau không đè lên nhau
+        _tags += IDU.price_tags(g, len(t), lambda k_: future_date(_last, tf, k_))      # Tenkan / Kijun / Span B / Lead 1
+    if "MA20" in layers:
+        _m20 = pd.to_numeric(t["MA20"], errors="coerce").dropna()
+        if len(_m20):
+            _tags.append((float(_m20.iloc[-1]), MA20_COLOR, "#FFFFFF"))               # giá MA20 ở nến cuối
+    if _tags:
+        # Các nhãn tự đẩy lệch (px) để nhãn gần giá nhau không đè lên nhau và không đè nhãn giá hiện tại
         _yr = fig.layout.yaxis.range
         _ph = (fig.layout.height - fig.layout.margin.t - fig.layout.margin.b) * heights[0]
         _ppu = _ph / (_yr[1] - _yr[0]) if _yr else 0
         if _ppu > 0:
             _cur, _gap = last_c * _ppu, 23.0
             _pos = []
-            for _v, _bg, _fg in IDU.price_tags(g, len(t), lambda k_: future_date(_last, tf, k_)):
+            for _v, _bg, _fg in sorted(_tags, key=lambda t_: -t_[0]):
                 if _yr[0] <= _v <= _yr[1]:
                     _pos.append([_v * _ppu, _v, _bg, _fg])
             _prev = _cur                                  # nhãn giá hiện tại đứng yên; các nhãn phía trên xếp dần lên, phía dưới xếp dần xuống
