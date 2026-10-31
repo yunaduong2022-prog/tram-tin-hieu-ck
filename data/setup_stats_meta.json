@@ -1,0 +1,22 @@
+{
+  "chạy lúc": "2026-10-31 02:21",
+  "dữ liệu từ": "2018-11-01",
+  "dữ liệu đến": "2026-10-23",
+  "số mã": 198,
+  "số mã đã ngừng giao dịch": 0,
+  "ngày tách IS/OOS": "2024-01-01",
+  "max_hold": 60,
+  "chi phí": {
+    "fee": 0.0015,
+    "sell_tax": 0.001,
+    "slip": 0.001,
+    "limit": 0.07,
+    "lock_bars": 2
+  },
+  "lệnh bị loại": {
+    "gap dưới cắt lỗ": 113,
+    "khóa trần": 34,
+    "chưa vào": 19
+  },
+  "seed": 7
+}
