@@ -2802,7 +2802,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo (hdr_right: góc dưới bên phải)
         if sub in subs:
             dom = fig.get_subplot(2 + subs.index(sub), 1).yaxis.domain
-            if (hdr_right if sub_hdr_right is None else sub_hdr_right):
+            if sub_hdr_right and not hdr_right:       # trang Cổ phiếu: góc trên phải, cách mép khung, nền mờ để không dính/đè lên đường giá
+                fig.add_annotation(xref="paper", yref="paper", x=0.985, y=dom[1], xanchor="right", yanchor="top", yshift=-8, showarrow=False,
+                                   align="right", text=html_, font=dict(size=11, color="#8B95A5"),
+                                   bgcolor="rgba(14,27,23,0.78)", borderpad=4)
+            elif (hdr_right if sub_hdr_right is None else sub_hdr_right):
                 fig.add_annotation(xref="paper", yref="paper", x=0.996, y=dom[0], xanchor="right", yanchor="bottom", yshift=4, showarrow=False,
                                    align="right", text=html_, font=dict(size=11, color="#8B95A5"))
             else:
