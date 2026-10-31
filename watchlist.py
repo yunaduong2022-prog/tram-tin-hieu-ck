@@ -45,11 +45,11 @@ GROUPS: dict[str, list[str]] = {
     "Vật liệu xây dựng": ["HT1", "VGC", "NTP", "DHA", "VLB"],
     "Hàng công nghiệp": ["DHC", "HHP", "VEA", "MZG"],
     "Hàng tiêu dùng": ["TLG"],
-    "Điện": ["NT2", "GEE", "POW", "REE"],
+    "Điện": ["NT2", "GEE", "POW", "REE", "PGV", "DNH", "VSH", "QTP", "HNA", "SBH", "GEG", "HND", "CHP", "TMP", "SHP", "PPC", "AVC", "VPD", "TBC"],
     "Nhựa": ["NTP"],
     "Hạ tầng giao thông": ["CII"],
     "Đa ngành": ["VGC", "SAM", "THD"],
-    "Họ Gelex": ["GEX", "GEL", "VIX", "VSC", "EIB"],
+    "Họ Gelex": ["GEX", "GEL", "GEE", "VIX", "VSC", "EIB"],
 }
 
 # Danh mục cũ của người dùng (giữ lại để chọn khi cần)
