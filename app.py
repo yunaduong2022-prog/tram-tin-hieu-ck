@@ -2482,6 +2482,7 @@ def future_date(last, tf, k):
 # Muốn nhỏ/lớn hơn thì chỉnh 2 số này (Livestream dùng height_px riêng nên không bị ảnh hưởng).
 STOCK_CHART_BASE = 420
 STOCK_CHART_PER_SUB = 100
+VOL_PANEL_W = 0.95          # độ cao khung Khối lượng so với các chỉ báo khác (1.0 = bằng nhau; trước đây 0.6 nên hơi hẹp)
 DATE_GAP_PX = 16       # khe (px) giữa biểu đồ nến và khung bên dưới (khối lượng, MACD...). Nhãn ngày chỉ hiện ở đáy cùng nên khe này chỉ còn là khoảng cách giữa các khung
 # Định dạng nhãn trục ngày chỉ dùng mã số (không cần ngôn ngữ), Plotly tự chọn theo bước chia khi zoom:
 # ngày/tuần -> 24/10 · mỗi tháng -> Tháng 10 · mỗi 2-11 tháng -> T10/2026 · từ 1 năm -> 2026
@@ -2587,7 +2588,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         subs = [s for s in subs if s not in ("VNINDEX", "RS vs VNINDEX")]   # đang xem chính VNINDEX thì không cần 2 khung này
     elif len(mkt) == 0:
         subs = [s for s in subs if s != "RS vs VNINDEX"]
-    _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
+    _w = [VOL_PANEL_W if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
     height = (440 + 140 * len(subs)) if mobile else (STOCK_CHART_BASE + STOCK_CHART_PER_SUB * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
     if height_px:
