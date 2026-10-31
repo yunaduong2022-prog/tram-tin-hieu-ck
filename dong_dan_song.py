@@ -169,7 +169,7 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
 
     left, right = st.columns([1.3, 1], gap="medium")
     with left:
-        st.markdown('<div class="dd-topbar">Bấm vào một dòng trong bảng để xem các mã của dòng đó 👉</div>', unsafe_allow_html=True)
+        st.markdown('<div class="dd-topbar"><b style="color:#E6EDF3;letter-spacing:.4px">TRẠM TÍN HIỆU</b>&nbsp;<span style="color:#6B7686">|</span>&nbsp;<b style="color:#E8C47C;letter-spacing:.4px">MIN TRADING</b></div>', unsafe_allow_html=True)
         styler = _styler(view, ["Biến động giai đoạn", "Biến động ngày"], sel_name)
         picked = None
         ev = None
