@@ -2573,10 +2573,11 @@ def _ma_row_html(code) -> str:
 
 
 def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag="pan", name_suffix="",
-               height_px=None, hide_legend=False, title_text=None, code_w=0.20, hdr_right=False):
+               height_px=None, hide_legend=False, title_text=None, code_w=0.20, hdr_right=False, sub_hdr_right=None):
     """name_suffix: chuỗi nối vào cuối tên công ty ở đầu biểu đồ (Livestream ghi " - D").
     height_px: chiều cao nền (px) thay cho mặc định, mỗi khung chỉ báo phụ thứ 2 trở đi cộng thêm 100px (Livestream dùng để hai biểu đồ vừa một màn hình).
     hide_legend: ẩn dòng chú giải các đường (và thu gọn khoảng trống phía trên).
+    sub_hdr_right: chỉ đổi vị trí dòng giá trị các khung chỉ báo phụ (True = góc dưới bên phải, False = góc trên trái); None = theo hdr_right. Trang Cổ phiếu dùng True.
     hdr_right: dòng giá trị của các khung chỉ báo phụ (VOL / MA20, MACD, RSI...) đặt ở góc dưới bên phải khung thay vì góc trên trái (Livestream).
     code_w: phần bề ngang (0-1) dành cho mã + giá ở đầu biểu đồ; tên công ty, O/H/L/C và các chỉ số bắt đầu từ mốc này (cột hẹp như Livestream cần số lớn hơn).
     title_text: không có metrics thì thay dòng thương hiệu TRẠM TÍN HIỆU | MIN TRADING bằng chữ này (Livestream ghi KHUNG TUẦN)."""
@@ -2801,7 +2802,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     def _hdr(sub, html_):                         # dòng giá trị ở góc trên trái của khung chỉ báo (hdr_right: góc dưới bên phải)
         if sub in subs:
             dom = fig.get_subplot(2 + subs.index(sub), 1).yaxis.domain
-            if hdr_right:
+            if (hdr_right if sub_hdr_right is None else sub_hdr_right):
                 fig.add_annotation(xref="paper", yref="paper", x=0.996, y=dom[0], xanchor="right", yanchor="bottom", yshift=4, showarrow=False,
                                    align="right", text=html_, font=dict(size=11, color="#8B95A5"))
             else:
@@ -3168,7 +3169,7 @@ def page_stock():
             _drag, _cfg = mobile_chart_opts(_mode)
         if not _mob:
             _bars = range_bars(tf, len(a["g"]))
-        st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag),
+        st.plotly_chart(make_chart(a, code, tf, layers, None if _mob else chart_metrics, _mob, _bars, _drag, sub_hdr_right=not _mob),
                         config=_cfg, **_STRETCH)
         if not _mob:
             range_bar_ui(tf, len(a["g"]))           # thanh 5D · 1M · 3M · 6M · 1Y · 2Y · 3Y · Tất cả ngay dưới biểu đồ
