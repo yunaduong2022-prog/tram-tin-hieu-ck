@@ -154,7 +154,7 @@ def _tab_backtest(stats: pd.DataFrame | None, meta: dict, stretch: dict) -> None
     base = {g: stats[(stats["Setup"] == "BASE") & (stats["Nhóm"] == g)]["R TB"] for g in ("ALL", "IS", "OOS")}
     rows.append({"Setup": "BASE", "Nhãn": "Vào ngẫu nhiên (mức nền)", "Số lệnh": int(stats[(stats["Setup"] == "BASE") & (stats["Nhóm"] == "ALL")]["Số lệnh"].sum()),
                  "R TB toàn kỳ": base["ALL"].iat[0] if len(base["ALL"]) else np.nan, "R TB trong mẫu": base["IS"].iat[0] if len(base["IS"]) else np.nan,
-                 "R TB ngoài mẫu": base["OOS"].iat[0] if len(base["OOS"]) else np.nan, "R hơn nền (toàn kỳ)": np.nan, "Kết luận": "Mốc so sánh"})
+                 "R TB ngoài mẫu": base["OOS"].iat[0] if len(base["OOS"]) else np.nan, "R hơn nền (toàn kỳ)": 0.0, "Kết luận": "Mốc so sánh"})
     q = pd.DataFrame(rows)
     st.dataframe(q, hide_index=True, column_config={c: st.column_config.NumberColumn(c, format="%+.3f") for c in q.columns if c.startswith("R ")}, **stretch)
     st.caption("R = lãi ròng chia cho rủi ro ban đầu (giá vào − cắt lỗ). **Có lợi thế** chỉ khi khoảng tin cậy 95% của R trung bình nằm hoàn toàn trên R của mức nền; "
@@ -165,6 +165,8 @@ def _tab_backtest(stats: pd.DataFrame | None, meta: dict, stretch: dict) -> None
     d = stats[stats["Nhóm"] == grp].copy()
     order = {s: k for k, s in enumerate((*SETUP_ORDER, "BASE"))}
     d = d.sort_values("Setup", key=lambda c: c.map(order))
+    if "R hơn nền" in d.columns:
+        d["R hơn nền"] = d["R hơn nền"].fillna(0.0)     # dòng BASE so với chính nó = 0 (tránh hiện "None")
     cols = ["Setup", "Nhãn", "Số lệnh", "Lãi TB %", "Lãi trung vị %", "Thắng %", "R TB", "R TB (CI95 thấp)", "R TB (CI95 cao)", "R trung vị",
             "R TB bỏ 5% lệnh tốt nhất", "Profit factor", "MDD (R)", "Giữ TB (phiên)", "R hơn nền", "Vượt nền (CI95)"]
     st.dataframe(d[[c for c in cols if c in d.columns]], hide_index=True, column_config=_fmt_cols(d), **stretch)
