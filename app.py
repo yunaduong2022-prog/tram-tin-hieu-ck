@@ -3398,44 +3398,98 @@ def _route_inner():
 
 
 # ------------------------------------------------------------------ DASHBOARD LIVESTREAM
-LIVE_DAILY_H = 540        # chiều cao nền (px) biểu đồ Ngày ở Livestream (chưa tính phần đầu); chỉnh nhỏ lại nếu muốn hai biểu đồ gọn hơn nữa
+LIVE_DAILY_H = 600        # chiều cao (px) biểu đồ Ngày ở Livestream (đầu biểu đồ giờ là thẻ HTML riêng nên không còn cộng thêm phần đầu); chỉnh nhỏ lại nếu muốn gọn hơn
 LIVE_CODE_W = 0.27        # đầu biểu đồ Ngày ở Livestream: phần bề ngang dành cho mã + giá (tăng để tên công ty nhích sang phải)
 LIVE_WEEKLY_H = 300       # chiều cao (px) biểu đồ Tuần ở Livestream (đã gồm dòng chữ KHUNG TUẦN)
+def _live_quote_html(code, g, metrics, name, show_ma) -> str:
+    """Thẻ đầu biểu đồ Ngày ở Livestream: mã, giá, thay đổi, tên công ty, O/H/L/C, lưới chỉ số (Vol, P/E, P/B, ROE, Vốn hóa...) và dòng MA.
+    Dựng bằng HTML/CSS nên tự co giãn theo bề ngang cột, không bị đè chữ như khi vẽ chú thích cố định theo px trong biểu đồ."""
+    esc = htmllib.escape
+    price_m = next((m for m in metrics if m["label"] == "Giá"), None)
+    others = [m for m in metrics if m is not price_m]
+    pc = (price_m or {}).get("px_color", "#E6EDF3")
+    price = esc(str(price_m["value"])) if price_m else "—"
+    chg = (f"<span class='lq-chg' style='color:{pc};border-color:{pc}66;background:{pc}1f'>{esc(str(price_m['px_chg']))}</span>"
+           if price_m and price_m.get("px_chg") else "")
+    note = (f"<div class='lq-note' style='color:{price_m.get('color', '#8B95A5')}'>{esc(str(price_m['sub']))}</div>"
+            if price_m and price_m.get("sub") else "")
+    cells = "".join(
+        f"<div class='lq-m'><span>{esc(m['label'])}</span><b>{esc(str(m['value']))}</b>"
+        + (f"<i style='color:{m.get('color', '#8B95A5')}'>{esc(str(m['sub'])).replace(chr(10), '<br>')}</i>" if m.get("sub") else "")
+        + "</div>" for m in others)
+    return (f"<div class='lq'><div class='lq-top'><div class='lq-id'><span class='lq-code'>{esc(str(code))}</span>"
+            f"<span class='lq-price' style='color:{pc}'>{price}</span>{chg}</div>"
+            f"<span class='lq-brand'>{esc(BR.BRAND.upper())}</span></div>{note}"
+            + (f"<div class='lq-name'>{esc(name)}</div>" if name else "")
+            + f"<div class='lq-ohlc'>{_ohlc_header(code, 'D', g)}</div>"
+            + (f"<div class='lq-grid'>{cells}</div>" if cells else "")
+            + (f"<div class='lq-ma'>{_ma_row_html(code)}</div>" if show_ma else "") + "</div>")
+
+
 def page_livestream():
     """Bố cục phát sóng: chart ngày/tuần bên trái, kết luận và dữ liệu bên phải."""
     st.markdown("""
     <style>
-    .live-shell{background:#0b1220;border:1px solid #263449;border-radius:14px;padding:14px 16px;margin:0 0 12px}
-    .live-eyebrow{font-size:11px;letter-spacing:1.2px;font-weight:800;color:#8da3bd;text-transform:uppercase}
-    .live-title{font-size:25px;font-weight:850;line-height:1.15;color:#f4f7fb;margin:4px 0}
+    .live-shell{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:linear-gradient(100deg,#0d1627 0%,#0b1220 62%,#0c1b1d 100%);border:1px solid #263449;border-left:4px solid #39d6a0;border-radius:14px;padding:14px 18px;margin:0 0 14px}
+    .live-eyebrow{font-size:11px;letter-spacing:1.4px;font-weight:800;color:#8da3bd;text-transform:uppercase}
+    .live-title{font-size:24px;font-weight:850;line-height:1.15;color:#f4f7fb;margin:4px 0 3px}
     .live-sub{font-size:12px;color:#91a0b5}
-    .live-card{background:#111b2b;border:1px solid #29384d;border-radius:12px;padding:13px 15px;margin-bottom:12px}
-    .live-card-title{font-size:13px;font-weight:800;color:#c7d4e5;letter-spacing:.45px;margin-bottom:9px}
-    .live-verdict{font-size:22px;line-height:1.15;font-weight:900;color:#40d6a0}
-    .live-price{font-size:28px;line-height:1.15;font-weight:900;color:#f8fafc}
+    .live-onair{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:1.6px;color:#ff6b81;border:1px solid #ff6b8166;background:#ff6b8118;border-radius:999px;padding:6px 13px}
+    .live-onair:before{content:"";width:8px;height:8px;border-radius:50%;background:#ff4d6a;animation:live-pulse 1.6s ease-in-out infinite}
+    @keyframes live-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .live-bar{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-top:29px}
+    .live-chip{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#b6c4d6;background:#0f1a2b;border:1px solid #26364b;border-radius:999px;padding:7px 13px;white-space:nowrap}
+    .live-dot{width:8px;height:8px;border-radius:50%;background:#35d49a;box-shadow:0 0 0 3px rgba(53,212,154,.18)}
+    .live-sec{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:800;letter-spacing:1.2px;color:#c7d4e5;text-transform:uppercase;margin:4px 0 9px}
+    .live-sec:before{content:"";width:4px;height:15px;border-radius:2px;background:#39d6a0}
+    .live-sec small{font-size:11px;font-weight:600;letter-spacing:.3px;color:#8fa1b8;text-transform:none}
+    .live-lab{font-size:11px;letter-spacing:1px;font-weight:700;color:#8fa1b8;text-transform:uppercase;margin:4px 0 -6px}
+    .live-card{background:linear-gradient(180deg,#121d2f,#0f1928);border:1px solid #29384d;border-radius:12px;padding:14px 16px;margin-bottom:12px}
+    .live-card-title{font-size:13px;font-weight:800;color:#c7d4e5;letter-spacing:.45px;margin-bottom:10px}
+    .live-verdict{font-size:24px;line-height:1.1;font-weight:900;color:#40d6a0;letter-spacing:.3px}
+    .live-price{font-size:28px;line-height:1.15;font-weight:900;color:#f8fafc;font-variant-numeric:tabular-nums}
     .live-muted{font-size:12px;color:#8fa1b8}
-    .live-kpi{background:#0b1422;border:1px solid #26364b;border-radius:8px;padding:9px}
-    .live-kpi span{display:block;font-size:10px;color:#8fa1b8;margin-bottom:4px}
-    .live-kpi b{font-size:16px;color:#f1f5f9}
+    .live-kpi{background:#0b1422;border:1px solid #26364b;border-radius:8px;padding:9px 11px}
+    .live-kpi.acc{border-left:3px solid var(--k,#26364b)}
+    .live-kpi span{display:block;font-size:10px;letter-spacing:.4px;color:#8fa1b8;margin-bottom:4px}
+    .live-kpi b{font-size:16px;color:#f1f5f9;font-variant-numeric:tabular-nums}
     .live-table{width:100%;border-collapse:collapse;font-size:12px;color:#dce5f0}
     .live-table th{text-align:left;color:#8fa1b8;font-weight:700;border-bottom:1px solid #314158;padding:7px 5px}
     .live-table td{border-bottom:1px solid #202e42;padding:8px 5px}
     .live-positive{color:#43d6a1;font-weight:800}.live-warn{color:#f7bd55;font-weight:800}
     div[data-testid="stPlotlyChart"]{border:1px solid #263449;border-radius:10px;overflow:hidden}
+    /* thẻ đầu biểu đồ Ngày */
+    .lq{background:linear-gradient(180deg,#121d2f,#0e1726);border:1px solid #29384d;border-radius:12px;padding:14px 18px 12px;margin:0 0 10px}
+    .lq-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .lq-id{display:flex;align-items:center;flex-wrap:wrap}
+    .lq-code{font-size:44px;font-weight:900;line-height:1;letter-spacing:.5px;color:#f8fafc;margin-right:16px}
+    .lq-price{font-size:38px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;margin-right:14px}
+    .lq-chg{display:inline-block;font-size:13px;font-weight:700;padding:4px 10px;border:1px solid;border-radius:999px;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .lq-brand{font-size:11px;font-weight:800;letter-spacing:1.4px;color:#e8c47c;border:1px solid #e8c47c55;border-radius:6px;padding:3px 9px}
+    .lq-note{font-size:12px;line-height:1.4;margin-top:7px}
+    .lq-name{font-size:17px;font-weight:600;color:#dbe5f1;margin-top:10px}
+    .lq-ohlc{font-size:13px;margin-top:3px;font-variant-numeric:tabular-nums}
+    .lq-grid{margin-top:12px;padding-top:12px;border-top:1px solid #243349}
+    .lq-m{display:inline-block;vertical-align:top;min-width:104px;margin:0 26px 10px 0}
+    .lq-m span{display:block;font-size:11px;letter-spacing:.3px;color:#8fa1b8;margin-bottom:2px}
+    .lq-m b{font-size:20px;font-weight:800;line-height:1.2;color:#f1f5f9;font-variant-numeric:tabular-nums}
+    .lq-m i{display:block;font-style:normal;font-size:11px;line-height:1.3;margin-top:2px}
+    .lq-ma{margin-top:12px;padding-top:10px;border-top:1px dashed #243349;font-size:13px;color:#aab8cb;font-variant-numeric:tabular-nums}
+    div[data-testid="stMultiSelect"] span[data-baseweb="tag"]{font-size:12px;border-radius:6px}
     </style>
     """, unsafe_allow_html=True)
     st.markdown(
-        '<div class="live-shell"><div class="live-eyebrow">MIN TRADING · ON AIR DASHBOARD</div>'
+        '<div class="live-shell"><div><div class="live-eyebrow">MIN TRADING · ON AIR DASHBOARD</div>'
         '<div class="live-title">TRẠM TÍN HIỆU <span style="color:#39d6a0">/ LIVESTREAM</span></div>'
         '<div class="live-sub">Phân tích đa khung thời gian · Dữ liệu cuối phiên theo nguồn đang chọn · '
-        'Thông tin chỉ phục vụ tham khảo, không phải khuyến nghị đầu tư</div></div>',
+        'Thông tin chỉ phục vụ tham khảo, không phải khuyến nghị đầu tư</div></div><span class="live-onair">ON AIR</span></div>',
         unsafe_allow_html=True
     )
     available = sorted(set(res_df["Mã"].astype(str).tolist()))
     # Lọc theo ngành (nhóm ngành trong watchlist.GROUPS; mã thuộc nhiều nhóm thì hiện ở từng nhóm): danh sách mã bên cạnh thu hẹp theo ngành đã chọn
     ALL_SECTORS = "Tất cả ngành"
     sectors = sorted({g_ for c_ in available for g_ in MEMBER.get(c_, []) if g_ in WL.GROUPS})
-    top_a, top_s, top_b, top_c = st.columns([1.25, 1, 1, 1])      # Mã đang phát bên trái, lọc Ngành bên phải ô mã (ô Ngành tạo trước vì danh sách mã phụ thuộc vào nó)
+    top_a, top_s, top_b = st.columns([1.25, 1, 1.75])      # Mã đang phát bên trái, lọc Ngành bên phải ô mã (ô Ngành tạo trước vì danh sách mã phụ thuộc vào nó)
     sector = top_s.selectbox("Ngành", [ALL_SECTORS] + sectors, key="live_sector")
     codes_in = available if sector == ALL_SECTORS else [c_ for c_ in available if sector in MEMBER.get(c_, [])]
     default_code = st.session_state.get("selected_code", "DRI")
@@ -3448,8 +3502,8 @@ def page_livestream():
         return
     code = top_a.selectbox("Mã đang phát", codes_in, key="live_code")      # giá trị lấy từ session_state["live_code"] (không truyền index để khỏi cảnh báo)
     st.session_state["selected_code"] = code
-    top_b.markdown(f"<div class='live-muted' style='padding-top:32px'>📅 Dữ liệu đến {latest_date:%d/%m/%Y}</div>", unsafe_allow_html=True)
-    top_c.markdown(f"<div class='live-muted' style='padding-top:32px'>🟢 {data_mode}</div>", unsafe_allow_html=True)
+    top_b.markdown(f"<div class='live-bar'><span class='live-chip'>📅 Dữ liệu đến {latest_date:%d/%m/%Y}</span>"
+                   f"<span class='live-chip'><span class='live-dot'></span>{htmllib.escape(str(data_mode))}</span></div>", unsafe_allow_html=True)
 
     A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
     info = stock_row(code)
@@ -3489,7 +3543,7 @@ def page_livestream():
     _rs_txt = "—" if pd.isna(_rs_v) else f"{_rs_v:.2f}"
     left, right = st.columns([6, 4], gap="medium")
     with left:
-        st.markdown("<div class='live-card-title'>📌 KHUNG NGÀY · DAILY</div>", unsafe_allow_html=True)
+        st.markdown("<div class='live-sec'>Khung ngày · Daily <small>khung tuần ở bên dưới</small></div>", unsafe_allow_html=True)
         DT.inject(code, ("D", "W"))                    # thanh công cụ vẽ bên trái cho cả biểu đồ Ngày và Tuần (nét vẽ lưu riêng theo mã + khung); đặt ở đầu cột để iframe luôn được nạp, không phụ thuộc cuộn trang
         # Đầu biểu đồ Ngày: mã, giá, tên công ty, O/H/L/C, Vol vs MA10, P/B, ROE, Vốn hóa y như biểu đồ ở trang Cổ phiếu (tên có thêm " - D").
         # Cho phép bật/tắt từng lớp chỉ báo ngay trong trang livestream.
@@ -3500,17 +3554,24 @@ def page_livestream():
             "RS vs VNINDEX", "Vùng giá", "Dự báo", "Elliott",
             "Wyckoff", "Tín hiệu quá khứ", "Hull Suite"
         ]
+        _quote_ph = st.empty()                        # thẻ đầu biểu đồ nằm TRÊN ô chọn chỉ báo nhưng cần biết lớp nào đang bật (dòng MA) nên điền sau
+        st.markdown("<div class='live-lab'>Chỉ báo trên biểu đồ <span style='text-transform:none;letter-spacing:0;font-weight:500'>· bấm × để bỏ, mở ô để thêm</span></div>", unsafe_allow_html=True)
         layers = st.multiselect(
             "Chỉ báo hiển thị trên biểu đồ",
             options=layer_options,
             default=["Khối lượng", "Dual Ichimoku", MA_LAYER, "MA20"],
             key="live_chart_layers_v2",
-            help="Chọn hoặc bỏ chọn chỉ báo. Mặc định hiển thị Khối lượng, Dual Ichimoku, dòng giá MA20 / MA50 (ngày, tuần) và đường MA20 trên biểu đồ."
+            label_visibility="collapsed",
         )
+        try:
+            _quote_ph.markdown(_live_quote_html(code, A["D"]["g"], _chart_metrics(code, info), _chart_name(code), MA_LAYER in layers),
+                               unsafe_allow_html=True)
+        except Exception as exc:  # noqa: BLE001
+            _quote_ph.caption(f"Không dựng được thẻ thông tin {code}: {exc}")
         _nD, _nW = len(A["D"]["g"]), len(A["W"]["g"])
         try:
-            st.plotly_chart(make_chart(A["D"], code, "D", layers, _chart_metrics(code, info), False, range_bars("D", _nD, "live_", "6M"), "pan", name_suffix=" - D",
-                                      height_px=LIVE_DAILY_H, hide_legend=True, code_w=LIVE_CODE_W, hdr_right=True),
+            st.plotly_chart(make_chart(A["D"], code, "D", layers, None, False, range_bars("D", _nD, "live_", "6M"), "pan",
+                                      height_px=LIVE_DAILY_H, hide_legend=True, title_text="KHUNG NGÀY", hdr_right=True),
                             config={"displayModeBar": False, "scrollZoom": False}, **_STRETCH)
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ ngày: {exc}")
@@ -3525,18 +3586,21 @@ def page_livestream():
         st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
 
     with right:
+        st.markdown("<div class='live-sec'>Tín hiệu &amp; dữ liệu <small>kết luận đa khung</small></div>", unsafe_allow_html=True)
         verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
+        _vcol = {"green": "#40d6a0", "red": "#ff6b81", "amber": "#f7bd55"}.get(conclusion.get("kind") if isinstance(conclusion, dict) else None, "#c7d4e5")
+        _rs_col = "#40d6a0" if (pd.notna(_rs_v) and _rs_v >= 1) else "#f7bd55"            # RS >= 1: mạnh hơn VN-Index
         st.markdown(
             f"<div class='live-card'><div class='live-card-title'>🏆 KẾT LUẬN ĐA KHUNG</div>"
             f"<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>"
-            f"<div class='live-verdict'>{htmllib.escape(verdict.upper())}</div>"
+            f"<div class='live-verdict' style='color:{_vcol}'>{htmllib.escape(verdict.upper())}</div>"
             f"<div style='text-align:right'><div class='live-muted'>{code}</div><div class='live-price'>{price:,.2f}</div></div></div>"
             f"<div style='height:1px;background:#29384d;margin:12px 0'></div>"
             f"<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
-            f"<div class='live-kpi'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
-            f"<div class='live-kpi'><span>MỤC TIÊU / KHÁNG CỰ</span><b>{_fmt_level(target)}</b></div>"
-            f"<div class='live-kpi'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
-            f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{_rs_txt}</b></div>"
+            f"<div class='live-kpi acc' style='--k:#40d6a0'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
+            f"<div class='live-kpi acc' style='--k:#5aa9ff'><span>MỤC TIÊU / KHÁNG CỰ</span><b>{_fmt_level(target)}</b></div>"
+            f"<div class='live-kpi acc' style='--k:#ff6b81'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
+            f"<div class='live-kpi acc' style='--k:{_rs_col}'><span>RS VS VNINDEX</span><b>{_rs_txt}</b></div>"
             f"</div><div class='live-muted' style='margin-top:9px'>Vùng mua/cắt lỗ dự phòng là mức tham khảo nếu dữ liệu kỹ thuật không trả về hỗ trợ/kháng cự.</div></div>",
             unsafe_allow_html=True
         )
