@@ -430,7 +430,8 @@ except Exception as e:
 
 df = frames["D"]
 latest_date = df["Ngày"].max()
-n_sessions = int(df.groupby("Mã").size().min())
+_sess = raw.groupby("Mã").size()         # số phiên THỰC của từng mã (tính từ dữ liệu gốc; frames chỉ giữ DAILY_KEEP phiên gần nhất để đỡ RAM)
+n_sessions = int(_sess.min())
 latest_df = df[df["Ngày"] == latest_date]
 DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}"
 WY_KEY = f"{DATA_KEY}-{float(latest_df['Giá đóng cửa'].sum()):.2f}"
@@ -557,12 +558,31 @@ MA_COL = {MA_OPTS[1]: "Trend_NganHan", MA_OPTS[2]: "Trend_TrungHan", MA_OPTS[3]:
 WY_OPTS = ["Tích lũy", "Phân phối", "Pha C", "Pha D", "Pha E"]
 
 
+MIN_SESSIONS_WARN = 60
+
+
+def short_sessions_note(sess: pd.Series, min_sessions: int = MIN_SESSIONS_WARN) -> tuple[str, str]:
+    """Nhận số phiên theo mã -> (mức, nội dung). Mức: "" (không cần báo) | "info" (vài mã mới niêm yết, chỉ ghi chú) |
+    "warning" (nhiều mã thiếu dữ liệu, có thể ảnh hưởng chung). Nội dung nêu rõ mã nào thiếu thay vì cảnh báo cả trang."""
+    few = sess[sess < min_sessions].sort_values()
+    if few.empty:
+        return "", ""
+    names = ", ".join(f"{c} ({int(n)} phiên)" for c, n in few.head(8).items()) + (f" và {len(few) - 8} mã khác" if len(few) > 8 else "")
+    effect = "Ichimoku, MA50/MA200, khung Tuần/Tháng và backtest"
+    if len(few) <= max(3, int(0.05 * len(sess))):
+        return "info", f"ℹ️ {len(few)} mã chưa đủ {min_sessions} phiên (thường là mã mới niêm yết): {names}. {effect} của riêng các mã này sẽ thiếu hoặc không đáng tin."
+    return "warning", f"{len(few)}/{len(sess)} mã dưới {min_sessions} phiên ({names}): {effect} của các mã này sẽ thiếu hoặc không đáng tin."
+
+
 def header():
     st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · "
-               f"tối thiểu {n_sessions} phiên/mã · RS so với {mkt_src}")
-    if n_sessions < 60:
-        st.warning("Dữ liệu dưới 60 phiên/mã: Ichimoku, MA50/MA200, khung Tuần/Tháng và backtest sẽ thiếu hoặc không đáng tin.")
-    elif n_sessions < 250:
+               f"trung vị {int(_sess.median()):,} phiên/mã · RS so với {mkt_src}")
+    _lv, _msg = short_sessions_note(_sess)
+    if _lv == "warning":
+        st.warning(_msg)
+    elif _lv == "info":
+        st.caption(_msg)
+    if _sess.median() < 250:
         st.caption("ℹ️ Dưới 250 phiên/mã: 'đỉnh/đáy 52 tuần', MA200 và cấu trúc dài hạn chỉ tính trên phần dữ liệu có sẵn.")
 
 
@@ -1189,16 +1209,12 @@ def page_filter():
         st.dataframe(kq_table(page_df), hide_index=True, use_container_width=True)
         return
     show_mtf = st.toggle("Hiện phân tích đa khung (D · W · M) và chiến lược trong từng thẻ", value=True, key="show_mtf")
-    # Có thể bổ sung vốn hóa thực tế qua data/stock_metadata.csv (cột Mã,Vốn hóa TT; đơn vị tỷ đồng).
-    cap_map = {}
-    if os.path.exists("data/stock_metadata.csv"):
-        try:
-            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
-            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
-        except Exception: pass
-    # Tên công ty, P/B, ROE: data/fundamentals.csv do update_fundamentals.py tự cập nhật; tên sửa tay ở data/ten_cong_ty_tay.csv
-    fund_map = {}
-    fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
+    # Vốn hóa / P/B / ROE: dùng CHUNG nguồn với bộ lọc và các trang khác (_wb_meta_maps = stock_metadata + bảng xếp hạng ngành + nhập tay),
+    # trước đây thẻ chỉ đọc stock_metadata.csv + fundamentals.csv nên thiếu P/B, ROE và lệch vốn hóa so với trang Chờ mua / bộ lọc.
+    _cm, _fm = _wb_meta_maps(WY_KEY)
+    cap_map = dict(_cm)
+    fund_map = {k_: dict(v_) for k_, v_ in _fm.items()}      # bản sao: không sửa trực tiếp lên dữ liệu trong cache
+    # Tên công ty sửa tay ở data/ten_cong_ty_tay.csv (ưu tiên hơn nguồn tự động)
     if os.path.exists("data/ten_cong_ty_tay.csv"):
         try:
             _nt = pd.read_csv("data/ten_cong_ty_tay.csv", dtype=str)
@@ -1206,7 +1222,6 @@ def page_filter():
                 if isinstance(_n, str) and _n.strip():
                     fund_map.setdefault(_c, {})["Tên công ty"] = _n.strip()
         except Exception: pass
-    apply_manual_overrides(fund_map, cap_map)
     for _w in FG.warnings():
         st.warning("Dữ liệu cơ bản: " + _w)
     if f.empty:
@@ -1318,9 +1333,21 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
 
 @st.cache_data(show_spinner=False)
 def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
-    """Vốn hóa (data/stock_metadata.csv), tên/P/B/ROE (data/fundamentals.csv) và số nhập tay - cùng nguồn với thẻ ở Bộ lọc."""
+    """Vốn hóa (SLCP bảng xếp hạng ngành x giá, thiếu thì stock_metadata.csv), tên/P/B/ROE (fundamentals.csv + bảng xếp hạng) và số nhập tay - dùng chung cho thẻ Bộ lọc, Chờ mua và các ô lọc."""
     _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
     cap_map = market_cap_map(_px)
+    # Số CP lưu hành trong bảng xếp hạng ngành (WiData) mới và đúng hơn số nhập tay cũ trong shares_outstanding.csv
+    # (vd. AAS 229,999,521 CP chứ không phải 1,372,786,256) -> vốn hóa = giá hiện tại x SLCP của bảng xếp hạng. Ô "Vốn hóa TT" nhập tay vẫn ưu tiên hơn (xử lý ở dưới).
+    try:
+        _xh = XH.load()
+        if _xh is not None and not _xh.empty and "Số CP lưu hành" in _xh.columns:
+            _sh = _xh.drop_duplicates("Mã").set_index(_xh.drop_duplicates("Mã")["Mã"].astype(str).str.upper())["Số CP lưu hành"]
+            for _c, _n in pd.to_numeric(_sh, errors="coerce").items():
+                _p = _px.get(_c)
+                if pd.notna(_n) and _n > 0 and _p is not None and pd.notna(_p) and _p > 0:
+                    cap_map[_c] = round(float(_p) * float(_n) / 1e6)
+    except Exception:  # noqa: BLE001  (bảng xếp hạng lỗi thì giữ số cũ, không làm hỏng trang)
+        pass
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     XH.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, giá trị sổ sách, xếp hạng, vốn hóa theo bảng xếp hạng ngành (data/xep_hang_nganh.csv), chỉ điền ô còn thiếu
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
