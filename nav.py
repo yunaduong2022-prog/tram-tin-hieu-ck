@@ -69,7 +69,10 @@ _SCROLL_TOP_JS = """<script>
 
 
 def _reset_sub():
-    st.session_state["nav_sub"] = (MENU[st.session_state["nav_main"]] or [None])[0]
+    main = st.session_state.get("nav_main")
+    if main not in MENU:     # bấm lại đúng mục đang chọn: segmented_control trả None (render_nav bên dưới khôi phục mục cũ), giữ nguyên tab phụ
+        return
+    st.session_state["nav_sub"] = (MENU[main] or [None])[0]
 
 
 def goto(main: str, sub: str | None = None):
