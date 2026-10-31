@@ -156,7 +156,7 @@ CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (ki
 MA20_COLOR = "#FF4FD8"          # đường MA20 + nhãn giá bên phải: hồng magenta, không trùng Ichimoku (xanh dương / cam / xanh lá nhạt / hồng cam), Supertrend, Hull, EMA, Bollinger, nến. Muốn đổi màu chỉ sửa dòng này
 LAYER_OPTS = ["Dự báo", "Tín hiệu quá khứ", "Dual Ichimoku", "Vùng giá", MA_LAYER, "MA20", "Bollinger",
               "Wyckoff", "EMA 50/200", "Supertrend", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]
-LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "MA20", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
+LAYER_DEFAULT = ["Dự báo", "Dual Ichimoku", MA_LAYER, "Bollinger", "Hull Suite", "Khối lượng", "VNINDEX", "RS vs VNINDEX", "MACD", "RSI", "StochRSI"]      # các lớp bật sẵn; lớp khác bấm vào mới hiện
 
 
 # ------------------------------------------------------------------ DỮ LIỆU
