@@ -2843,6 +2843,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
         # nằm ngang hàng đáy chỉ số); tên nhiều dòng thì mã nâng thêm theo để vẫn thẳng hàng với dòng tên đầu tiên.
         _dy = 33 + NAME_LH * (max(1, len(name_lines)) - 1)
+        if price_m:
+            # Mốc bắt đầu của tên công ty / chỉ số phải nằm sau hết chữ giá (mã dài + giá nhiều chữ số thì lấn sang tên); ước lượng theo px.
+            # Giả định bề ngang vùng vẽ: ~850px ở trang Cổ phiếu, ~700px ở Livestream (cột hẹp hơn). Mã ngắn thì giữ nguyên code_w đã truyền vào.
+            _need_px = _code_px(code) + 32 + sum(10 if ch_ in ".," else 20 for ch_ in str(price_m["value"])) + 28
+            code_w = max(code_w, min(0.40, _need_px / (700 if hdr_right else 850)))
         step = (1 - code_w) / max(1, len(others))
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34 + _dy, showarrow=False,
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
