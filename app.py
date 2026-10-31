@@ -2869,7 +2869,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
         # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
-        brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
+        # Mã chưa có tên công ty (vd. mã mới thêm): vẫn chừa chỗ cho 1 dòng tên, nếu không dòng thương hiệu tụt xuống đè lên mã và giá
+        brand_y = 106 + NAME_LH * max(1, len(name_lines)) + 6
         BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
         top += BRAND_H
         height += BRAND_H - 80
@@ -3547,9 +3548,10 @@ def page_livestream():
         if _sec_main:
             _secs = [_sec_main] + [x_ for x_ in _secs if x_ != _sec_main]
         try:
-            _cap_map, _fund_map = _wb_meta_maps(WY_KEY)
-            # Mã có file data/nhan_dinh_ma/<MÃ>.md thì hiện thẻ nhận định thay cho thẻ vốn hóa & định giá; mã khác giữ thẻ định giá.
-            st.markdown(SDV.commentary_card(code) or SDV.valuation_card(code, _sec_main, _wb_meta(code) or {}, _fund_map, _cap_map, WL.GROUPS, _cap_rank_note(code)), unsafe_allow_html=True)
+            # Thẻ "Vốn hóa & định giá" đã bỏ (vốn hóa, P/E, P/B, ROE đã có sẵn ở đầu biểu đồ); mã có file data/nhan_dinh_ma/<MÃ>.md thì vẫn hiện thẻ nhận định.
+            _cm_card = SDV.commentary_card(code)
+            if _cm_card:
+                st.markdown(_cm_card, unsafe_allow_html=True)
             st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
             st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS), unsafe_allow_html=True)
         except Exception as exc:  # noqa: BLE001
