@@ -2820,9 +2820,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         _hdr("VNINDEX", f'<b style="color:#CBD2DC">VNINDEX</b>  <b style="color:#CBD2DC">{_vlast:,.2f}</b>  <span style="color:{_vcol}">{_vchg:+.2f}%</span>' if _vlast == _vlast
              else "VNINDEX: chưa có dữ liệu trong vùng đang xem")
     if "RS vs VNINDEX" in subs:
-        _st = "mạnh hơn thị trường" if _above[-1] else "yếu hơn thị trường"
-        _hdr("RS vs VNINDEX", f'RS = {code}/VNINDEX (=100 đầu vùng)<br><b style="color:#CBD2DC">{rs_t.iloc[-1]:.1f}</b>  '
-                              f'MA20: <span style="color:#F59E0B">{rs_ma.iloc[-1]:.1f}</span>  · {_st}')
+        _st = "Mạnh hơn thị trường" if _above[-1] else "Yếu hơn thị trường"
+        _hdr("RS vs VNINDEX", f'RS = <b style="color:#CBD2DC">{rs_t.iloc[-1]:.1f}</b> | MA20 = <span style="color:#F59E0B">{rs_ma.iloc[-1]:.1f}</span>  {_st}')
     if "MACD" in subs:
         _hdr("MACD", f'MACD(12,26,9)<br>DIF: <span style="color:#3B82F6">{lr["MACD"]:.2f}</span>  '
                      f'DEA: <span style="color:#F59E0B">{lr["MACD_sig"]:.2f}</span>  MACD: <b style="color:#CBD2DC">{lr["MACD_hist"]:.2f}</b>')
