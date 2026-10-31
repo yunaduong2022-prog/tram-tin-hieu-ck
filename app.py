@@ -2877,7 +2877,10 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Mã chưa có tên công ty (vd. mã mới thêm): vẫn chừa chỗ cho 1 dòng tên, nếu không dòng thương hiệu tụt xuống đè lên mã và giá
         brand_y = 86 + NAME_LH * max(1, len(name_lines)) + 4
         _ma_row = _ma_row_html(code) if MA_LAYER in layers else ""
-        _ex = 24 if _ma_row else 0                    # chừa thêm 24px cho dòng MA ngay dưới dòng chỉ số
+        # Dòng MA nằm sát mép trên biểu đồ; cụm chỉ số phía trên được nâng lên đúng bằng chiều cao các dòng ghi chú dưới chỉ số (TOP n NGÀNH...),
+        # nên mã không có ghi chú thì dòng MA nằm sát ngay dưới hàng chỉ số, không chừa khoảng trống thừa.
+        _sub_lines = max([sum(len(textwrap.wrap(_l, 34)) or 1 for _l in str(m_["sub"]).split("\n")) for m_ in others if m_.get("sub")] or [0])
+        _ex = 13 * _sub_lines if _ma_row else 0
         top = brand_y + 32 + _ex + (0 if hide_legend else 60)       # lề trên = phần đầu biểu đồ (+ dòng chú giải các đường nếu hiện)
         # Vùng vẽ (nến + các khung chỉ báo) = chiều cao nền - 240 như trước, cộng thêm HDR_GAIN px nhờ phần chữ đầu biểu đồ đã thu nhỏ;
         # chiều cao tổng của hình = vùng vẽ + lề trên + lề dưới, nên vùng vẽ luôn cao hơn trước dù tên công ty xuống dòng hay không.
