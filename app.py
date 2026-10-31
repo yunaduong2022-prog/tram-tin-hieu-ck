@@ -2478,7 +2478,7 @@ def future_date(last, tf, k):
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
 
 
-DATE_GAP_PX = 34       # khe (px) giữa biểu đồ nến và khung bên dưới: chứa dải nhãn ngày + nhãn ngày của đường gióng
+DATE_GAP_PX = 16       # khe (px) giữa biểu đồ nến và khung bên dưới (khối lượng, MACD...). Nhãn ngày chỉ hiện ở đáy cùng nên khe này chỉ còn là khoảng cách giữa các khung
 # Định dạng nhãn trục ngày chỉ dùng mã số (không cần ngôn ngữ), Plotly tự chọn theo bước chia khi zoom:
 # ngày/tuần -> 24/10 · mỗi tháng -> Tháng 10 · mỗi 2-11 tháng -> T10/2026 · từ 1 năm -> 2026
 DATE_TICK_STOPS = [
@@ -2825,10 +2825,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    # Trục ngày: hiện ngay dưới biểu đồ nến (trên khung khối lượng), không chỉ ở đáy cùng; nhãn tự đổi theo mức zoom
+    # Trục ngày: chỉ hiện ở đáy cùng của hình (khung dưới cùng); nhãn tự đổi theo mức zoom
     fig.update_xaxes(hoverformat="%d/%m/%Y")        # ngày trong hộp rê chuột của các đường chỉ báo luôn đầy đủ, không theo nhãn tháng của trục
     fig.update_xaxes(tickformatstops=DATE_TICK_STOPS, tickangle=0, ticks="outside", ticklen=4, tickfont=dict(size=11))
-    fig.update_xaxes(showticklabels=True, row=1, col=1)
+    if not subs:
+        fig.update_xaxes(showticklabels=True, row=1, col=1)       # có khung chỉ báo phía dưới (Khối lượng...) thì nhãn ngày chỉ nằm ở đáy cùng, không lặp giữa các khung
     if metrics:
         # Bên trái: MÃ + GIÁ cạnh nhau (bỏ nhãn "Giá"), dòng phụ của giá nằm dưới mã. Bên phải mã: tên công ty (cỡ chữ bằng giá, hiện
         # đủ, tự xuống dòng) rồi O/H/L/C. Các chỉ số còn lại nằm ngay trên biểu đồ.
