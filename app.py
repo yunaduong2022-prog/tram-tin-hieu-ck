@@ -430,7 +430,8 @@ except Exception as e:
 
 df = frames["D"]
 latest_date = df["Ngày"].max()
-n_sessions = int(df.groupby("Mã").size().min())
+_sess = raw.groupby("Mã").size()         # số phiên THỰC của từng mã (tính từ dữ liệu gốc; frames chỉ giữ DAILY_KEEP phiên gần nhất để đỡ RAM)
+n_sessions = int(_sess.min())
 latest_df = df[df["Ngày"] == latest_date]
 DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}"
 WY_KEY = f"{DATA_KEY}-{float(latest_df['Giá đóng cửa'].sum()):.2f}"
@@ -557,12 +558,31 @@ MA_COL = {MA_OPTS[1]: "Trend_NganHan", MA_OPTS[2]: "Trend_TrungHan", MA_OPTS[3]:
 WY_OPTS = ["Tích lũy", "Phân phối", "Pha C", "Pha D", "Pha E"]
 
 
+MIN_SESSIONS_WARN = 60
+
+
+def short_sessions_note(sess: pd.Series, min_sessions: int = MIN_SESSIONS_WARN) -> tuple[str, str]:
+    """Nhận số phiên theo mã -> (mức, nội dung). Mức: "" (không cần báo) | "info" (vài mã mới niêm yết, chỉ ghi chú) |
+    "warning" (nhiều mã thiếu dữ liệu, có thể ảnh hưởng chung). Nội dung nêu rõ mã nào thiếu thay vì cảnh báo cả trang."""
+    few = sess[sess < min_sessions].sort_values()
+    if few.empty:
+        return "", ""
+    names = ", ".join(f"{c} ({int(n)} phiên)" for c, n in few.head(8).items()) + (f" và {len(few) - 8} mã khác" if len(few) > 8 else "")
+    effect = "Ichimoku, MA50/MA200, khung Tuần/Tháng và backtest"
+    if len(few) <= max(3, int(0.05 * len(sess))):
+        return "info", f"ℹ️ {len(few)} mã chưa đủ {min_sessions} phiên (thường là mã mới niêm yết): {names}. {effect} của riêng các mã này sẽ thiếu hoặc không đáng tin."
+    return "warning", f"{len(few)}/{len(sess)} mã dưới {min_sessions} phiên ({names}): {effect} của các mã này sẽ thiếu hoặc không đáng tin."
+
+
 def header():
     st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · "
-               f"tối thiểu {n_sessions} phiên/mã · RS so với {mkt_src}")
-    if n_sessions < 60:
-        st.warning("Dữ liệu dưới 60 phiên/mã: Ichimoku, MA50/MA200, khung Tuần/Tháng và backtest sẽ thiếu hoặc không đáng tin.")
-    elif n_sessions < 250:
+               f"trung vị {int(_sess.median()):,} phiên/mã · RS so với {mkt_src}")
+    _lv, _msg = short_sessions_note(_sess)
+    if _lv == "warning":
+        st.warning(_msg)
+    elif _lv == "info":
+        st.caption(_msg)
+    if _sess.median() < 250:
         st.caption("ℹ️ Dưới 250 phiên/mã: 'đỉnh/đáy 52 tuần', MA200 và cấu trúc dài hạn chỉ tính trên phần dữ liệu có sẵn.")
 
 
@@ -576,7 +596,7 @@ def wy_match(w, sel):
 GTGD_DEFAULT = 0.0      # GTGD20 tối thiểu (tỷ đồng) mặc định của ô lọc thanh khoản; 0 = không lọc. Đặt 5-10 nếu muốn mặc định loại mã kém thanh khoản.
 _FP_DEFAULTS = {"fp_alerts": ALERT_OPTS, "fp_zones": ["High", "Mid-Sell", "Low"], "fp_score": 0.0, "fp_rs": 0.80, "fp_vol": 0.0,
                 "fp_gtgd": GTGD_DEFAULT, "fp_align": "Tất cả", "fp_ma": "Tất cả", "fp_pos52": "Tất cả", "fp_groups": [], "fp_wy": [],
-                "fp_flow": [], "fp_search": "", "fp_above200": False}
+                "fp_flow": [], "fp_search": "", "fp_above200": False, "fp_cap": 0.0, "fp_roe": 0.0, "fp_pb": 0.0, "fp_rr": 0.0}
 # Preset một cú bấm: ngưỡng là gợi ý khởi đầu, hãy chỉnh theo phong cách giao dịch của bạn (nên kiểm tra bằng backtest)
 FILTER_PRESETS = {
     "Xu hướng khỏe": dict(fp_score=6.0, fp_rs=1.0, fp_above200=True, fp_gtgd=10.0),
@@ -618,6 +638,16 @@ def filter_panel():
                                 help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
         search = b2.text_input("Tìm mã", key="fp_search").upper()
         above200 = b3.checkbox("Chỉ lấy mã nằm trên MA200", key="fp_above200")
+        e1, e2, e3, e4 = st.columns(4)
+        min_cap = e1.number_input("Vốn hóa tối thiểu (tỷ đồng)", min_value=0.0, step=500.0, format="%.0f", key="fp_cap",
+                                  help="0 = không lọc. Mã chưa có dữ liệu vốn hóa sẽ bị loại khi bật ô này.")
+        min_roe = e2.number_input("ROE tối thiểu (%)", min_value=0.0, step=1.0, format="%.1f", key="fp_roe",
+                                  help="0 = không lọc. Mã chưa có dữ liệu ROE sẽ bị loại khi bật ô này.")
+        max_pb = e3.number_input("P/B tối đa", min_value=0.0, step=0.1, format="%.2f", key="fp_pb",
+                                 help="0 = không lọc. Chỉ lấy mã có P/B dương và không vượt ngưỡng; mã thiếu P/B bị loại khi bật ô này.")
+        min_rr = e4.number_input("R:R tối thiểu (vùng gom)", min_value=0.0, step=0.5, format="%.1f", key="fp_rr",
+                                 help="0 = không lọc. Dùng đúng R:R hiển thị trên thẻ (vùng gom - cắt lỗ - mục tiêu từ phân tích Đa khung). "
+                                      "Lần đầu bật sẽ mất vài giây để tính cho cả rổ.")
         _n_adv = sum(ss[k_] != (list(_FP_DEFAULTS[k_]) if isinstance(_FP_DEFAULTS[k_], list) else _FP_DEFAULTS[k_]) for k_ in _FP_ADV)
         with st.expander("⚙️ Nâng cao" + (f" · đang bật {_n_adv}" if _n_adv else ""), expanded=False):
             c1, c2, c3 = st.columns(3)
@@ -634,7 +664,40 @@ def filter_panel():
             flow = st.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), placeholder="Tất cả", key="fp_flow",
                                   help="Chọn nhiều mục = phải thoả tất cả")
     return dict(alerts=alerts, zones=zones, min_score=min_score, min_rs=min_rs, min_vol=min_vol, min_gtgd=min_gtgd, align=align,
-                ma_trend=ma_trend, pos52=pos52, groups=groups, wy=wy, flow=flow, search=search, above200=above200)
+                min_cap=min_cap, min_roe=min_roe, max_pb=max_pb, min_rr=min_rr, ma_trend=ma_trend, pos52=pos52, groups=groups, wy=wy, flow=flow, search=search, above200=above200)
+
+
+def _meta_series(codes: pd.Series, col: str) -> pd.Series:
+    """Vốn hóa (tỷ đồng) / ROE (%) / P/B theo mã, cùng nguồn với thẻ kết quả lọc (_wb_meta_maps). Thiếu dữ liệu -> NaN."""
+    cap_map, fund_map = _wb_meta_maps(WY_KEY)
+    up = codes.astype(str).str.upper()
+    if col == "cap":
+        return pd.to_numeric(up.map(cap_map), errors="coerce")
+    return pd.to_numeric(up.map(lambda c_: (fund_map.get(c_) or {}).get(col)), errors="coerce")
+
+
+def _rr_card_map(codes: tuple) -> dict:
+    """R:R của khung Vùng mua - Cắt lỗ - Mục tiêu trên thẻ (mtf_levels._strategy) cho nhiều mã. Kết quả nằm trong mtf_cached nên lần sau gần như tức thì."""
+    out = {}
+    for c_ in codes:
+        try:
+            s_ = (mtf_cached(frames, c_, DATA_KEY) or {}).get("strategy") or {}
+            out[c_] = float(s_["rr_value"]) if s_.get("ok") and s_.get("rr_value") is not None else np.nan
+        except Exception:  # noqa: BLE001
+            out[c_] = np.nan
+    return out
+
+
+def fund_filter_note(d: pd.DataFrame, p: dict) -> str:
+    """Dòng ghi chú: bao nhiêu mã bị loại vì THIẾU dữ liệu khi bật lọc vốn hóa / ROE / P/B (để không hiểu nhầm là mã không đạt)."""
+    codes = d["Mã"].drop_duplicates()
+    parts = []
+    for key, col, label in (("min_cap", "cap", "vốn hóa"), ("min_roe", "ROE", "ROE"), ("max_pb", "P/B", "P/B")):
+        if p.get(key, 0) > 0:
+            n_ = int(_meta_series(codes, col).isna().sum())
+            if n_:
+                parts.append(f"{label}: {n_}/{len(codes)}")
+    return ("ℹ️ Mã bị loại vì chưa có dữ liệu - " + " · ".join(parts)) if parts else ""
 
 
 def apply_filters(d: pd.DataFrame, p: dict) -> pd.DataFrame:
@@ -653,6 +716,17 @@ def apply_filters(d: pd.DataFrame, p: dict) -> pd.DataFrame:
         f = f[f["Vol/Avg10"].fillna(0) >= p["min_vol"]]
     if p.get("min_gtgd", 0) > 0 and "GTGD20" in f.columns:
         f = f[f["GTGD20"].fillna(0) >= p["min_gtgd"]]
+    if p.get("min_cap", 0) > 0:
+        f = f[_meta_series(f["Mã"], "cap").fillna(0) >= p["min_cap"]]
+    if p.get("min_roe", 0) > 0:
+        f = f[_meta_series(f["Mã"], "ROE").fillna(-1e9) >= p["min_roe"]]
+    if p.get("max_pb", 0) > 0:
+        _pb = _meta_series(f["Mã"], "P/B")
+        f = f[(_pb > 0) & (_pb <= p["max_pb"])]
+    if p.get("min_rr", 0) > 0 and len(f):
+        with st.spinner("Đang tính R:R cho cả rổ (lần đầu vài giây)..."):
+            _rr = _rr_card_map(tuple(f["Mã"].astype(str).unique()))
+        f = f[f["Mã"].astype(str).map(_rr).fillna(0) >= p["min_rr"]]
     if p["align"] != "Tất cả":
         f = f[f["MA align"] == p["align"]]
     if p["ma_trend"] != "Tất cả":
@@ -953,7 +1027,7 @@ def divergence_cached(_frames: dict, code: str, key: str) -> list:
     return DV.analyze(_frames, code, ("M", "W", "D"))
 
 
-@st.cache_data(show_spinner=False, max_entries=30)
+@st.cache_data(show_spinner=False, max_entries=400)      # mỗi mục chỉ ~1 KB nên giữ đủ cả rổ
 def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     pick = lambda tf: _frames[tf][_frames[tf]["Mã"] == code]
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
@@ -1092,7 +1166,11 @@ def page_filter():
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua - Cắt lỗ - Mục tiêu (wb-*)
     st.caption("Chọn một bộ lọc nhanh hoặc tự chỉnh các ô bên dưới (mục Nâng cao có thêm điều kiện Cảnh báo, Zone, MA, Wyckoff, Dòng tiền). "
                "Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
-    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
+    _p = filter_panel()
+    _note = fund_filter_note(res_df, _p)
+    if _note:
+        st.caption(_note)
+    f = apply_filters(res_df, _p).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
     st.divider()
     st.subheader("📋 Kết quả lọc")
     # ---- Tập B = Tập A + tìm mã + lọc thời hạn + sắp xếp (đọc trạng thái từ session_state để thẻ thống kê hiện đúng ngay lượt này)
@@ -1131,16 +1209,12 @@ def page_filter():
         st.dataframe(kq_table(page_df), hide_index=True, use_container_width=True)
         return
     show_mtf = st.toggle("Hiện phân tích đa khung (D · W · M) và chiến lược trong từng thẻ", value=True, key="show_mtf")
-    # Có thể bổ sung vốn hóa thực tế qua data/stock_metadata.csv (cột Mã,Vốn hóa TT; đơn vị tỷ đồng).
-    cap_map = {}
-    if os.path.exists("data/stock_metadata.csv"):
-        try:
-            meta = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
-            if {"Mã", "Vốn hóa TT"}.issubset(meta.columns): cap_map = dict(zip(meta["Mã"].str.upper(), meta["Vốn hóa TT"]))
-        except Exception: pass
-    # Tên công ty, P/B, ROE: data/fundamentals.csv do update_fundamentals.py tự cập nhật; tên sửa tay ở data/ten_cong_ty_tay.csv
-    fund_map = {}
-    fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
+    # Vốn hóa / P/B / ROE: dùng CHUNG nguồn với bộ lọc và các trang khác (_wb_meta_maps = stock_metadata + bảng xếp hạng ngành + nhập tay),
+    # trước đây thẻ chỉ đọc stock_metadata.csv + fundamentals.csv nên thiếu P/B, ROE và lệch vốn hóa so với trang Chờ mua / bộ lọc.
+    _cm, _fm = _wb_meta_maps(WY_KEY)
+    cap_map = dict(_cm)
+    fund_map = {k_: dict(v_) for k_, v_ in _fm.items()}      # bản sao: không sửa trực tiếp lên dữ liệu trong cache
+    # Tên công ty sửa tay ở data/ten_cong_ty_tay.csv (ưu tiên hơn nguồn tự động)
     if os.path.exists("data/ten_cong_ty_tay.csv"):
         try:
             _nt = pd.read_csv("data/ten_cong_ty_tay.csv", dtype=str)
@@ -1148,7 +1222,6 @@ def page_filter():
                 if isinstance(_n, str) and _n.strip():
                     fund_map.setdefault(_c, {})["Tên công ty"] = _n.strip()
         except Exception: pass
-    apply_manual_overrides(fund_map, cap_map)
     for _w in FG.warnings():
         st.warning("Dữ liệu cơ bản: " + _w)
     if f.empty:
@@ -1260,9 +1333,21 @@ def _wb_meta_maps(key: str) -> tuple[dict, dict]:
 
 @st.cache_data(show_spinner=False)
 def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
-    """Vốn hóa (data/stock_metadata.csv), tên/P/B/ROE (data/fundamentals.csv) và số nhập tay - cùng nguồn với thẻ ở Bộ lọc."""
+    """Vốn hóa (SLCP bảng xếp hạng ngành x giá, thiếu thì stock_metadata.csv), tên/P/B/ROE (fundamentals.csv + bảng xếp hạng) và số nhập tay - dùng chung cho thẻ Bộ lọc, Chờ mua và các ô lọc."""
     _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
     cap_map = market_cap_map(_px)
+    # Số CP lưu hành trong bảng xếp hạng ngành (WiData) mới và đúng hơn số nhập tay cũ trong shares_outstanding.csv
+    # (vd. AAS 229,999,521 CP chứ không phải 1,372,786,256) -> vốn hóa = giá hiện tại x SLCP của bảng xếp hạng. Ô "Vốn hóa TT" nhập tay vẫn ưu tiên hơn (xử lý ở dưới).
+    try:
+        _xh = XH.load()
+        if _xh is not None and not _xh.empty and "Số CP lưu hành" in _xh.columns:
+            _sh = _xh.drop_duplicates("Mã").set_index(_xh.drop_duplicates("Mã")["Mã"].astype(str).str.upper())["Số CP lưu hành"]
+            for _c, _n in pd.to_numeric(_sh, errors="coerce").items():
+                _p = _px.get(_c)
+                if pd.notna(_n) and _n > 0 and _p is not None and pd.notna(_p) and _p > 0:
+                    cap_map[_c] = round(float(_p) * float(_n) / 1e6)
+    except Exception:  # noqa: BLE001  (bảng xếp hạng lỗi thì giữ số cũ, không làm hỏng trang)
+        pass
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     XH.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, giá trị sổ sách, xếp hạng, vốn hóa theo bảng xếp hạng ngành (data/xep_hang_nganh.csv), chỉ điền ô còn thiếu
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
@@ -1355,7 +1440,7 @@ def _roe_rank_note(code: str) -> str:
             best = (rank, sec)
     if best is None or best[0] > TOP_NGANH_N:
         return ""
-    return f"TOP {best[0]} NGÀNH"          # chỉ ghi ngắn để nằm gọn dưới ô ROE (tên ngành đã có ở ghi chú Vốn hóa)
+    return f"TOP {best[0]} NGÀNH"        # ngắn gọn để nằm gọn dưới ô ROE, không lấn sang ô Vốn hóa (tên ngành đã có ở ghi chú dưới Vốn hóa)
 
 
 def _wb_ma_of(code: str) -> dict:
@@ -2758,6 +2843,11 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
         # nằm ngang hàng đáy chỉ số); tên nhiều dòng thì mã nâng thêm theo để vẫn thẳng hàng với dòng tên đầu tiên.
         _dy = 33 + NAME_LH * (max(1, len(name_lines)) - 1)
+        if price_m:
+            # Mốc bắt đầu của tên công ty / chỉ số phải nằm sau hết chữ giá (mã dài + giá nhiều chữ số thì lấn sang tên); ước lượng theo px.
+            # Giả định bề ngang vùng vẽ: ~850px ở trang Cổ phiếu, ~700px ở Livestream (cột hẹp hơn). Mã ngắn thì giữ nguyên code_w đã truyền vào.
+            _need_px = _code_px(code) + 32 + sum(10 if ch_ in ".," else 20 for ch_ in str(price_m["value"])) + 28
+            code_w = max(code_w, min(0.40, _need_px / (700 if hdr_right else 850)))
         step = (1 - code_w) / max(1, len(others))
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34 + _dy, showarrow=False,
                            text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
@@ -2776,15 +2866,16 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(others):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
-            fig.add_annotation(**base, yanchor="bottom", yshift=66, text=m["label"], font=dict(size=12, color="#8B95A5"),
+            fig.add_annotation(**base, yanchor="bottom", yshift=58, text=m["label"], font=dict(size=11, color="#8B95A5"),
                                hovertext=m.get("tip"))
-            fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
+            fig.add_annotation(**base, yanchor="bottom", yshift=34, text=f'<b>{m["value"]}</b>', font=dict(size=21),
                                hovertext=m.get("tip"))
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
                                    font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
         # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
-        brand_y = 106 + NAME_LH * len(name_lines) + (6 if name_lines else 0)
+        # Mã chưa có tên công ty (vd. mã mới thêm): vẫn chừa chỗ cho 1 dòng tên, nếu không dòng thương hiệu tụt xuống đè lên mã và giá
+        brand_y = 106 + NAME_LH * max(1, len(name_lines)) + 6
         BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
         top += BRAND_H
         height += BRAND_H - 80
@@ -3462,9 +3553,10 @@ def page_livestream():
         if _sec_main:
             _secs = [_sec_main] + [x_ for x_ in _secs if x_ != _sec_main]
         try:
-            _cap_map, _fund_map = _wb_meta_maps(WY_KEY)
-            # Mã có file data/nhan_dinh_ma/<MÃ>.md thì hiện thẻ nhận định thay cho thẻ vốn hóa & định giá; mã khác giữ thẻ định giá.
-            st.markdown(SDV.commentary_card(code) or SDV.valuation_card(code, _sec_main, _wb_meta(code) or {}, _fund_map, _cap_map, WL.GROUPS, _cap_rank_note(code)), unsafe_allow_html=True)
+            # Thẻ "Vốn hóa & định giá" đã bỏ (vốn hóa, P/E, P/B, ROE đã có sẵn ở đầu biểu đồ); mã có file data/nhan_dinh_ma/<MÃ>.md thì vẫn hiện thẻ nhận định.
+            _cm_card = SDV.commentary_card(code)
+            if _cm_card:
+                st.markdown(_cm_card, unsafe_allow_html=True)
             st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
             st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS), unsafe_allow_html=True)
         except Exception as exc:  # noqa: BLE001
