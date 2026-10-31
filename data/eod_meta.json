@@ -1,18 +1,14 @@
 {
- "updated_at": "30/10/2026 21:27 (giờ VN)",
+ "updated_at": "01/11/2026 03:51 (giờ VN)",
  "latest_date": "2026-10-30",
  "symbols": 266,
- "symbols_on_latest_date": 222,
- "rows": 490151,
+ "symbols_on_latest_date": 249,
+ "rows": 490212,
  "sources": {
-  "vci": 164,
-  "kbs": 72
+  "kbs": 1
  },
  "failed": [],
- "skipped": 13,
- "adjusted": [
-  "VDS",
-  "MSR"
- ],
- "stopped": "Quá 80 phút, dừng ở mã thứ 237/249"
+ "skipped": 0,
+ "adjusted": [],
+ "stopped": null
 }
