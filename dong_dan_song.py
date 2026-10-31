@@ -63,7 +63,7 @@ def _color(v):
 
 
 def _tag_style(v):
-    return "color:#E8C47C;font-weight:800;background-color:rgba(232,196,124,.14)" if v else ""
+    return "color:#E8C47C;font-weight:800;background-color:rgba(232,196,124,.07)" if v else ""
 
 
 def _styler(df: pd.DataFrame, pct_cols: list[str], selected: str | None):
@@ -97,6 +97,7 @@ def _table_cfg() -> dict:
     for w in ((64, 100, 64), ("small", "small", "small")):
         try:
             return {"Hạng": st.column_config.NumberColumn("Hạng", width=w[0], format="%d"),
+                    "Ngành / Dòng": st.column_config.TextColumn("Ngành / Dòng", width="large"),
                     "Tín hiệu": st.column_config.TextColumn("Tín hiệu", width=w[1]),
                     "Số mã": st.column_config.NumberColumn("Số mã", width=w[2], format="%d")}
         except Exception:  # noqa: BLE001
