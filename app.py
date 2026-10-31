@@ -2478,6 +2478,10 @@ def future_date(last, tf, k):
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
 
 
+# Chiều cao biểu đồ trang Cổ phiếu (máy tính): nền + mỗi khung chỉ báo phụ. Trước đây 540 + 180/khung nên khi bật nhiều chỉ báo biểu đồ cao hơn màn hình.
+# Muốn nhỏ/lớn hơn thì chỉnh 2 số này (Livestream dùng height_px riêng nên không bị ảnh hưởng).
+STOCK_CHART_BASE = 420
+STOCK_CHART_PER_SUB = 100
 DATE_GAP_PX = 16       # khe (px) giữa biểu đồ nến và khung bên dưới (khối lượng, MACD...). Nhãn ngày chỉ hiện ở đáy cùng nên khe này chỉ còn là khoảng cách giữa các khung
 # Định dạng nhãn trục ngày chỉ dùng mã số (không cần ngôn ngữ), Plotly tự chọn theo bước chia khi zoom:
 # ngày/tuần -> 24/10 · mỗi tháng -> Tháng 10 · mỗi 2-11 tháng -> T10/2026 · từ 1 năm -> 2026
@@ -2585,7 +2589,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         subs = [s for s in subs if s != "RS vs VNINDEX"]
     _w = [0.6 if s == "Khối lượng" else 1.0 for s in subs]          # khung khối lượng thấp hơn các chỉ báo khác
     heights = [0.56] + [0.44 * w_ / sum(_w) for w_ in _w] if subs else [1.0]
-    height = (440 + 140 * len(subs)) if mobile else (540 + 180 * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
+    height = (440 + 140 * len(subs)) if mobile else (STOCK_CHART_BASE + STOCK_CHART_PER_SUB * len(subs))    # điện thoại: thấp hơn để dễ vuốt qua biểu đồ
     if height_px:
         height = height_px + 100 * max(0, len(subs) - 1)
     # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
