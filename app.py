@@ -576,7 +576,7 @@ def wy_match(w, sel):
 GTGD_DEFAULT = 0.0      # GTGD20 tối thiểu (tỷ đồng) mặc định của ô lọc thanh khoản; 0 = không lọc. Đặt 5-10 nếu muốn mặc định loại mã kém thanh khoản.
 _FP_DEFAULTS = {"fp_alerts": ALERT_OPTS, "fp_zones": ["High", "Mid-Sell", "Low"], "fp_score": 0.0, "fp_rs": 0.80, "fp_vol": 0.0,
                 "fp_gtgd": GTGD_DEFAULT, "fp_align": "Tất cả", "fp_ma": "Tất cả", "fp_pos52": "Tất cả", "fp_groups": [], "fp_wy": [],
-                "fp_flow": [], "fp_search": "", "fp_above200": False}
+                "fp_flow": [], "fp_search": "", "fp_above200": False, "fp_cap": 0.0, "fp_roe": 0.0, "fp_pb": 0.0, "fp_rr": 0.0}
 # Preset một cú bấm: ngưỡng là gợi ý khởi đầu, hãy chỉnh theo phong cách giao dịch của bạn (nên kiểm tra bằng backtest)
 FILTER_PRESETS = {
     "Xu hướng khỏe": dict(fp_score=6.0, fp_rs=1.0, fp_above200=True, fp_gtgd=10.0),
@@ -618,6 +618,16 @@ def filter_panel():
                                 help="Một mã thuộc nhiều nhóm sẽ hiện nếu khớp bất kỳ nhóm nào được chọn.")
         search = b2.text_input("Tìm mã", key="fp_search").upper()
         above200 = b3.checkbox("Chỉ lấy mã nằm trên MA200", key="fp_above200")
+        e1, e2, e3, e4 = st.columns(4)
+        min_cap = e1.number_input("Vốn hóa tối thiểu (tỷ đồng)", min_value=0.0, step=500.0, format="%.0f", key="fp_cap",
+                                  help="0 = không lọc. Mã chưa có dữ liệu vốn hóa sẽ bị loại khi bật ô này.")
+        min_roe = e2.number_input("ROE tối thiểu (%)", min_value=0.0, step=1.0, format="%.1f", key="fp_roe",
+                                  help="0 = không lọc. Mã chưa có dữ liệu ROE sẽ bị loại khi bật ô này.")
+        max_pb = e3.number_input("P/B tối đa", min_value=0.0, step=0.1, format="%.2f", key="fp_pb",
+                                 help="0 = không lọc. Chỉ lấy mã có P/B dương và không vượt ngưỡng; mã thiếu P/B bị loại khi bật ô này.")
+        min_rr = e4.number_input("R:R tối thiểu (vùng gom)", min_value=0.0, step=0.5, format="%.1f", key="fp_rr",
+                                 help="0 = không lọc. Dùng đúng R:R hiển thị trên thẻ (vùng gom - cắt lỗ - mục tiêu từ phân tích Đa khung). "
+                                      "Lần đầu bật sẽ mất vài giây để tính cho cả rổ.")
         _n_adv = sum(ss[k_] != (list(_FP_DEFAULTS[k_]) if isinstance(_FP_DEFAULTS[k_], list) else _FP_DEFAULTS[k_]) for k_ in _FP_ADV)
         with st.expander("⚙️ Nâng cao" + (f" · đang bật {_n_adv}" if _n_adv else ""), expanded=False):
             c1, c2, c3 = st.columns(3)
@@ -634,7 +644,40 @@ def filter_panel():
             flow = st.multiselect("Dòng tiền sớm & nén biến động", list(FLOW_OPTS), placeholder="Tất cả", key="fp_flow",
                                   help="Chọn nhiều mục = phải thoả tất cả")
     return dict(alerts=alerts, zones=zones, min_score=min_score, min_rs=min_rs, min_vol=min_vol, min_gtgd=min_gtgd, align=align,
-                ma_trend=ma_trend, pos52=pos52, groups=groups, wy=wy, flow=flow, search=search, above200=above200)
+                min_cap=min_cap, min_roe=min_roe, max_pb=max_pb, min_rr=min_rr, ma_trend=ma_trend, pos52=pos52, groups=groups, wy=wy, flow=flow, search=search, above200=above200)
+
+
+def _meta_series(codes: pd.Series, col: str) -> pd.Series:
+    """Vốn hóa (tỷ đồng) / ROE (%) / P/B theo mã, cùng nguồn với thẻ kết quả lọc (_wb_meta_maps). Thiếu dữ liệu -> NaN."""
+    cap_map, fund_map = _wb_meta_maps(WY_KEY)
+    up = codes.astype(str).str.upper()
+    if col == "cap":
+        return pd.to_numeric(up.map(cap_map), errors="coerce")
+    return pd.to_numeric(up.map(lambda c_: (fund_map.get(c_) or {}).get(col)), errors="coerce")
+
+
+def _rr_card_map(codes: tuple) -> dict:
+    """R:R của khung Vùng mua - Cắt lỗ - Mục tiêu trên thẻ (mtf_levels._strategy) cho nhiều mã. Kết quả nằm trong mtf_cached nên lần sau gần như tức thì."""
+    out = {}
+    for c_ in codes:
+        try:
+            s_ = (mtf_cached(frames, c_, DATA_KEY) or {}).get("strategy") or {}
+            out[c_] = float(s_["rr_value"]) if s_.get("ok") and s_.get("rr_value") is not None else np.nan
+        except Exception:  # noqa: BLE001
+            out[c_] = np.nan
+    return out
+
+
+def fund_filter_note(d: pd.DataFrame, p: dict) -> str:
+    """Dòng ghi chú: bao nhiêu mã bị loại vì THIẾU dữ liệu khi bật lọc vốn hóa / ROE / P/B (để không hiểu nhầm là mã không đạt)."""
+    codes = d["Mã"].drop_duplicates()
+    parts = []
+    for key, col, label in (("min_cap", "cap", "vốn hóa"), ("min_roe", "ROE", "ROE"), ("max_pb", "P/B", "P/B")):
+        if p.get(key, 0) > 0:
+            n_ = int(_meta_series(codes, col).isna().sum())
+            if n_:
+                parts.append(f"{label}: {n_}/{len(codes)}")
+    return ("ℹ️ Mã bị loại vì chưa có dữ liệu - " + " · ".join(parts)) if parts else ""
 
 
 def apply_filters(d: pd.DataFrame, p: dict) -> pd.DataFrame:
@@ -653,6 +696,17 @@ def apply_filters(d: pd.DataFrame, p: dict) -> pd.DataFrame:
         f = f[f["Vol/Avg10"].fillna(0) >= p["min_vol"]]
     if p.get("min_gtgd", 0) > 0 and "GTGD20" in f.columns:
         f = f[f["GTGD20"].fillna(0) >= p["min_gtgd"]]
+    if p.get("min_cap", 0) > 0:
+        f = f[_meta_series(f["Mã"], "cap").fillna(0) >= p["min_cap"]]
+    if p.get("min_roe", 0) > 0:
+        f = f[_meta_series(f["Mã"], "ROE").fillna(-1e9) >= p["min_roe"]]
+    if p.get("max_pb", 0) > 0:
+        _pb = _meta_series(f["Mã"], "P/B")
+        f = f[(_pb > 0) & (_pb <= p["max_pb"])]
+    if p.get("min_rr", 0) > 0 and len(f):
+        with st.spinner("Đang tính R:R cho cả rổ (lần đầu vài giây)..."):
+            _rr = _rr_card_map(tuple(f["Mã"].astype(str).unique()))
+        f = f[f["Mã"].astype(str).map(_rr).fillna(0) >= p["min_rr"]]
     if p["align"] != "Tất cả":
         f = f[f["MA align"] == p["align"]]
     if p["ma_trend"] != "Tất cả":
@@ -953,7 +1007,7 @@ def divergence_cached(_frames: dict, code: str, key: str) -> list:
     return DV.analyze(_frames, code, ("M", "W", "D"))
 
 
-@st.cache_data(show_spinner=False, max_entries=30)
+@st.cache_data(show_spinner=False, max_entries=400)      # mỗi mục chỉ ~1 KB nên giữ đủ cả rổ
 def mtf_cached(_frames: dict, code: str, key: str) -> dict:
     pick = lambda tf: _frames[tf][_frames[tf]["Mã"] == code]
     return ML.analyze_dwm_timeframe(pick("D"), pick("W"), pick("M"))
@@ -1092,7 +1146,11 @@ def page_filter():
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua - Cắt lỗ - Mục tiêu (wb-*)
     st.caption("Chọn một bộ lọc nhanh hoặc tự chỉnh các ô bên dưới (mục Nâng cao có thêm điều kiện Cảnh báo, Zone, MA, Wyckoff, Dòng tiền). "
                "Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
-    f = apply_filters(res_df, filter_panel()).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
+    _p = filter_panel()
+    _note = fund_filter_note(res_df, _p)
+    if _note:
+        st.caption(_note)
+    f = apply_filters(res_df, _p).sort_values("Score", ascending=False).drop_duplicates("Mã").reset_index(drop=True)   # Tập A
     st.divider()
     st.subheader("📋 Kết quả lọc")
     # ---- Tập B = Tập A + tìm mã + lọc thời hạn + sắp xếp (đọc trạng thái từ session_state để thẻ thống kê hiện đúng ngay lượt này)
