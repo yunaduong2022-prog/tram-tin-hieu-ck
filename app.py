@@ -2861,9 +2861,9 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(others):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
-            fig.add_annotation(**base, yanchor="bottom", yshift=66, text=m["label"], font=dict(size=12, color="#8B95A5"),
+            fig.add_annotation(**base, yanchor="bottom", yshift=58, text=m["label"], font=dict(size=11, color="#8B95A5"),
                                hovertext=m.get("tip"))
-            fig.add_annotation(**base, yanchor="bottom", yshift=36, text=f'<b>{m["value"]}</b>', font=dict(size=26),
+            fig.add_annotation(**base, yanchor="bottom", yshift=34, text=f'<b>{m["value"]}</b>', font=dict(size=21),
                                hovertext=m.get("tip"))
             if m.get("sub"):
                 fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
