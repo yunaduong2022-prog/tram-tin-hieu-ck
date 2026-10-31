@@ -25,7 +25,6 @@ import nav as NAV
 import theme as TH
 import brand as BR
 import stock_tabs as ST
-import shares_src as SS     # số CP lưu hành: lấy số lớn nhất giữa thong_tin_chung / shares_outstanding / bảng xếp hạng ngành
 import mtf_levels as ML
 import waiting_buy as WB
 import action_summary as AS
@@ -226,8 +225,8 @@ MIN_CAP_BN = CF.MIN_CAP_BN   # ngưỡng vốn hóa (tỷ đồng) đặt MỘT 
 
 
 def market_cap_map(prices: dict) -> dict:
-    """{mã: vốn hóa tỷ đồng}. Ưu tiên tăng dần: data/stock_metadata.csv -> giá đóng cửa x SLCP lưu hành (LỚN NHẤT trong thong_tin_chung.csv,
-    shares_outstanding.csv, xep_hang_nganh.csv: xem shares_src.py) -> ô "Vốn hóa TT" nhập tay trong nhap_tay.csv. prices: {mã: giá đóng cửa mới nhất, đơn vị nghìn đồng}."""
+    """{mã: vốn hóa tỷ đồng}. Ưu tiên tăng dần: data/stock_metadata.csv -> giá đóng cửa x SLCP lưu hành (thong_tin_chung.csv, thiếu thì
+    shares_outstanding.csv) -> ô "Vốn hóa TT" nhập tay trong nhap_tay.csv. prices: {mã: giá đóng cửa mới nhất, đơn vị nghìn đồng}."""
     cap_map: dict = {}
     if os.path.exists("data/stock_metadata.csv"):
         try:
@@ -237,10 +236,13 @@ def market_cap_map(prices: dict) -> dict:
         except Exception:  # noqa: BLE001
             pass
     try:
-        _best = SS.best_shares()          # số CP lưu hành lớn nhất giữa các nguồn (shares_src.py)
+        _info = ST._read_csv_by_code(ST.INFO_PATH)
+        _sh = ST._read_csv_by_code(ST.SHARES_PATH)
         for _c, _p in prices.items():
-            _n = _best.get(_c)
-            if _n and pd.notna(_p) and _n > 0:
+            _n = pd.to_numeric(_info.at[_c, "SLCP lưu hành (cp)"], errors="coerce") if (_c in _info.index and "SLCP lưu hành (cp)" in _info.columns) else float("nan")
+            if pd.isna(_n) and _c in _sh.index and "Số CP lưu hành" in _sh.columns:
+                _n = pd.to_numeric(_sh.at[_c, "Số CP lưu hành"], errors="coerce")
+            if pd.notna(_n) and pd.notna(_p) and _n > 0:
                 cap_map[_c] = round(float(_p) * float(_n) / 1e6)
     except Exception:  # noqa: BLE001
         pass
@@ -1334,7 +1336,18 @@ def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     """Vốn hóa (SLCP bảng xếp hạng ngành x giá, thiếu thì stock_metadata.csv), tên/P/B/ROE (fundamentals.csv + bảng xếp hạng) và số nhập tay - dùng chung cho thẻ Bộ lọc, Chờ mua và các ô lọc."""
     _px = dict(zip(latest_df["Mã"].astype(str).str.upper(), pd.to_numeric(latest_df["Giá đóng cửa"], errors="coerce")))
     cap_map = market_cap_map(_px)
-    # Số CP lưu hành: market_cap_map ở trên đã lấy số LỚN NHẤT giữa thong_tin_chung / shares_outstanding / bảng xếp hạng ngành (shares_src.py); ô "Vốn hóa TT" nhập tay vẫn ưu tiên hơn (xử lý ở dưới).
+    # Số CP lưu hành trong bảng xếp hạng ngành (WiData) mới và đúng hơn số nhập tay cũ trong shares_outstanding.csv
+    # (vd. AAS 229,999,521 CP chứ không phải 1,372,786,256) -> vốn hóa = giá hiện tại x SLCP của bảng xếp hạng. Ô "Vốn hóa TT" nhập tay vẫn ưu tiên hơn (xử lý ở dưới).
+    try:
+        _xh = XH.load()
+        if _xh is not None and not _xh.empty and "Số CP lưu hành" in _xh.columns:
+            _sh = _xh.drop_duplicates("Mã").set_index(_xh.drop_duplicates("Mã")["Mã"].astype(str).str.upper())["Số CP lưu hành"]
+            for _c, _n in pd.to_numeric(_sh, errors="coerce").items():
+                _p = _px.get(_c)
+                if pd.notna(_n) and _n > 0 and _p is not None and pd.notna(_p) and _p > 0:
+                    cap_map[_c] = round(float(_p) * float(_n) / 1e6)
+    except Exception:  # noqa: BLE001  (bảng xếp hạng lỗi thì giữ số cũ, không làm hỏng trang)
+        pass
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     XH.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, giá trị sổ sách, xếp hạng, vốn hóa theo bảng xếp hạng ngành (data/xep_hang_nganh.csv), chỉ điền ô còn thiếu
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
