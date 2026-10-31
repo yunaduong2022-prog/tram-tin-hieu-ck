@@ -2529,12 +2529,12 @@ def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
     o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
     up = (c >= prev) if pd.notna(prev) else (c >= o)
     col = "#089981" if up else "#F23645"
-    head = f'<span style="color:#8B95A5;font-size:14px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
+    head = f'<span style="color:#8B95A5;font-size:12px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
     pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
     chg = ""
     if pd.notna(pct) and pd.notna(prev):
         chg = f' {c - prev:+,.2f} ({f"{pct:+.2f}".replace(".", ",")}%)'
-    ohlc = f'<span style="color:{col};font-size:14px">  O{o:,.2f} H{h:,.2f} L{l_:,.2f} C{c:,.2f}{chg}</span>'
+    ohlc = f'<span style="color:{col};font-size:12px">  O{o:,.2f} H{h:,.2f} L{l_:,.2f} C{c:,.2f}{chg}</span>'
     return head + ohlc
 
 
@@ -2835,74 +2835,71 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         import textwrap
         price_m = next((m for m in metrics if m["label"] == "Giá"), None)
         others = [m for m in metrics if m is not price_m]
-        NAME_PX, NAME_LH = 26, 34                       # cỡ chữ tên = cỡ chữ giá; 34px mỗi dòng
-        NAME_WRAP = 90                                  # tên công ty hiện trên 1 hàng ngang (tên dài nhất ~63 ký tự); chỉ xuống dòng khi dài bất thường
+        NAME_PX, NAME_LH = 21, 27                       # cỡ chữ tên; 27px mỗi dòng (đầu biểu đồ thu nhỏ để vùng vẽ rộng, cao hơn)
+        NAME_WRAP = 105                                 # tên công ty hiện trên 1 hàng ngang (tên dài nhất ~63 ký tự); chỉ xuống dòng khi dài bất thường
         _nm = _chart_name(code) or ""
         name_lines = textwrap.wrap(_nm + name_suffix if _nm else "", NAME_WRAP)
         top, bot = 150, 10
         # Khối MÃ + GIÁ nâng lên để mép trên chữ mã ngang mép trên dòng tên công ty (đo từ ảnh thực tế: mã cao hơn ~33px so với vị trí cũ,
         # nằm ngang hàng đáy chỉ số); tên nhiều dòng thì mã nâng thêm theo để vẫn thẳng hàng với dòng tên đầu tiên.
-        _dy = 33 + NAME_LH * (max(1, len(name_lines)) - 1)
+        _dy = 26 + NAME_LH * (max(1, len(name_lines)) - 1)
         if price_m:
             # Mốc bắt đầu của tên công ty / chỉ số phải nằm sau hết chữ giá (mã dài + giá nhiều chữ số thì lấn sang tên); ước lượng theo px.
             # Giả định bề ngang vùng vẽ: ~850px ở trang Cổ phiếu, ~700px ở Livestream (cột hẹp hơn). Mã ngắn thì giữ nguyên code_w đã truyền vào.
-            _need_px = _code_px(code) + 32 + sum(10 if ch_ in ".," else 20 for ch_ in str(price_m["value"])) + 28
+            _need_px = int(_code_px(code) * 0.8) + 26 + sum(8 if ch_ in ".," else 16 for ch_ in str(price_m["value"])) + 26
             code_w = max(code_w, min(0.40, _need_px / (700 if hdr_right else 850)))
         step = (1 - code_w) / max(1, len(others))
-        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=34 + _dy, showarrow=False,
-                           text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=56))
+        fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=27 + _dy, showarrow=False,
+                           text=f"<b>{htmllib.escape(str(code))}</b>", font=dict(size=45))
         if price_m:
             _pc = price_m.get("px_color", "#E6EDF3")
-            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 32,
-                               yshift=58 + _dy, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=34, color=_pc),
+            fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=int(_code_px(code) * 0.8) + 26,
+                               yshift=46 + _dy, showarrow=False, text=f'<b>{price_m["value"]}</b>', font=dict(size=27, color=_pc),
                                hovertext=price_m.get("tip"))
             if price_m.get("px_chg"):
-                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=_code_px(code) + 34,
-                                   yshift=40 + _dy, showarrow=False, text=price_m["px_chg"], font=dict(size=13, color=_pc))
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", xshift=int(_code_px(code) * 0.8) + 28,
+                                   yshift=32 + _dy, showarrow=False, text=price_m["px_chg"], font=dict(size=11, color=_pc))
             if price_m.get("sub"):
-                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=32 + _dy, showarrow=False,
-                                   align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 34)),
-                                   font=dict(size=11, color=price_m.get("color", "#8B95A5")), hovertext=price_m.get("tip"))
+                fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="top", yshift=26 + _dy, showarrow=False,
+                                   align="left", text="<br>".join(textwrap.wrap(str(price_m["sub"]), 36)),
+                                   font=dict(size=10, color=price_m.get("color", "#8B95A5")), hovertext=price_m.get("tip"))
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(others):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
-            fig.add_annotation(**base, yanchor="bottom", yshift=58, text=m["label"], font=dict(size=11, color="#8B95A5"),
+            fig.add_annotation(**base, yanchor="bottom", yshift=50, text=m["label"], font=dict(size=10, color="#8B95A5"),
                                hovertext=m.get("tip"))
-            fig.add_annotation(**base, yanchor="bottom", yshift=34, text=f'<b>{m["value"]}</b>', font=dict(size=21),
+            fig.add_annotation(**base, yanchor="bottom", yshift=29, text=f'<b>{m["value"]}</b>', font=dict(size=18),
                                hovertext=m.get("tip"))
             if m.get("sub"):
-                fig.add_annotation(**base, yanchor="top", yshift=32, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
-                                   font=dict(size=11, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
-        # Chồng từ dưới lên: chỉ số -> O/H/L/C (86) -> tên công ty (106, mỗi dòng 34px) -> dòng thương hiệu
+                fig.add_annotation(**base, yanchor="top", yshift=27, text="<br>".join("<br>".join(textwrap.wrap(_ln, 34)) for _ln in str(m["sub"]).split("\n")),
+                                   font=dict(size=10, color=m.get("color", "#8B95A5")), hovertext=m.get("tip"))
+        # Chồng từ dưới lên: chỉ số -> O/H/L/C (70) -> tên công ty (86, mỗi dòng 27px) -> dòng thương hiệu
         # Mã chưa có tên công ty (vd. mã mới thêm): vẫn chừa chỗ cho 1 dòng tên, nếu không dòng thương hiệu tụt xuống đè lên mã và giá
-        brand_y = 106 + NAME_LH * max(1, len(name_lines)) + 6
-        BRAND_H = 80 + (brand_y - 122)                 # chừa chỗ cho tên nhiều dòng + thương hiệu (mốc cũ: thương hiệu ở 122px, BRAND_H 80)
-        top += BRAND_H
-        height += BRAND_H - 80
+        brand_y = 86 + NAME_LH * max(1, len(name_lines)) + 4
         _ma_row = _ma_row_html(code) if MA_LAYER in layers else ""
-        _ex = 26 if _ma_row else 0                    # chừa thêm 26px cho dòng MA ngay dưới dòng chỉ số
-        top += _ex
-        height += _ex                         # cao thêm đúng phần đã chiếm để vùng vẽ nến không bị thu nhỏ
-        if hide_legend:                                # không có dòng chú giải thì bỏ phần lề trên dành cho nó (thương hiệu cao nhất ở brand_y + ~34px)
-            top -= 72
-            height -= 72
-        ph = height - top - bot
+        _ex = 24 if _ma_row else 0                    # chừa thêm 24px cho dòng MA ngay dưới dòng chỉ số
+        top = brand_y + 32 + _ex + (0 if hide_legend else 60)       # lề trên = phần đầu biểu đồ (+ dòng chú giải các đường nếu hiện)
+        # Vùng vẽ (nến + các khung chỉ báo) = chiều cao nền - 240 như trước, cộng thêm HDR_GAIN px nhờ phần chữ đầu biểu đồ đã thu nhỏ;
+        # chiều cao tổng của hình = vùng vẽ + lề trên + lề dưới, nên vùng vẽ luôn cao hơn trước dù tên công ty xuống dòng hay không.
+        HDR_GAIN = 70
+        ph = (height - 240) + HDR_GAIN
+        height = ph + top + bot
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=brand_y, showarrow=False,
-                           text=_brand_tag(), font=dict(size=22))
+                           text=_brand_tag(), font=dict(size=18))
         if name_lines:
-            fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=106, showarrow=False,
+            fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
                                align="left", text="<br>".join(htmllib.escape(x_) for x_ in name_lines),
                                font=dict(size=NAME_PX, color="#E6EDF3"))
-        fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
+        fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=70, showarrow=False,
                            align="left", text=_ohlc_header(code, tf, g))
         if _ma_row:
-            for _an in fig.layout.annotations:           # đẩy cụm chỉ số phía trên lên 26px, nhường chỗ cho dòng MA sát mép trên biểu đồ
+            for _an in fig.layout.annotations:           # đẩy cụm chỉ số phía trên lên _ex px, nhường chỗ cho dòng MA sát mép trên biểu đồ
                 if _an.xref == "paper" and _an.yref == "paper" and _an.y == 1:
                     _an.yshift = (_an.yshift or 0) + _ex
             fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=4, showarrow=False,
-                               align="left", text=_ma_row, font=dict(size=13))
+                               align="left", text=_ma_row, font=dict(size=12))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=top, b=bot),
-                          legend=dict(orientation="h", yanchor="bottom", y=1 + (104 + BRAND_H + _ex) / ph, font=dict(size=10)))
+                          legend=dict(orientation="h", yanchor="bottom", y=1 + (brand_y + 34 + _ex) / ph, font=dict(size=10)))
     elif mobile:
         # điện thoại: chú thích xuống dưới đáy biểu đồ (nhiều dòng cũng không đè lên chỉ số / thanh công cụ)
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
