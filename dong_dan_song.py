@@ -93,13 +93,13 @@ def _pick_from(sel, names: list[str]):
 
 
 def _table_cfg() -> dict:
-    """Cấu hình cột: Hạng / Tín hiệu / Số mã hẹp; bản Streamlit cũ không nhận độ rộng px thì dùng 'small'."""
-    for w in ((64, 100, 64), ("small", "small", "small")):
+    """Cấu hình cột: Hạng / Ngành / Tín hiệu / Số mã có độ rộng cố định vừa đủ để hai cột biến động luôn nằm trong khung; bản Streamlit cũ không nhận px thì dùng cỡ chữ."""
+    for w in ((64, 185, 100, 64), ("small", "medium", "small", "small")):
         try:
             return {"Hạng": st.column_config.NumberColumn("Hạng", width=w[0], format="%d"),
-                    "Ngành / Dòng": st.column_config.TextColumn("Ngành / Dòng", width="large"),
-                    "Tín hiệu": st.column_config.TextColumn("Tín hiệu", width=w[1]),
-                    "Số mã": st.column_config.NumberColumn("Số mã", width=w[2], format="%d")}
+                    "Ngành / Dòng": st.column_config.TextColumn("Ngành / Dòng", width=w[1]),
+                    "Tín hiệu": st.column_config.TextColumn("Tín hiệu", width=w[2]),
+                    "Số mã": st.column_config.NumberColumn("Số mã", width=w[3], format="%d")}
         except Exception:  # noqa: BLE001
             continue
     return {}
