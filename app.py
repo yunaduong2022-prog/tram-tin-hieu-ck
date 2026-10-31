@@ -41,6 +41,7 @@ import market_overview as MO
 import my_watchlist as MW
 import my_portfolio as MP
 import vip_picks as VP
+import backtest_view as BV            # Bộ lọc & Backtest > Backtest chiến lược + số liệu backtest cho thẻ setup
 import xep_hang_nganh as XH
 import nhom_nganh_homnay as NNH          # Thị trường > Nhóm ngành: xếp hạng sức mạnh nhóm ngành hôm nay
 import dong_dan_song as DDS              # Ngành > Dòng dẫn sóng
@@ -2158,10 +2159,9 @@ def rsi_card(a, tf, code):
     return card("Phân tích RSI", head + body + note)
 
 
-SETUP_BT = {        # backtest 147 mã 2019-2026, vào mở cửa phiên sau, đã trừ phí 0,15%/chiều + thuế 0,1% + trượt giá 0,1%/chiều, T+2,
-                    # thoát khi chạm cắt lỗ hoặc đóng cửa dưới Supertrend, tối đa 60 phiên: (số lệnh, lãi TB %, thắng %, R/lệnh)
-    "BOTTOM": (603, 4.1, 37, 0.53), "BASE_HL": (1309, 2.8, 34, 0.36), "BREAKOUT": (3074, 1.5, 30, 0.25), "TREND": (3629, 3.0, 34, 0.50)}
-SETUP_BASE = (5880, 2.1, 34, 0.31)      # vào ngẫu nhiên, cùng cách cắt lỗ và thoát
+def _setup_bt():
+    """Số liệu backtest cho thẻ setup: đọc từ data/setup_stats.csv (do backtest_setups.py ghi), chưa có file thì dùng số cũ."""
+    return BV.load_setup_bt()
 
 
 def setup_card(g_day):
@@ -2218,15 +2218,28 @@ def setup_card(g_day):
         html.append(f'<div class="muted" style="margin-top:6px">{tag(_lab, _mc["tone"])} {_mc["note"]}</div>')
     if p["div_note"]:
         html.append(f'<div class="muted" style="margin-top:6px">{tag("Phân kỳ tăng", "green" if p["div"]["state"] == "confirmed" else "amber")} {p["div_note"]}</div>')
-    if s_ in SETUP_BT:
-        n, rt, w, rr = SETUP_BT[s_]
-        bn, brt, bw, brr = SETUP_BASE
-        html.append(f'<div class="muted" style="margin-top:8px">Backtest kiểu này ({n:,} lệnh, 147 mã, 2019-2026, đã trừ phí, thuế, trượt giá, T+2): '
-                    f'lãi trung bình {rt:+.1f}%/lệnh, thắng {w}%, {rr:+.2f}R/lệnh. Vào ngẫu nhiên với cùng cách thoát: {brt:+.1f}%, thắng {bw}%, {brr:+.2f}R. '
-                    'Tức là tỷ lệ thắng chỉ khoảng một phần ba; lợi nhuận đến từ vài lệnh lớn, và kết quả âm ở các năm 2019, 2022, 2024, 2026. '
-                    'Chia nhỏ vốn, luôn đặt cắt lỗ; đây là công cụ lọc, không phải lệnh chắc thắng.</div>')
+    _bt = _setup_bt()
+    if s_ in _bt["bt"]:
+        n, rt, w, rr = _bt["bt"][s_]
+        bn, brt, bw, brr = _bt["base"]
+        _m = _bt["meta"]
+        _scope = (f'{_m.get("số mã", "")} mã, {str(_m.get("dữ liệu từ", ""))[:4]}-{str(_m.get("dữ liệu đến", ""))[:4]}' if _bt["src"] == "file" else "147 mã, 2019-2026")
+        _txt = (f'Backtest kiểu này ({n:,} lệnh, {_scope}, đã trừ phí, thuế, trượt giá, T+2): '
+                f'lãi trung bình {rt:+.1f}%/lệnh, thắng {w:.0f}%, {rr:+.2f}R/lệnh. Vào ngẫu nhiên với cùng cách thoát: {brt:+.1f}%, thắng {bw:.0f}%, {brr:+.2f}R. ')
+        _o = _bt["oos"].get(s_)
+        if _o:
+            _txt += (f'Ngoài mẫu (từ {_m.get("ngày tách IS/OOS", "")}): {_o[1]:+.1f}%/lệnh, {_o[3]:+.2f}R, {_o[0]:,} lệnh. ')
+        if _bt["src"] == "file" and not _bt["sig"].get(s_):
+            _txt += 'Chưa hơn mức vào ngẫu nhiên một cách có ý nghĩa thống kê. '
+        _ng = _bt["neg_years"].get(s_)
+        _txt += ('Tỷ lệ thắng chỉ khoảng một phần ba; lợi nhuận đến từ vài lệnh lớn' if w < 45 else 'Lợi nhuận phụ thuộc vào một số lệnh lớn')
+        _txt += (f', và kết quả âm ở các năm {", ".join(map(str, _ng))}. ' if _ng else '. ' if _bt["src"] == "file" else ', và kết quả âm ở các năm 2019, 2022, 2024, 2026. ')
+        _txt += 'Chia nhỏ vốn, luôn đặt cắt lỗ; đây là công cụ lọc, không phải lệnh chắc thắng. Chi tiết ở Bộ lọc &amp; Backtest › Backtest chiến lược.'
+        html.append(f'<div class="muted" style="margin-top:8px">{_txt}</div>')
     elif s_ == "WEAK":
-        html.append('<div class="muted" style="margin-top:6px">Trạng thái yếu nhất trong backtest: +0,8%/lệnh, 0,06R, thấp hơn nhiều so với vào ngẫu nhiên.</div>')
+        _w = _bt["bt"].get("WEAK")
+        html.append('<div class="muted" style="margin-top:6px">Trạng thái yếu nhất trong backtest: '
+                    + (f'{_w[1]:+.1f}%/lệnh, {_w[3]:+.2f}R' if _w else '+0,8%/lệnh, 0,06R') + ', thấp hơn nhiều so với vào ngẫu nhiên.</div>')
     elif s_ == "RANGE":
         html.append('<div class="muted" style="margin-top:6px">Mua sát hỗ trợ giữa Tenkan và Kijun cho kỳ vọng gần 0 và 50% lần bị quét cắt lỗ trong 10 phiên; '
                     'vượt đường trên kèm khối lượng mới có lợi thế (+2,3% sau 20 phiên so với mức nền +1,7%).</div>')
@@ -3286,9 +3299,7 @@ def _route_inner():
         if sub == "Khuyến nghị khách hàng": return page_vip_picks()
         if sub == "Danh sách cảnh báo": return page_alert_lists()
         if sub == "Bán / Chốt lời": return page_sell_list()
-        return NAV.placeholder("🧪 Backtest chiến lược",
-                               ["Backtest theo từng mã (Win Rate) hiện có trong Cổ phiếu > Biểu đồ.",
-                                "Công cụ backtest hàng loạt theo bộ lọc: đang xây dựng."])
+        return BV.render(_STRETCH_DF)
     if main == "Livestream":
         return page_livestream()
     if main == "Cổ phiếu" and sub == "Biểu đồ":

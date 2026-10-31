@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+.streamlit/secrets.toml
+.DS_Store
+
+# file lệnh chi tiết của backtest (lớn, sinh lại bằng backtest_setups.py)
+data/setup_trades.csv

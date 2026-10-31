@@ -239,3 +239,16 @@ Nội dung thẻ động lực nằm trong `data/dong_luc_nganh.csv` (cột: Ph�
 - **Phạm vi** = tên ngành đúng như trong `watchlist.py` (ví dụ `Cao su`) hoặc mã cổ phiếu (ví dụ `GVR`) cho dòng chỉ riêng mã đó.
 - **Loại** = `Động lực`, `Đầu vào`, `Đầu ra`, `Chỉ số theo dõi` hoặc `Rủi ro`.
 - Muốn hiện số (ví dụ giá cao su thế giới), điền cột **Giá trị**, **Thay đổi %**, **Cập nhật**, **Nguồn** của dòng đó; để trống thì chỉ hiện mô tả. App không tự lấy giá hàng hóa.
+
+## Backtest setup và theo dõi tín hiệu thực (mới)
+
+Menu **Bộ lọc & Backtest → Backtest chiến lược** thay cho chỗ giữ chỗ cũ. Hai script ghi số liệu ra `data/`, app chỉ đọc:
+
+- `backtest_setups.py` (khoảng 1 phút): backtest 6 setup của Phân loại trạng thái (BOTTOM, BASE_HL, BREAKOUT, TREND, RANGE, WEAK) so với mức nền vào ngẫu nhiên.
+  Cùng quy tắc với `engine.BT_COST` (vào mở cửa phiên sau, phí, thuế, trượt giá, T+2). Ghi `data/setup_stats.csv` (theo toàn kỳ, IS / OOS, từng năm, VNINDEX trên / dưới MA200,
+  kèm trung vị, khoảng tin cậy 95%, profit factor, MDD), `data/setup_stats_meta.json` và `data/setup_trades.csv` (từng lệnh, không đưa lên git). Chạy lại mỗi khi dữ liệu thay đổi nhiều (ví dụ mỗi tuần).
+  Thẻ setup trong app (`setup_card`) đọc cùng file này thay cho bảng số cứng `SETUP_BT` cũ; chưa có file thì dùng số cũ.
+- `forward_log.py`: mỗi lần chạy ghi tín hiệu mới của ngày dữ liệu mới nhất vào `data/forward_signals.csv`, rồi cập nhật kết quả các tín hiệu cũ (lợi suất 20 / 40 / 60 phiên, kết quả lệnh mô phỏng, chênh lệch so với VNINDEX)
+  và tổng hợp ra `data/forward_summary.csv`. Đã gắn vào `update_eod.bat`. Lần chạy đầu chỉ ghi ngày mới nhất, không dựng lại quá khứ. Cần ít nhất 30 lệnh đã đóng mỗi setup mới nên đọc kết quả.
+
+Cả hai dùng chung hàm `simulate()` trong `backtest_setups.py` để đo bằng cùng một thước. Các mục **Cổ phiếu của tôi** và **Khuyến nghị khách hàng** không bị thay đổi.
