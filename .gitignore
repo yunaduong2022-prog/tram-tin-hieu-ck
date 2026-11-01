@@ -29,3 +29,5 @@ data/.foreign_backups/
 data/.foreign_state/
 data/proprietary_flow.csv
 data/.proprietary_state/
+data/foreign_stock_flow.csv
+data/.foreign_stock_state/
