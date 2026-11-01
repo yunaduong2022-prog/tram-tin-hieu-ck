@@ -129,37 +129,51 @@ def make_candle(d, intraday=False):
 
 
 
-def quick_chart_period(d, intraday, period):
-    """Choose true lookback windows; don't mistake a daily candle for 15m bars.
 
-    1 day/week shows closed 15m bars from the last 1/5 available trading
-    sessions when intraday is at least as current as EOD; otherwise use 1/5
-    EOD candles explicitly labelled as a fallback. Never synthesize bars.
+def quick_chart_period(d, intraday, period):
+    """Quick-chart lookback, NOT a technical indicator timeframe.
+
+    1 giờ = 15m bars during the last 60 minutes of recorded market time.
+    1 ngày / 1 tuần = last 1 / up to 5 available trading sessions of
+    confirmed 15m bars. When the intraday snapshot is stale, use clearly
+    labelled EOD for 1d/1w, never present EOD as an hourly candle.
     """
+    if d is None or d.empty:
+        return pd.DataFrame(), False, 'Chưa có dữ liệu giá EOD để tham chiếu.'
+    latest_eod = pd.to_datetime(d.iloc[-1]['Ngày']).date()
+    valid = pd.DataFrame()
+    if intraday is not None and not intraday.empty and 'time' in intraday.columns:
+        valid = intraday.dropna(subset=['time']).sort_values('time')
+    has_current_15m = (not valid.empty and
+                       valid.iloc[-1]['time'].date() >= latest_eod)
     if period == '15 phút':
-        if intraday is None or intraday.empty:
-            return d.tail(1), False, 'Chưa có nến 15m; dùng nến EOD gần nhất.'
-        return intraday, True, (
-            f'Nến 15m gần nhất (đã đóng): {intraday.iloc[-1]["time"]:%d/%m/%Y %H:%M} · Không phải realtime từng giây')
-    if period in ('1 ngày', '1 tuần'):
+        if valid.empty:
+            return pd.DataFrame(), True, 'Chưa có nến 15 phút đã đóng của mã này.'
+        return valid, True, (
+            f'15 phút: nến gần nhất {valid.iloc[-1]["time"]:%d/%m/%Y %H:%M}; không phải giá từng giây.')
+    if period == '1 giờ':
+        if not has_current_15m:
+            return pd.DataFrame(), True, 'Khung 1 giờ cần nến 15 phút đủ mới; chưa có dữ liệu phù hợp.'
+        end = valid.iloc[-1]['time']
+        portion = valid.loc[(valid['time'] > end - pd.Timedelta(minutes=60)) &
+                            (valid['time'] <= end)].tail(4)
+        return portion, True, (
+            f'1 giờ gần nhất theo 15m đã đóng: {len(portion)}/4 nến, đến {end:%d/%m/%Y %H:%M}.')
+    if period in ('1 ngày','1 tuần'):
         days = 1 if period == '1 ngày' else 5
-        if intraday is not None and not intraday.empty and 'time' in intraday.columns:
-            valid = intraday.dropna(subset=['time']).sort_values('time')
-            # Don't use stale intraday snapshots if EOD is newer.
-            if not valid.empty and valid.iloc[-1]['time'].date() >= d.iloc[-1]['Ngày'].date():
-                available = sorted(valid['time'].dt.date.unique())
-                selected_dates = set(available[-days:])
-                portion = valid.loc[valid['time'].dt.date.isin(selected_dates)].copy()
-                if not portion.empty:
-                    return portion, True, (
-                        f'{period}: {len(selected_dates)}/{days} phiên có nến 15m đã đóng; '
-                        f'mới nhất {portion.iloc[-1]["time"]:%d/%m/%Y %H:%M}.')
+        if has_current_15m:
+            dates = sorted(valid['time'].dt.date.unique())[-days:]
+            portion = valid.loc[valid['time'].dt.date.isin(set(dates))]
+            if not portion.empty:
+                return portion, True, (
+                    f'{period}: {len(dates)}/{days} phiên có nến 15m đã đóng; '
+                    f'mới nhất {portion.iloc[-1]["time"]:%d/%m/%Y %H:%M}.')
         return d.tail(days), False, (
-            f'{period}: chưa có dữ liệu 15m đủ mới; hiển thị {min(len(d),days)} nến EOD đã xác nhận.')
-    n = {'1 tháng':21, '3 tháng':63, '6 tháng':126, '1 năm':252, 'Tất cả':len(d)}.get(period)
-    if n is None:
-        raise ValueError('Unsupported quick chart period: '+str(period))
-    return d.tail(n), False, ''
+            f'{period}: nến 15 phút chưa đủ mới; dùng {min(len(d),days)} nến EOD đã xác nhận.')
+    size = {'1 tháng':21,'3 tháng':63,'6 tháng':126,'1 năm':252,'Tất cả':len(d)}.get(period)
+    if size is None:
+        raise ValueError('Unknown stock quick-chart range: '+str(period))
+    return d.tail(size), False, ''
 
 
 def render_profile(g, code, fund):
@@ -199,14 +213,19 @@ def render_profile(g, code, fund):
     left,right=st.columns([1.35,1],gap='large')
     with left:
         st.markdown('**Biểu đồ nhanh**')
-        choices=['1 ngày','1 tuần','1 tháng','3 tháng','6 tháng','1 năm','Tất cả']
-        if not intraday.empty:
-            choices=['15 phút']+choices
-        period=st.selectbox('Khoảng biểu đồ', choices, index=(1 if choices[0]=='15 phút' else 0), key=f'min_profile_period_{code}')
+        # QUICK_CHART_V3_1H_1D_1W: explicit choices; new widget key clears stale UI state.
+        choices = ['15 phút','1 giờ','1 ngày','1 tuần','1 tháng','3 tháng','6 tháng','1 năm','Tất cả']
+        default = '1 ngày' if not intraday.empty else '1 tháng'
+        period = st.selectbox('Khoảng biểu đồ', choices, index=choices.index(default),
+                              key=f'min_profile_quick_v3_{code}')
+        st.caption('Xem nhanh v3 · 1 giờ / 1 ngày / 1 tuần lấy nến 15m đã đóng khi có dữ liệu; các kỳ dài lấy EOD.')
         selected, use_intra, period_note = quick_chart_period(d, intraday, period)
         if period_note:
             st.caption(period_note)
-        st.plotly_chart(make_candle(selected,use_intra), use_container_width=True)
+        if selected.empty:
+            st.info('Chưa đủ dữ liệu nến đã đóng cho khoảng thời gian này. Chọn kỳ dài hơn hoặc kiểm tra lần cập nhật 15m.')
+        else:
+            st.plotly_chart(make_candle(selected,use_intra), use_container_width=True)
         st.caption('Biểu đồ nhanh từ dữ liệu đã lưu. Tab Biểu đồ chính giữ đầy đủ 6 khung và bộ chỉ báo.')
     with right:
         st.markdown('**Hồ sơ doanh nghiệp & định giá**')
