@@ -160,7 +160,7 @@ def _save_cache(code: str, items: list[dict]) -> None:
 def fetch_news(code: str, limit: int = 20, name=None) -> tuple[list[dict], list[str], dict]:
     """Trả về (tin, lỗi, meta). meta = {'fetched': thời điểm lấy, 'stale': True nếu là bản lưu cũ}."""
     errs: list[str] = []
-    items = _vnstock_news(code, errs) or _rss_news(code, errs, name)
+    items = (_vnstock_news(code, errs) if os.environ.get("VNSTOCK_REMOTE_ALLOWED", "0") == "1" else []) or _rss_news(code, errs, name)
     items.sort(key=lambda x: x["date"] or pd.Timestamp.min, reverse=True)
     items = items[:limit]
     now = pd.Timestamp.now()

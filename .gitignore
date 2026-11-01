@@ -6,3 +6,21 @@ __pycache__/
 
 # file lệnh chi tiết của backtest (lớn, sinh lại bằng backtest_setups.py)
 data/setup_trades.csv
+
+# Local backups - do not publish
+backups/
+*.bak
+*.bak.*
+*.csv.*.bak
+*.json.*.bak
+
+# VNStock intraday data; do not publish until redistribution rights are confirmed.
+data/intraday_15m.csv
+
+# Local-only trusted precomputed indicators, never sync to GitHub
+data/.startup_cache/
+
+# Local-only incremental intraday progress and audit reports
+data/.intraday_state/
+# R2 publish/download state and logs
+data/.cloud_sync/

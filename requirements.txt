@@ -7,3 +7,4 @@ plotly>=5.20
 streamlit-autorefresh>=1.0.1
 vnstock>=5.0.1
 psutil>=5.9
+boto3>=1.34,<2

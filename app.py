@@ -13,6 +13,8 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import intraday_mtf as IM
+import startup_accel as SC
 import fund_guard as FG
 import ichimoku_dual as IDU
 import setups as SU
@@ -52,6 +54,10 @@ import crosshair as CH
 import draw_tools as DT
 
 st.set_page_config(layout="wide", page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon())
+# Private R2 mirror (only when [market_sync] is configured in Streamlit Secrets).
+import r2_bridge as R2B
+_R2_SYNC_STATUS = R2B.sync_for_streamlit()
+
 
 TH.inject()
 st.markdown(WYK.CSS, unsafe_allow_html=True)      # CSS khối ghi chú Wyckoff trong thẻ (wy-*)
@@ -149,7 +155,7 @@ _STRETCH = ({"width": "stretch"} if "width" in inspect.signature(st.plotly_chart
             else {"use_container_width": True})
 _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe).parameters
                else {"use_container_width": True})
-TF_LABEL = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
+TF_LABEL = {"15m": "15 phút", "1H": "1 giờ", "4H": "4 giờ (phiên VN)", "D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
 MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GIÁ TRỊ MA20/MA50 ngày + tuần dưới dòng chỉ số, không vẽ đường
 CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
@@ -329,6 +335,8 @@ VN30_LIST, VN30_SRC = list(WL.VN30_DU_PHONG), "danh sách trong watchlist.py (VN
 MEMBER = WL.membership(VN30_LIST)
 
 HAS_EOD = os.path.exists(EOD_CSV)
+# Prepared data is trusted/local and verified against EOD + code/metadata versions.
+_PREPARED = SC.load_if_valid() if HAS_EOD else None
 
 with st.sidebar:
     st.caption(f"Engine {E.ENGINE_VERSION}")
@@ -338,14 +346,14 @@ with st.sidebar:
     except Exception:  # noqa: BLE001
         pass
     st.header("📂 Dữ liệu")
-    data_mode = st.radio("Nguồn dữ liệu", [MODE_EOD, MODE_XLS, MODE_LIVE], index=0 if HAS_EOD else 1,
+    data_mode = st.radio("Nguồn dữ liệu", [MODE_EOD, MODE_XLS], index=0 if HAS_EOD else 1,
                          help="Cuối phiên: file data/eod_prices.csv do lịch tự động cập nhật sau giờ đóng cửa (khuyến nghị). "
                               "Vnstock tự động: gọi nguồn liên tục khi mở app, dễ bị giới hạn tần suất.")
     source = None
     if data_mode == MODE_EOD:
         _meta = read_eod_meta()
         if HAS_EOD:
-            st.caption("Dữ liệu cuối phiên, tự cập nhật sau 15:45 mỗi ngày giao dịch (GitHub Actions)."
+            st.caption("Dữ liệu EOD thu thập trên Windows (đồng bộ riêng tư qua R2 khi được cấu hình)."
                        + (f" Cập nhật lần cuối: {_meta['updated_at']}." if _meta.get("updated_at") else "")
                        + (f" Nguồn: {', '.join(_meta['sources'])}." if _meta.get("sources") else ""))
             if _meta.get("failed") or _meta.get("stopped"):
@@ -389,7 +397,7 @@ if data_mode == MODE_EOD:
                 "Hoặc chọn **Excel CafeF** ở thanh bên.")
         st.stop()
     try:
-        raw = load_eod(EOD_CSV, os.path.getmtime(EOD_CSV))
+        raw = _PREPARED["raw"] if _PREPARED is not None else load_eod(EOD_CSV, os.path.getmtime(EOD_CSV))
     except Exception as e:
         st.error(f"Không đọc được data/eod_prices.csv: {e}")
         st.stop()
@@ -422,8 +430,11 @@ else:
         st.stop()
 
 try:
-    raw = drop_small_caps(E.clean_raw(raw))        # bỏ mã vốn hóa dưới MIN_CAP_BN tỷ để đỡ tốn RAM
-    frames = build_frames(raw, E.ENGINE_VERSION)
+    if data_mode == MODE_EOD and _PREPARED is not None:
+        frames = _PREPARED["frames"]
+    else:
+        raw = drop_small_caps(E.clean_raw(raw))        # unchanged computation if no valid EOD cache
+        frames = build_frames(raw, E.ENGINE_VERSION)
 except Exception as e:
     st.error(f"Lỗi khi xử lý dữ liệu: {e}")
     st.stop()
@@ -435,7 +446,7 @@ n_sessions = int(_sess.min())
 latest_df = df[df["Ngày"] == latest_date]
 DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}"
 WY_KEY = f"{DATA_KEY}-{float(latest_df['Giá đóng cửa'].sum()):.2f}"
-WY_TABLE = wyckoff_table(df, WY_KEY)
+WY_TABLE = _PREPARED["wy"] if data_mode == MODE_EOD and _PREPARED is not None else wyckoff_table(df, WY_KEY)
 if data_mode == "Vnstock tự động":
     st.caption(f"🟢 Chế độ tự động · lịch sử OHLCV được cache 60 phút · bảng giá polling mỗi {refresh_seconds} giây. Thời điểm chạy: {pd.Timestamp.now(tz='Asia/Ho_Chi_Minh'):%H:%M:%S %d/%m/%Y} (giờ VN). Giá đang chạy có thể chưa đồng bộ đầy đủ với OHLCV.")
 elif data_mode == MODE_EOD:
@@ -454,8 +465,17 @@ def screener_cached(_frames: dict, mkt: pd.Series, key: str) -> pd.DataFrame:
     return E.build_screener(_frames, mkt)
 
 
-mkt, mkt_src = market_cached(raw, WY_KEY)
-res_df = screener_cached(frames, mkt, WY_KEY + "|" + E.ENGINE_VERSION).copy()
+mkt, mkt_src = _PREPARED["market"] if data_mode == MODE_EOD and _PREPARED is not None else market_cached(raw, WY_KEY)
+res_df = (_PREPARED["screener"].copy() if data_mode == MODE_EOD and _PREPARED is not None
+          else screener_cached(frames, mkt, WY_KEY + "|" + E.ENGINE_VERSION).copy())
+# Opportunistic fallback: if cache is missing (e.g. fresh Cloud instance),
+# retain the result locally for subsequent launches. Never alters EOD CSV.
+if data_mode == MODE_EOD and _PREPARED is None:
+    try:
+        SC.save({"raw":raw, "frames":frames, "wy":WY_TABLE,
+                 "market":(mkt,mkt_src), "screener":res_df.copy()})
+    except (OSError, ValueError, TypeError) as _cache_exc:
+        st.caption("Bộ nhớ đệm khởi động không sẵn sàng; tiếp tục tính toán bình thường.")
 res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
 _gt = df.groupby("Mã").tail(20)       # GTGD trung bình 20 phiên (tỷ đồng) = giá (nghìn đồng) x khối lượng / 1 triệu; tail() trả về bản sao nên không đụng frames dùng chung
 res_df["GTGD20"] = res_df["Mã"].map((_gt["Giá đóng cửa"] * _gt["Khối lượng khớp lệnh"] / 1e6).groupby(_gt["Mã"]).mean().round(1))
@@ -2597,14 +2617,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     # khe giữa các khung cố định theo px (không theo %) để luôn đủ chỗ cho dải nhãn ngày dưới biểu đồ nến
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
     # hộp thông tin khi rê chuột vào nến: "T6, 24/10/2026" + Mở / Cao / Thấp / Đóng (giống biểu đồ VNINDEX)
-    _kl = pd.to_numeric(t["Khối lượng khớp lệnh"], errors="coerce").fillna(0).to_numpy()
-    _tip = [f"<b>{VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}<br>KL {v_ / 1e6:,.2f} triệu cp"
+    _kl = pd.to_numeric(t["Khối lượng khớp lệnh"], errors="coerce").to_numpy()
+    _tip = [f"<b>{VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}<br>" + (f"KL {v_ / 1e6:,.2f} triệu cp" if pd.notna(v_) else "KL chưa có dữ liệu")
             for d_, o_, h_, l_, c_, v_ in zip(x, t["Giá mở cửa"], t["Giá cao nhất"], t["Giá thấp nhất"], t["Giá đóng cửa"], _kl)]
-    fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
-                                 close=t["Giá đóng cửa"], name=code, whiskerwidth=0, text=_tip, hoverinfo="text",      # thân nến đặc, cùng màu với biểu đồ VNINDEX
-                                 increasing=dict(line=dict(color=CANDLE_UP, width=1), fillcolor=CANDLE_UP),
-                                 decreasing=dict(line=dict(color=CANDLE_DN, width=1), fillcolor=CANDLE_DN)), row=1, col=1)
 
+    fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
+                                 close=t["Giá đóng cửa"], name=code, whiskerwidth=0, text=_tip, hoverinfo="text",
+                                 increasing=dict(line=dict(color=CANDLE_UP, width=1), fillcolor=CANDLE_UP),
+                                 decreasing=dict(line=dict(color=CANDLE_DN, width=1), fillcolor=CANDLE_DN)), row=1, col=1)    
     def line(col, name, color, w=1.2, dash=None):
         return go.Scatter(x=x, y=t[col], name=name, line=dict(width=w, color=color, dash=dash))
 
@@ -3136,10 +3156,20 @@ def page_stock():
     _sm = st.session_state.pop("_star_msg", None)
     if _sm:
         (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
-    tf = c2.radio("Khung thời gian", ["D", "W", "M"], format_func=TF_LABEL.get, horizontal=True)
+    tf = c2.selectbox("Khung thời gian", ["15m", "1H", "4H", "D", "W", "M"], format_func=TF_LABEL.get)
+    if tf in ("15m", "1H", "4H"):
+        IM.render_six_frame_panel(code, tf, historical_eod=raw.loc[raw["Mã"] == code], show_chart=True)
+        return
     include_short = c3.toggle("Mô phỏng cả lệnh Bán (short)", value=False,
                               help="Thị trường VN không bán khống được, mặc định chỉ tính lệnh Mua.")
     layers = pick_layers()
+
+    # Six-frame panel reads local/GitHub CSV only; never queries VNStock on Cloud.
+    # Intraday TF charts are separate from legacy EOD backtests.
+    if os.path.exists("data/intraday_15m.csv"):
+        with st.expander("📊 Đối chiếu 6 khung (D/W/M tạm tính trong phiên)", expanded=False):
+            IM.render_six_frame_panel(code, tf, historical_eod=raw.loc[raw["Mã"] == code], show_chart=False)
+        st.caption("Biểu đồ, dự báo và backtest chuyên sâu bên dưới sử dụng EOD đã đóng; không tính nến tạm thành tín hiệu xác nhận.")
 
     A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
     info = stock_row(code)

@@ -1,4 +1,4 @@
-"""Thị trường > Nhận định VNINDEX: biểu đồ nến VNINDEX + khối lượng + đường MA, kèm nhận định tự động bên dưới.
+﻿"""Thị trường > Nhận định VNINDEX: biểu đồ nến VNINDEX + khối lượng + đường MA, kèm nhận định tự động bên dưới.
 
 Dữ liệu lấy từ mã VNINDEX trong data/eod_prices.csv (dữ liệu cuối phiên), nên mỗi lần cập nhật dữ liệu (update_eod.bat rồi push)
 biểu đồ tự có nến phiên mới nhất, không phải sửa gì thêm. Chọn khung Phiên / Tuần / Tháng / Quý và số nến hiển thị ngay trên trang.
@@ -24,6 +24,7 @@ import crosshair as CH
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 EOD_CSV = os.path.join(_HERE, "data", "eod_prices.csv")
+INDEX_CSV = os.path.join(_HERE, "data", "index_prices.csv")
 O, H, L, C = "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"
 V = getattr(E, "VOL", "Khối lượng khớp lệnh")
 OHLC = [O, H, L, C]
@@ -47,15 +48,25 @@ def _csv_index(path: str, mtime: float) -> pd.DataFrame:
 
 
 def index_daily(raw: pd.DataFrame | None) -> pd.DataFrame:
-    """Chuỗi VNINDEX theo ngày. Ưu tiên bảng dữ liệu đang chạy của app, không có thì đọc thẳng data/eod_prices.csv."""
+    """Lay VNINDEX tu index_prices.csv, du phong bang raw va eod_prices.csv."""
     d = pd.DataFrame()
-    if raw is not None and not raw.empty:
+
+    if os.path.exists(INDEX_CSV):
+        try:
+            d = _csv_index(INDEX_CSV, os.path.getmtime(INDEX_CSV))
+        except (OSError, ValueError, KeyError, pd.errors.ParserError):
+            d = pd.DataFrame()
+
+    if d.empty and raw is not None and not raw.empty:
         m = raw["Mã"].astype(str).str.upper().str.strip().isin(INDEX_CODES)
         d = raw[m]
+
     if d.empty and os.path.exists(EOD_CSV):
         d = _csv_index(EOD_CSV, os.path.getmtime(EOD_CSV))
+
     if d.empty:
         return d
+
     d = d.copy()
     d["Ngày"] = pd.to_datetime(d["Ngày"], errors="coerce", format="mixed", dayfirst=True).dt.normalize()
     for c in OHLC + [V]:
@@ -65,8 +76,7 @@ def index_daily(raw: pd.DataFrame | None) -> pd.DataFrame:
     return d[["Ngày"] + OHLC + [V]].drop_duplicates("Ngày", keep="last").sort_values("Ngày").reset_index(drop=True)
 
 
-# ------------------------------------------------------------------ CHUẨN BỊ DỮ LIỆU BIỂU ĐỒ (hàm thuần, dễ kiểm tra)
-def resample_period(d: pd.DataFrame, tf: str) -> pd.DataFrame:
+# ------------------------------------------------------------------ CHUAN BI DU LIEU BIEU DO (ham thuan, de kiem tra)def resample_period(d: pd.DataFrame, tf: str) -> pd.DataFrame:
     """Gộp nến Ngày thành Tuần (T2-T6) / Tháng / Quý. Nến kỳ cuối có thể chưa đủ kỳ (đang hình thành)."""
     if tf == "D":
         return d.reset_index(drop=True)
@@ -348,3 +358,4 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     st.caption(note)
     _sections(view["sections"])
     st.caption("Nhận định tự động tính theo luật cố định trên dữ liệu, mang tính tham khảo, không phải khuyến nghị đầu tư.")
+

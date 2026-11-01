@@ -51,7 +51,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
         "Mã": ("Mã", "first"), "Ngày": ("Ngày", "last"),
         "Giá mở cửa": ("Giá mở cửa", "first"), "Giá cao nhất": ("Giá cao nhất", "max"),
         "Giá thấp nhất": ("Giá thấp nhất", "min"), "Giá đóng cửa": ("Giá đóng cửa", "last"),
-        VOL: (VOL, "sum"), "Số phiên": ("Ngày", "size"),
+        VOL: (VOL, lambda x: x.sum(min_count=len(x))), "Số phiên": ("Ngày", "size"),
     })
     return r.reset_index(drop=True)
 

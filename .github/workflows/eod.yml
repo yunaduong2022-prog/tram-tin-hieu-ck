@@ -29,6 +29,7 @@ concurrency:
 
 jobs:
   update:
+    if: ${{ false }}  # VNStock must run on registered Windows device only
     runs-on: ubuntu-latest
     timeout-minutes: 130
     steps:
