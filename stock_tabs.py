@@ -359,7 +359,7 @@ def news_page(codes, groups, df, fund_map):
 
 
 TABS = {"Thông tin chung": tab_general, "Định giá": tab_valuation, "Cơ bản": None,
-        "Biến động giá": tab_volatility, "Phạm vi giá": tab_range, "Thanh khoản": tab_liquidity,
+        "Biến động giá": tab_volatility, "Phạm vi giá": tab_range, "Thanh khoản": tab_liquidity, "Tự doanh": None,
         "Ghi chú": tab_notes, "Tin tức": tab_news}
 
 
@@ -510,6 +510,13 @@ def tab_info_table(codes, fund_map):
 
 
 def render(sub, df, codes, fund_map, groups=None):
+    # MIN_PROPRIETARY_SEPARATE_TAB_V1
+    if sub == "Tự doanh":
+        # Dedicated page; shares current selected_code with the other stock tabs.
+        from stock_proprietary_tab import render as render_proprietary
+        render_proprietary(df, codes, fund_map)
+        st.caption("Chỉ phục vụ nghiên cứu cá nhân; không phải khuyến nghị đầu tư.")
+        return
     if sub == "Tin tức":
         news_page(codes, groups, df, fund_map)
         st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")

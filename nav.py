@@ -9,7 +9,9 @@ MENU = {
                    "Nhóm ngành", "Kết quả kinh doanh"],
     "Ngành": ["Tổng quan ngành", "Dòng dẫn sóng", "Cảnh báo luân chuyển dòng tiền", "Vị thế cổ phiếu ngành", "Xếp hạng cổ phiếu", "Tác động ngành", "Định giá ngành"],
     "Cổ phiếu": ["Biểu đồ", "Thông tin chung", "Định giá", "Cơ bản", "Biến động giá", "Phạm vi giá",
-                 "Thanh khoản", "Đa khung D-W-M", "Ghi chú", "Tin tức"],
+                 "Thanh khoản", "Tự doanh",
+                 # MIN_PROPRIETARY_SEPARATE_TAB_V1
+                  "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Mua ngay", "Chờ mua", "Tăng mạnh", "Lọc tất cả CP", "Bộ lọc Realtime", "Giảm mạnh", "Cạn cung", "Đang phục hồi",
                           "Watchlist", "Cổ phiếu của tôi", "Khuyến nghị khách hàng", "Danh sách cảnh báo",
                           "Bán / Chốt lời", "Backtest chiến lược"],
