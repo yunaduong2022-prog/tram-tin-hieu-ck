@@ -76,7 +76,8 @@ def index_daily(raw: pd.DataFrame | None) -> pd.DataFrame:
     return d[["Ngày"] + OHLC + [V]].drop_duplicates("Ngày", keep="last").sort_values("Ngày").reset_index(drop=True)
 
 
-# ------------------------------------------------------------------ CHUAN BI DU LIEU BIEU DO (ham thuan, de kiem tra)def resample_period(d: pd.DataFrame, tf: str) -> pd.DataFrame:
+# ------------------------------------------------------------------ CHUAN BI DU LIEU BIEU DO (ham thuan, de kiem tra)
+def resample_period(d: pd.DataFrame, tf: str) -> pd.DataFrame:
     """Gộp nến Ngày thành Tuần (T2-T6) / Tháng / Quý. Nến kỳ cuối có thể chưa đủ kỳ (đang hình thành)."""
     if tf == "D":
         return d.reset_index(drop=True)
