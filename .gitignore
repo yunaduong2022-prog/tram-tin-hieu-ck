@@ -27,3 +27,5 @@ data/.cloud_sync/
 data/foreign_net_flow.csv
 data/.foreign_backups/
 data/.foreign_state/
+data/proprietary_flow.csv
+data/.proprietary_state/

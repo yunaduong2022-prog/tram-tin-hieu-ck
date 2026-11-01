@@ -263,9 +263,9 @@ def render_profile(g, code, fund):
     with b:
         with st.container(border=True):
             st.markdown('**Tự doanh**')
-            own=number(general.get('GDTD ròng (tỷ)'))
-            st.metric('Ròng (tỷ)',display(own,'+,.2f'))
-            st.caption('Nguồn nhập riêng; chưa có lịch sử 20 phiên tự động.' if own is not None else 'Chưa kết nối nguồn dữ liệu tự doanh đáng tin cậy.')
+            # MIN_PROP_STOCK_COMPACT_V1
+            from proprietary_dashboard import render_compact
+            render_compact(code)
     with c:
         with st.container(border=True):
             st.markdown('**Thanh khoản EOD**')
@@ -273,5 +273,10 @@ def render_profile(g, code, fund):
             ratio=number(vol.iloc[-1])/avg20 if avg20 else None
             st.metric('KL so với TB20',display(ratio,'.2f','x'))
             st.caption('KL TB20: '+display(avg20,',.0f')+' cp · EOD '+date)
+
+    # MIN_PROP_STOCK_DETAILS_V1
+    with st.expander('📈 Tự doanh · Bảng giao dịch và biểu đồ 20 phiên', expanded=False):
+        from proprietary_dashboard import render_detail
+        render_detail(code, d)
 
     st.caption('Thông tin phục vụ nghiên cứu cá nhân. Nguồn EOD / Intraday / BCTC có thời điểm cập nhật khác nhau.')
