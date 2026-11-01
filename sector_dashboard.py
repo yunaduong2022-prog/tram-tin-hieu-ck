@@ -12,6 +12,7 @@ import streamlit as st
 
 import fund_guard as FG
 import watchlist as WL
+import sector_leaderboard as SLB
 
 INDEX_NAMES = {"VNINDEX", "VN-INDEX", "VN_INDEX", "VNINDEXINDEX", "VNINDEX1", "^VNINDEX"}
 PERIODS = {"1 phiên": 1, "1 tuần": 5, "1 tháng": 21, "3 tháng": 63}
@@ -352,6 +353,10 @@ def render(raw: pd.DataFrame, cap_map: dict | None = None, fund_map: dict | None
     st.caption(f"Ngày dữ liệu mới nhất: **{latest:%d/%m/%Y}** · {info['symbols']} mã cổ phiếu · {info['sessions']} phiên thị trường trong dữ liệu")
     if not info["has_index"]:
         st.warning("Dữ liệu hiện tại không có chuỗi VN-Index chuẩn. RS đang so với trung vị hiệu suất các mã có dữ liệu (proxy), không được hiểu là RS so với VN-Index. Để có RS chuẩn, cần bổ sung chuỗi VN-Index vào dữ liệu.")
+
+    # MIN_SECTOR_LEADERBOARD_V1: EOD ranking with optional closed 15m tracking.
+    SLB.render_board(raw, metrics, info)
+    st.divider()
 
     # Bản đồ ngành đặt ở đầu trang: dùng hiệu suất thực tế theo khung được chọn.
     st.subheader("🗺️ Bản đồ ngành — Tìm tiền đang chảy vào đâu")
