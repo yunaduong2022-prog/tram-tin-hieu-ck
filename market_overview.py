@@ -16,6 +16,7 @@ import streamlit as st
 
 import market_stats as MS
 import market_view as MV
+import vnindex_view as VV
 import nav as NAV
 import sector_dashboard as SD
 
@@ -194,6 +195,39 @@ def _rank_rows(d: pd.DataFrame, rs_col: str) -> str:
     return f'<div class="ov-list">{rows or "<small>Chưa có nhóm phù hợp.</small>"}</div>'
 
 
+
+
+# MARKET_OVERVIEW_INDEX_SOURCE_V1
+def _with_confirmed_index(daily: pd.DataFrame, raw: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Use the same confirmed VNINDEX feed as Thị trường > Nhận định VNINDEX.
+
+    data/index_prices.csv is normally fresher than the old VNINDEX rows in
+    data/eod_prices.csv. Never forward-fill missing market days or invent a close.
+    Do not modify MV._daily's cached DataFrame in place.
+    """
+    if daily is None or daily.empty:
+        return daily, "unavailable"
+    result = daily.copy()
+    try:
+        index_day = VV.index_daily(raw)
+        if index_day is None or index_day.empty:
+            return result, "EOD fallback"
+        valid = index_day[["Ngày", "Giá đóng cửa"]].copy()
+        valid["Ngày"] = pd.to_datetime(valid["Ngày"], errors="coerce").dt.normalize()
+        valid["Giá đóng cửa"] = pd.to_numeric(valid["Giá đóng cửa"], errors="coerce")
+        valid = valid.dropna(subset=["Ngày", "Giá đóng cửa"])
+        valid = valid[(valid["Giá đóng cửa"] > 0) & (valid["Giá đóng cửa"] < 100000)]
+        if valid.empty:
+            return result, "EOD fallback"
+        series = valid.drop_duplicates("Ngày", keep="last").set_index("Ngày")["Giá đóng cửa"].sort_index()
+        series = series.reindex(result.index)
+        # Index file is authoritative when present, but keep valid EOD entries
+        # on days not yet represented in the index store.
+        result["index"] = series.combine_first(result["index"])
+        return result, "index_prices.csv + EOD fallback"
+    except (OSError, KeyError, ValueError, TypeError, pd.errors.ParserError):
+        return result, "EOD fallback"
+
 def render(raw, data_key: str, buy_n: int | None = None, wait_n: int | None = None):
     st.markdown(CSS, unsafe_allow_html=True)
     st.title("🧭 Tổng quan thị trường")
@@ -201,6 +235,7 @@ def render(raw, data_key: str, buy_n: int | None = None, wait_n: int | None = No
                "thanh khoản và độ rộng chỉ tính trên rổ mã theo dõi của app, không phải toàn thị trường.")
 
     t = MV._daily(raw, data_key)
+    t, index_source = _with_confirmed_index(t, raw)
     if t is None or t.empty:
         st.info("Chưa có dữ liệu giá để tính tổng quan. Hãy cập nhật data/eod_prices.csv hoặc chọn nguồn dữ liệu ở thanh bên.")
         return
@@ -214,6 +249,7 @@ def render(raw, data_key: str, buy_n: int | None = None, wait_n: int | None = No
     risk = risk_state(trend, s, fx)
 
     st.markdown(f'<div class="ov-cap">Phiên <b>{day:%d/%m/%Y}</b></div>', unsafe_allow_html=True)
+    st.caption("Nguồn VN-Index: " + index_source + " · chỉ dùng giá chỉ số đã có của từng phiên, không điền ngày thiếu.")
     cards = _cards_html(trend, breadth, liq, risk, fx)
     for (a, b) in ((0, 1), (2, 3)):
         c1, c2 = st.columns(2, gap="medium")
