@@ -109,6 +109,71 @@ def day_stats(P: dict, groups: dict, mkt: pd.Series, lead_min_val: float = 0.0) 
     return pd.DataFrame(rows)
 
 
+
+# MIN_MARKET_SECTOR_PERIODS_V1: period returns from CONFIRMED EOD sessions.
+RANK_WINDOWS = {'1 phiên': 1, '1 tuần': 5, '1 tháng': 21, '3 tháng': 63}
+
+
+def window_stats(P: dict, groups: dict, mkt: pd.Series, n: int,
+                 lead_min_val: float = 0.0) -> pd.DataFrame:
+    """Per-sector historical EOD performance over n TRADING sessions.
+
+    - No forward-fill of missing stock closes; a member needs both endpoints.
+    - GTGD is AVERAGE DAILY turnover in the window, never sum for 3 months.
+    - RS is sector performance minus market return (percentage points), or NaN.
+    - For leader GTGD filter, use the same average-per-session measure.
+    """
+    if n not in RANK_WINDOWS.values():
+        raise ValueError('Unsupported EOD window')
+    c, v = P.get('c'), P.get('v')
+    if c is None or len(c) < n + 1:
+        return pd.DataFrame()
+    last, first = c.iloc[-1], c.iloc[-1 - n]
+    end_ok = last.notna() & first.notna() & (first > 0) & (last > 0)
+    change = ((last / first - 1) * 100).where(end_ok).replace([np.inf, -np.inf], np.nan)
+
+    if v is not None and not v.empty:
+        price_window = c.iloc[-n:]
+        volume_window = v.reindex(index=price_window.index, columns=price_window.columns)
+        values = price_window * volume_window / 1e6
+        # Do not mistake a largely missing history for low turnover.
+        eligible_bars = (price_window.notna() & volume_window.notna()).sum(axis=0)
+        min_bars = int(np.ceil(n * 0.8))
+        gtgd = (values.sum(axis=0, min_count=1) / n).where(eligible_bars >= min_bars)
+    else:
+        gtgd = pd.Series(np.nan, index=c.columns, dtype=float)
+
+    benchmark = np.nan
+    if isinstance(mkt, pd.Series) and not mkt.empty:
+        reference = pd.to_numeric(mkt, errors='coerce').reindex(c.index).ffill()
+        m0, m1 = reference.iloc[-1 - n], reference.iloc[-1]
+        if pd.notna(m0) and pd.notna(m1) and m0 > 0 and m1 > 0:
+            benchmark = float((m1 / m0 - 1) * 100)
+
+    rows = []
+    for name, symbols in groups.items():
+        members = [s for s in _members(symbols, change.index) if pd.notna(change[s])]
+        if len(members) < MIN_MEMBERS:
+            continue
+        returns, money = change[members], gtgd.reindex(members)
+        liquid = returns[money.fillna(0) >= lead_min_val] if lead_min_val > 0 else returns
+        if liquid.empty:
+            liquid = returns
+        leader = str(liquid.idxmax())
+        sector_return = _agg(returns)
+        rows.append({
+            'Nhóm': name,
+            'Số mã': len(members),
+            'Hiệu suất': sector_return,
+            'GTGD': float(money.sum(min_count=1)) if money.notna().any() else float('nan'),
+            'Mã dẫn đầu': leader,
+            '% dẫn đầu': float(returns[leader]),
+            'Tăng': int((returns > 0).sum()),
+            'Giảm': int((returns < 0).sum()),
+            'RS kỳ': sector_return - benchmark if np.isfinite(benchmark) else float('nan'),
+        })
+    return pd.DataFrame(rows)
+
 def _bench(mkt: pd.Series, idx: pd.Index, n: int) -> tuple[float, float]:
     """(% VN-Index trong n phiên, % VN-Index phiên cuối)."""
     try:
