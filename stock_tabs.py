@@ -520,7 +520,20 @@ def render(sub, df, codes, fund_map, groups=None):
     if sub == "Định giá":
         tab_valuation_table(codes, fund_map)
     elif sub == "Thông tin chung":
-        tab_info_table(codes, fund_map)
+        # Mã được chọn hiển thị trước; bảng toàn thị trường nằm trong expander.
+        from stock_profile_dashboard import render_profile
+        saved = st.session_state.get("selected_code")
+        code = st.selectbox("Mã cổ phiếu", codes,
+                            index=codes.index(saved) if saved in codes else 0,
+                            key="tab_code")
+        st.session_state["selected_code"] = code
+        render_profile(_hist(df, code), code, _fund(code, fund_map))
+        with st.expander("📋 Bảng thông tin chung toàn thị trường", expanded=False):
+            if st.checkbox("Tải bảng tổng hợp toàn thị trường", value=False,
+                           key="min_profile_load_full_table"):
+                tab_info_table(codes, fund_map)
+        st.caption("Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+        return
     elif sub in MARKET_SPECS:
         market_table(sub, df, codes)
     st.subheader("Chi tiết theo mã")
