@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import intraday_mtf as IM
+import signal_source_policy as SSP
 import startup_accel as SC
 import fund_guard as FG
 import ichimoku_dual as IDU
@@ -3387,6 +3388,9 @@ def _route_inner():
         if "~" in str(_rt):
             _rt_go(*str(_rt).split("~", 1))
     main, sub = NAV.render_nav()
+    # Explicit source/time labeling and separate *observational* 15m monitor.
+    # No modification to confirmed EOD scanners or backtests.
+    SSP.render_page(main, sub, latest_date, frames["D"], data_mode == MODE_EOD)
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
     if main == "Thị trường" and sub == "Tổng quan":
