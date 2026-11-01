@@ -215,6 +215,25 @@ def plot_frame(tf, item):
         if fld in g.columns:
             fig.add_trace(go.Scatter(x=x,y=g[fld],name=fld,mode='lines',
                 line=dict(color=col,width=1.5),hovertemplate='%{y:,.2f}<extra>'+fld+'</extra>'),row=1,col=1)
+    # MIN_BOLLINGER_1H_DEFAULT_V1: only actual 1H bars; centre is existing MA20.
+    # BB fields are computed by engine.add_indicators on hourly closing prices.
+    # No synthetic hourly values and no lookahead; with <20 bars there is no band.
+    if tf == '1H' and {'BB_up', 'BB_lo'}.issubset(g.columns):
+        bb_top = pd.to_numeric(g['BB_up'], errors='coerce')
+        bb_bottom = pd.to_numeric(g['BB_lo'], errors='coerce')
+        if bb_top.notna().any() and bb_bottom.notna().any():
+            fig.add_trace(go.Scatter(
+                x=x, y=bb_top, mode='lines', name='Bollinger (20,2)',
+                legendgroup='BB20_2', showlegend=True,
+                line=dict(color='#60a5fa', width=1.35, dash='dot'),
+                hovertemplate='BB trên: %{y:,.2f}<extra></extra>'
+            ), row=1, col=1)
+            fig.add_trace(go.Scatter(
+                x=x, y=bb_bottom, mode='lines', name='BB dưới',
+                legendgroup='BB20_2', showlegend=False,
+                line=dict(color='#60a5fa', width=1.35, dash='dot'),
+                hovertemplate='BB dưới: %{y:,.2f}<extra></extra>'
+            ), row=1, col=1)
     if len(g)>=SPT.PERIOD:
         st=SPT.compute(g)
         for fld,name,color in [('ST_up','ST Tăng','#16a34a'),('ST_dn','ST Giảm','#dc2626')]:
