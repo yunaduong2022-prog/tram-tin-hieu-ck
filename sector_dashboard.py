@@ -268,6 +268,76 @@ def _render_valuation(sector: str, symbols: list[str], clean: pd.DataFrame, cap_
 
 
 
+# MIN_SECTOR_MAP_DRILLDOWN_V1: chi tiết ngành ngay cạnh nút Xem chi tiết.
+def _sector_map_stock_rows(raw: pd.DataFrame, member_string: str) -> pd.DataFrame:
+    """Bảng đọc EOD để xem nhanh; không ảnh hưởng tín hiệu/backtest và không gọi API."""
+    members = {x.strip().upper() for x in str(member_string).split(",") if x.strip()}
+    columns = ["Mã", "Ngày", "Giá đóng cửa", "Thay đổi phiên (%)"]
+    if not members or raw is None or raw.empty or not {"Mã", "Ngày", "Giá đóng cửa"}.issubset(raw.columns):
+        return pd.DataFrame(columns=columns)
+    selected = raw.loc[raw["Mã"].astype(str).str.strip().str.upper().isin(members),
+                       ["Mã", "Ngày", "Giá đóng cửa"]].copy()
+    if selected.empty:
+        return pd.DataFrame(columns=columns)
+    selected["Mã"] = selected["Mã"].astype(str).str.strip().str.upper()
+    selected["Ngày"] = pd.to_datetime(selected["Ngày"], errors="coerce", format="mixed", dayfirst=True)
+    selected["Giá đóng cửa"] = pd.to_numeric(selected["Giá đóng cửa"], errors="coerce")
+    selected = selected.dropna(subset=["Ngày", "Giá đóng cửa"])
+    selected = selected[selected["Giá đóng cửa"] > 0].sort_values(["Mã", "Ngày"])
+    selected = selected.drop_duplicates(["Mã", "Ngày"], keep="last")
+    rows = []
+    for code, stock in selected.groupby("Mã", sort=True):
+        close = stock["Giá đóng cửa"].to_numpy(dtype=float)
+        if len(close) < 1:
+            continue
+        prev = close[-2] if len(close) >= 2 else np.nan
+        pct = float((close[-1] / prev - 1) * 100) if np.isfinite(prev) and prev > 0 else np.nan
+        rows.append({"Mã": code, "Ngày": stock["Ngày"].iloc[-1],
+                     "Giá đóng cửa": float(close[-1]), "Thay đổi phiên (%)": pct})
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame(rows, columns=columns).sort_values(
+        ["Thay đổi phiên (%)", "Mã"], ascending=[False, True], na_position="last"
+    ).reset_index(drop=True)
+
+
+def _sector_map_drilldown(raw: pd.DataFrame, sector_row: dict, market_date):
+    """Hiển thị ngay mã trong ngành, cho phép chuyển đến Cổ phiếu > Biểu đồ."""
+    sector = str(sector_row["Nhóm ngành"])
+    stocks = _sector_map_stock_rows(raw, sector_row.get("Mã thành viên", ""))
+    with st.container(border=True):
+        st.markdown(f"#### Cổ phiếu ngành {sector}")
+        st.caption(f"Nguồn: EOD · thị trường đến {market_date:%d/%m/%Y}. "
+                   "Nhấp chọn mã và mở biểu đồ để phân tích 6 khung thời gian.")
+        if stocks.empty:
+            st.info("Ngành này chưa có dữ liệu giá của mã thành viên.")
+        else:
+            st.dataframe(stocks, use_container_width=True, hide_index=True,
+                         column_config={
+                             "Ngày": st.column_config.DateColumn("Ngày EOD", format="DD/MM/YYYY"),
+                             "Giá đóng cửa": st.column_config.NumberColumn(format="%.2f"),
+                             "Thay đổi phiên (%)": st.column_config.NumberColumn(format="%+.2f%%"),
+                         })
+            codes = stocks["Mã"].tolist()
+            if st.session_state.get("sector_map_drill_code") not in codes:
+                st.session_state["sector_map_drill_code"] = codes[0]
+            symbol = st.selectbox("Mã muốn xem chi tiết", codes, key="sector_map_drill_code")
+            a, b, c = st.columns([1, 1.25, 1])
+            if a.button("📈 Mở biểu đồ mã", key="sector_map_go_chart", use_container_width=True):
+                # Đồng nhất với cơ chế chuyển mã ở các trang danh sách của app.
+                import nav as NAV
+                for key in ("selected_code", "mtf_code", "tab_code"):
+                    st.session_state[key] = symbol
+                NAV.goto("Cổ phiếu", "Biểu đồ")
+            if b.button("📊 Xếp hạng cổ phiếu ngành", key="sector_map_go_rank", use_container_width=True):
+                import nav as NAV
+                st.session_state["sr_sector"] = sector
+                NAV.goto("Ngành", "Xếp hạng cổ phiếu")
+            if c.button("Đóng chi tiết", key="sector_map_close", use_container_width=True):
+                st.session_state["sector_map_focus"] = None
+                st.rerun()
+
+
 def render(raw: pd.DataFrame, cap_map: dict | None = None, fund_map: dict | None = None):
     st.title("🏭 Tổng quan ngành")
     st.caption("Bản đồ dòng tiền giúp nhận diện nhanh nhóm ngành mạnh/yếu, sau đó xem sức mạnh tương đối và cổ phiếu dẫn dắt. Dữ liệu lấy từ nguồn giá đang được app sử dụng; không phải khuyến nghị mua/bán.")
@@ -312,8 +382,14 @@ def render(raw: pd.DataFrame, cap_map: dict | None = None, fund_map: dict | None
                     if st.button("Xem chi tiết", key=f"sector_map_open_{map_period}_{sector_name}", use_container_width=True):
                         st.session_state["sector_detail"] = sector_name
                         st.session_state["sector_map_focus"] = sector_name
+            # MIN_SECTOR_MAP_DRILLDOWN_V1: mở danh sách mã ngay dưới hàng thẻ được nhấn.
+            focus = st.session_state.get("sector_map_focus")
+            chosen_row = next((x for x in sectors[start:start + cards_per_row]
+                               if str(x["Nhóm ngành"]) == focus), None)
+            if chosen_row is not None:
+                _sector_map_drilldown(raw, chosen_row, latest)
         if st.session_state.get("sector_map_focus"):
-            st.caption(f"Ngành được chọn từ bản đồ: **{st.session_state['sector_map_focus']}**. Xem phần chi tiết bên dưới.")
+            st.caption("Bên dưới bản đồ còn có bảng thống kê chi tiết và xếp hạng ngành đầy đủ.")
     else:
         st.info("Chưa đủ dữ liệu để hiển thị bản đồ ngành ở khung thời gian này.")
 
