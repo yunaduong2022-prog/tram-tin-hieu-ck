@@ -319,9 +319,10 @@ def _sector_map_drilldown(raw: pd.DataFrame, sector_row: dict, market_date):
                              "Thay đổi phiên (%)": st.column_config.NumberColumn(format="%+.2f%%"),
                          })
             codes = stocks["Mã"].tolist()
-            if st.session_state.get("sector_map_drill_code") not in codes:
-                st.session_state["sector_map_drill_code"] = codes[0]
-            symbol = st.selectbox("Mã muốn xem chi tiết", codes, key="sector_map_drill_code")
+            # Each industry owns a separate widget key. Streamlit sets widget state itself.
+            # Do NOT assign session_state for an instantiated widget during this rerun.
+            symbol = st.selectbox("Mã muốn xem chi tiết", codes,
+                                  key=f"sector_map_drill_code_{sector}")
             a, b, c = st.columns([1, 1.25, 1])
             if a.button("📈 Mở biểu đồ mã", key="sector_map_go_chart", use_container_width=True):
                 # Đồng nhất với cơ chế chuyển mã ở các trang danh sách của app.
