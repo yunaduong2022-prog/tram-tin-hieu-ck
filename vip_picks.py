@@ -825,6 +825,96 @@ CSS = """
 .vpb .tp-rec{display:block;padding:0;border:0;background:none;border-radius:0;font-size:12px;font-weight:800;letter-spacing:.4px;line-height:1.35;color:#e8f3ef}
 .vpb .tp-rec.green{color:#3fd68f}.vpb .tp-rec.red{color:#ff6168}.vpb .tp-rec.gray{color:#9cc7ba}
 .vpb .tp-note{font-size:11px;line-height:1.45;color:var(--muted);margin-top:4px}
+
+/* VIP_RECOMMENDATIONS_FIT_WIDTH_V1 - all fields visible, zero horizontal scrolling */
+.tp-wrap.vpb{width:100%;max-width:100%;box-sizing:border-box;overflow-x:visible;overflow-y:visible}
+.vpb .tp-tb,.vpb .tp-tb[style]{width:100%!important;max-width:100%!important;min-width:0!important;table-layout:fixed}
+.vpb .tp-tb th{white-space:normal;overflow-wrap:break-word;word-break:normal;letter-spacing:0;
+  font-size:clamp(9px,.62vw,11px);padding:11px 3px;line-height:1.3}
+.vpb .tp-tb td{overflow:visible;overflow-wrap:anywhere;word-break:normal;padding:13px 3px;
+  font-size:clamp(10px,.75vw,13px)}
+.vpb .tp-tb td.pl{font-size:clamp(10px,.78vw,13.5px)}
+.vpb .tp-tb td.pl.key{font-size:clamp(11px,.88vw,15px)}
+.vpb .tp-tb td.pl.rt{padding-right:4px}
+.vpb .cmd-t{font-size:clamp(10px,.75vw,13px);letter-spacing:0;white-space:normal}
+.vpb .pl-code{font-size:clamp(12px,.88vw,15px);overflow-wrap:anywhere}
+.vpb .pl-date{font-size:10px}
+.vpb .lv,.vpb .lvrow .lv{font-size:clamp(11px,.88vw,15px);letter-spacing:0}
+.vpb .lvrow{white-space:normal;flex-wrap:wrap;gap:1px 4px}
+.vpb .lvrow .lv+.lv{font-size:clamp(10px,.7vw,12px)}
+.vpb .tp-sc{font-size:clamp(12px,1vw,17px)}
+.vpb .tp-score{font-size:clamp(13px,1.1vw,20px)}
+.vpb .tp-grade{font-size:10px;white-space:normal}
+.vpb .tp-bar{width:85%;max-width:100%}
+.vpb .tp-chip{white-space:normal;overflow-wrap:anywhere;margin-left:0;line-height:1.4;font-size:10px}
+.vpb .tp-rec{font-size:clamp(10px,.72vw,12px);overflow-wrap:anywhere}
+.vpb .tp-note{font-size:10px;overflow-wrap:anywhere}
+.vpb .tp-tb td.pl.ex{font-size:clamp(10px,.7vw,12px);overflow-wrap:break-word}
+.vpb .tp-tb tbody tr.th td{overflow-wrap:anywhere}
+/* On narrow windows the whole 15-field record becomes a fully visible labelled grid.
+   Every original field remains present; no horizontal pan and no hidden columns. */
+@media(max-width:1399px){
+ .tp-wrap.vpb{border-radius:12px;overflow-x:visible}
+ .vpb .tp-tb,.vpb .tp-tb thead,.vpb .tp-tb tbody{display:block;width:100%;min-width:0}
+ .vpb .tp-tb thead{display:none}
+ .vpb .tp-tb tbody tr:not(.th){display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+   width:100%;box-sizing:border-box;padding:8px 10px 12px;border-bottom:1px solid var(--line)}
+ .vpb .tp-tb tbody tr:not(.th) td{min-width:0;display:block;text-align:left;vertical-align:top;
+   overflow-wrap:anywhere;padding:8px 9px;border:0;box-sizing:border-box}
+ .vpb .tp-tb tbody tr:not(.th) td::before{display:block;font-size:10px;font-weight:700;
+   color:var(--muted);text-transform:uppercase;letter-spacing:.15px;margin-bottom:5px}
+ .vpb .tp-tb tbody tr.th{display:block}
+ .vpb .tp-tb tbody tr.th td{display:block;box-sizing:border-box;max-width:100%;padding:8px 14px 14px}
+ .vpb .tp-tb tbody tr:not(.th) td.pl.rt{text-align:left;padding-right:9px}
+ .vpb .lvrow{justify-content:flex-start}
+ .vpb .tp-bar{width:90%;margin-left:0}
+ .vpb .tp-tb td.pl.ex{max-width:100%}
+}
+@media(max-width:700px){
+ .vpb .tp-tb tbody tr:not(.th){grid-template-columns:repeat(2,minmax(0,1fr));padding:7px}
+ .vpb .tp-tb tbody tr:not(.th) td{padding:8px}
+ .vpb .tp-tb tbody tr:not(.th) td::before{font-size:9px}
+}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"Hạng"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(2)::before{content:"Lệnh"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(3)::before{content:"Mã CP"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(4)::before{content:"Vùng mua KN"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(5)::before{content:"Giá hiện tại"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(6)::before{content:"Cách vùng mua"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(7)::before{content:"Tỷ trọng"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(8)::before{content:"Ví dụ"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(9)::before{content:"Cắt lỗ"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(10)::before{content:"Giá Mục Tiêu 1"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(11)::before{content:"Giá Mục Tiêu 2"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(12)::before{content:"Điểm cơ bản (FA)"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(13)::before{content:"Điểm kỹ thuật (TA)"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(14)::before{content:"Tổng điểm"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(15)::before{content:"Khuyến nghị"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"Hạng"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(2)::before{content:"Lệnh"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(3)::before{content:"Mã CP"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(4)::before{content:"Vùng mua KN"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(5)::before{content:"Giá khớp lệnh"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(6)::before{content:"Giá hiện tại"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(7)::before{content:"Khối lượng"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(8)::before{content:"Lãi/Lỗ dự kiến (%)"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(9)::before{content:"Cắt lỗ"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(10)::before{content:"Giá Mục Tiêu 1"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(11)::before{content:"Giá Mục Tiêu 2"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(12)::before{content:"Điểm cơ bản (FA)"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(13)::before{content:"Điểm kỹ thuật (TA)"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(14)::before{content:"Tổng điểm"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(15)::before{content:"Khuyến nghị"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"STT"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(2)::before{content:"Lệnh"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(3)::before{content:"Mã CK"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(4)::before{content:"Mục tiêu"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(5)::before{content:"Giá bán"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(6)::before{content:"Giá mua"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(7)::before{content:"Ngày mua"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(8)::before{content:"KL"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(9)::before{content:"Kết quả"}}
+@media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(10)::before{content:"Ghi chú"}}
 </style>
 """
 
@@ -1029,7 +1119,7 @@ def wait_table_html(v: pd.DataFrame) -> str:
     body = "".join(_wait_row_html(i + 1, r) for i, (_, r) in enumerate(v.iterrows()))
     foot = ('<div class="vp-disc">* Mức giá do hệ thống tự điền theo dữ liệu cuối phiên.</div>'
             if any(bool(r.get(k)) for _, r in v.iterrows() for k in ("buy_auto", "target_auto", "stop_auto", "sell_auto")) else "")
-    return f'<div class="tp-wrap vpb"><table class="tp-tb"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>{foot}'
+    return f'<div class="tp-wrap vpb vp-wait"><table class="tp-tb"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>{foot}'
 
 
 # Nhóm Đang nắm giữ: Hạng | Lệnh | Mã CP (+ngày KN) | Vùng mua KN | Giá khớp lệnh | Giá hiện tại | Khối lượng | Lãi/Lỗ dự kiến (%) |
@@ -1106,7 +1196,7 @@ def hold_table_html(v: pd.DataFrame) -> str:
     if any(bool(r.get(k)) for _, r in v.iterrows() for k in ("buy_auto", "target_auto", "stop_auto", "sell_auto")):
         notes.append("Mức giá do hệ thống tự điền theo dữ liệu cuối phiên.")
     foot = f'<div class="vp-disc">* {" ".join(notes)}</div>' if notes else ""
-    return f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1800px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>{foot}'
+    return f'<div class="tp-wrap vpb vp-hold"><table class="tp-tb" style="min-width:1800px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></div>{foot}'
 
 
 def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
@@ -1211,7 +1301,7 @@ def closed_html(d: pd.DataFrame, meta_fn=None, frames_d=None) -> str:
     cg = "".join(f'<col style="width:{w}%">' for w in CLOSED_WIDTH)
     th = "".join(f'<th>{h}</th>' for h in CLOSED_HEAD)
     foot = '<div class="vp-disc">* Chưa nhập giá khớp: tạm tính theo giữa vùng mua.</div>' if est_any else ""
-    return (f'<div class="tp-wrap vpb"><table class="tp-tb" style="min-width:1150px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead>'
+    return (f'<div class="tp-wrap vpb vp-closed"><table class="tp-tb" style="min-width:1150px"><colgroup>{cg}</colgroup><thead><tr>{th}</tr></thead>'
             f'<tbody>{"".join(out)}</tbody></table></div>{foot}')
 
 
