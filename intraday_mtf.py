@@ -176,32 +176,72 @@ def latest_row_summary(tf, item):
 
 
 def plot_frame(tf, item):
+    """D/W/M-compatible candlestick style for actual 15m / grouped 1H / VN-session 4H bars.
+
+    MIN_HOURLY_CANDLE_STYLE_V1. Uses only OHLCV already stored; never fabricates an hour.
+    """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
     import supertrend as SPT
+    import theme as TH
+
     g = item['df']
-    fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[.6,.2,.2],vertical_spacing=.035)
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
+                        row_heights=[.63, .19, .18], vertical_spacing=.045)
     if g.empty:
         return fig
-    g = g.tail(250).copy()
-    x = g['Ngày']
+    limit={'15m':200,'1H':160,'4H':120}.get(tf,250)
+    g=g.tail(limit).copy()
+    intraday = tf in ('15m','1H','4H')
+    stamps=pd.to_datetime(g['Ngày'], errors='coerce')
+    # Categorical bars skip nights, lunch and weekends without inventing missing 15m bars.
+    x=stamps.dt.strftime('%d/%m %H:%M') if intraday else stamps
+    rising = g['Giá đóng cửa'].ge(g['Giá mở cửa'])
+    colors=['#089981' if up else '#F23645' for up in rising]
+    volume=pd.to_numeric(g['Khối lượng khớp lệnh'], errors='coerce').fillna(0)
+    tips=[f'<b>{pd.Timestamp(t):%d/%m/%Y %H:%M}</b><br>'
+          f'Mở: {o:,.2f} · Cao: {h:,.2f}<br>'
+          f'Thấp: {l:,.2f} · Đóng: {c:,.2f}<br>'
+          f'KL: {v:,.0f} cp'
+          for t,o,h,l,c,v in zip(stamps,g['Giá mở cửa'],g['Giá cao nhất'],
+                  g['Giá thấp nhất'],g['Giá đóng cửa'],volume)]
     fig.add_trace(go.Candlestick(x=x,open=g['Giá mở cửa'],high=g['Giá cao nhất'],
-                                 low=g['Giá thấp nhất'],close=g['Giá đóng cửa'],name='OHLC'),row=1,col=1)
+            low=g['Giá thấp nhất'],close=g['Giá đóng cửa'],
+            text=tips,hoverinfo='text',whiskerwidth=0,name='OHLC',
+            increasing=dict(line=dict(color='#089981',width=1),fillcolor='#089981'),
+            decreasing=dict(line=dict(color='#F23645',width=1),fillcolor='#F23645')),
+            row=1,col=1)
     for fld,col in [('MA9','#9333ea'),('MA20','#db2777'),('MA50','#0d9488'),('MA200','#64748b')]:
-        if fld in g:
-            fig.add_trace(go.Scatter(x=x,y=g[fld],name=fld,mode='lines',line=dict(color=col,width=1.5)),row=1,col=1)
+        if fld in g.columns:
+            fig.add_trace(go.Scatter(x=x,y=g[fld],name=fld,mode='lines',
+                line=dict(color=col,width=1.5),hovertemplate='%{y:,.2f}<extra>'+fld+'</extra>'),row=1,col=1)
     if len(g)>=SPT.PERIOD:
         st=SPT.compute(g)
         for fld,name,color in [('ST_up','ST Tăng','#16a34a'),('ST_dn','ST Giảm','#dc2626')]:
-            fig.add_trace(go.Scatter(x=x,y=st[fld],name=name,line=dict(color=color,width=1.5)),row=1,col=1)
-    fig.add_trace(go.Bar(x=x,y=g['Khối lượng khớp lệnh'],name='Khối lượng'),row=2,col=1)
-    if 'RSI' in g:
-        fig.add_trace(go.Scatter(x=x,y=g['RSI'],name='RSI 14',line=dict(color='#f59e0b')),row=3,col=1)
-    fig.add_hline(y=70,line_dash='dot',row=3,col=1)
-    fig.add_hline(y=30,line_dash='dot',row=3,col=1)
-    fig.update_layout(height=690,xaxis_rangeslider_visible=False,
-                      title=f'{VIEW_LABEL[tf]} | ' + ('Nến đang hình thành' if item['provisional'] else 'Nến đã đóng'),
-                      margin=dict(l=14,r=14,t=55,b=22))
+            fig.add_trace(go.Scatter(x=x,y=st[fld],name=name,
+                                    line=dict(color=color,width=1.5)),row=1,col=1)
+    fig.add_trace(go.Bar(x=x,y=volume,name='Khối lượng',
+                         marker_color=colors,opacity=.72),row=2,col=1)
+    if 'RSI' in g.columns:
+        fig.add_trace(go.Scatter(x=x,y=g['RSI'],name='RSI 14',
+                                 line=dict(color='#f59e0b',width=1.5)),row=3,col=1)
+    fig.add_hline(y=70,line_dash='dot',row=3,col=1,line_color='#8B95A5')
+    fig.add_hline(y=30,line_dash='dot',row=3,col=1,line_color='#8B95A5')
+    fig.update_layout(height=690,template=TH.plotly_template(),
+        paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',
+        xaxis_rangeslider_visible=False,
+        title=f'{VIEW_LABEL[tf]} | '+('Đang hình thành / thiếu nến 15m' if item['provisional']
+              else 'Dữ liệu 15m đã thu thập' if intraday else 'Nến EOD đã xác nhận'),
+        margin=dict(l=12,r=48,t=60,b=22),
+        legend=dict(orientation='h',y=1.07,font=dict(size=11)),
+        hovermode='x unified')
+    if intraday:
+        fig.update_xaxes(type='category',nticks=12)
+    else:
+        fig.update_xaxes(nticks=12)
+    fig.update_xaxes(showgrid=False,showticklabels=False,row=1,col=1)
+    fig.update_xaxes(showgrid=False,showticklabels=False,row=2,col=1)
+    fig.update_xaxes(showgrid=False,showticklabels=True,row=3,col=1)
     return fig
 
 

@@ -115,28 +115,28 @@ def normalize_eod(g):
 
 
 def make_candle(d, intraday=False):
-    x = d['time'] if intraday else d['Ngày']
+    x = d['time'].dt.strftime('%d/%m %H:%M') if intraday else d['Ngày']
     o,h,l,c,v = ('open','high','low','close','volume') if intraday else EOD_COLS[1:]
     fig=make_subplots(rows=2,cols=1,shared_xaxes=True,vertical_spacing=.045,row_heights=[.76,.24])
     fig.add_trace(go.Candlestick(x=x,open=d[o],high=d[h],low=d[l],close=d[c],name='OHLC',
-                                 increasing_line_color='#1eac85',decreasing_line_color='#d45462'),row=1,col=1)
+                                 increasing_line_color='#089981',decreasing_line_color='#F23645'),row=1,col=1)
     fig.add_trace(go.Bar(x=x,y=d[v],name='KL',marker_color='#b48329',opacity=.65),row=2,col=1)
     fig.update_layout(template='plotly_dark',height=340,margin=dict(l=8,r=8,t=10,b=15),
                       paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',
                       showlegend=False,xaxis_rangeslider_visible=False)
     fig.update_xaxes(showgrid=False)
+    if intraday:
+        fig.update_xaxes(type='category', nticks=12)
     return fig
 
 
 
 
 def quick_chart_period(d, intraday, period):
-    """Quick-chart lookback, NOT a technical indicator timeframe.
+    """Show real candles at the selected interval from *stored* EOD or 15m data.
 
-    1 giờ = 15m bars during the last 60 minutes of recorded market time.
-    1 ngày / 1 tuần = last 1 / up to 5 available trading sessions of
-    confirmed 15m bars. When the intraday snapshot is stale, use clearly
-    labelled EOD for 1d/1w, never present EOD as an hourly candle.
+    MIN_HOURLY_CANDLE_STYLE_V1: 1H and VN-session 4H are OHLC aggregates of 15m,
+    not four 15m candles disguised as a 1H chart. Missing bars are not fabricated.
     """
     if d is None or d.empty:
         return pd.DataFrame(), False, 'Chưa có dữ liệu giá EOD để tham chiếu.'
@@ -149,16 +149,27 @@ def quick_chart_period(d, intraday, period):
     if period == '15 phút':
         if valid.empty:
             return pd.DataFrame(), True, 'Chưa có nến 15 phút đã đóng của mã này.'
-        return valid, True, (
-            f'15 phút: nến gần nhất {valid.iloc[-1]["time"]:%d/%m/%Y %H:%M}; không phải giá từng giây.')
-    if period == '1 giờ':
-        if not has_current_15m:
-            return pd.DataFrame(), True, 'Khung 1 giờ cần nến 15 phút đủ mới; chưa có dữ liệu phù hợp.'
-        end = valid.iloc[-1]['time']
-        portion = valid.loc[(valid['time'] > end - pd.Timedelta(minutes=60)) &
-                            (valid['time'] <= end)].tail(4)
-        return portion, True, (
-            f'1 giờ gần nhất theo 15m đã đóng: {len(portion)}/4 nến, đến {end:%d/%m/%Y %H:%M}.')
+        return valid.tail(200), True, (
+            f'15 phút: nến gần nhất {valid.iloc[-1]["time"]:%d/%m/%Y %H:%M}; không phải realtime.')
+    if period in ('1 giờ', '4 giờ'):
+        if valid.empty:
+            return pd.DataFrame(), True, 'Chưa có dữ liệu 15 phút để tạo nến giờ OHLC.'
+        src=valid.copy()
+        # Floor by Vietnam exchange wall-clock hours; 4H = one Vietnam session.
+        bucket=(src['time'].dt.floor('h') if period == '1 giờ'
+                else src['time'].dt.normalize())
+        src['_hour_bucket']=bucket
+        candles=src.groupby('_hour_bucket',sort=True).agg({
+            'time':'last','open':'first','high':'max','low':'min',
+            'close':'last','volume':'sum'}).reset_index(drop=True)
+        candles=candles.tail(140 if period == '1 giờ' else 65)
+        stamp=candles.iloc[-1]['time']
+        stale_note='' if has_current_15m else ' · Dữ liệu giờ chưa cập nhật tới phiên EOD mới nhất.'
+        vn_note=' · 4H = một phiên khớp lệnh Việt Nam (không phải nến 4 giờ quốc tế).' if period=='4 giờ' else ''
+        return candles, True, (
+            f'{period}: {len(candles)} nến OHLC tổng hợp từ 15m đã lưu; '
+            f'nến mới nhất đến {stamp:%d/%m/%Y %H:%M}.'+vn_note+stale_note+
+            ' Nến giờ có thể thiếu dữ liệu khi thiếu nến 15m.')
     if period in ('1 ngày','1 tuần'):
         days = 1 if period == '1 ngày' else 5
         if has_current_15m:
@@ -214,11 +225,11 @@ def render_profile(g, code, fund):
     with left:
         st.markdown('**Biểu đồ nhanh**')
         # QUICK_CHART_V3_1H_1D_1W: explicit choices; new widget key clears stale UI state.
-        choices = ['15 phút','1 giờ','1 ngày','1 tuần','1 tháng','3 tháng','6 tháng','1 năm','Tất cả']
+        choices = ['15 phút','1 giờ','4 giờ','1 ngày','1 tuần','1 tháng','3 tháng','6 tháng','1 năm','Tất cả']
         default = '1 ngày' if not intraday.empty else '1 tháng'
         period = st.selectbox('Khoảng biểu đồ', choices, index=choices.index(default),
-                              key=f'min_profile_quick_v3_{code}')
-        st.caption('Xem nhanh v3 · 1 giờ / 1 ngày / 1 tuần lấy nến 15m đã đóng khi có dữ liệu; các kỳ dài lấy EOD.')
+                              key=f'min_profile_quick_v4_{code}')
+        st.caption('Xem nhanh · 1H và 4H tổng hợp nến OHLC từ 15m; 1 ngày / 1 tuần dùng nến 15m đã đóng khi có; kỳ dài dùng EOD.')
         selected, use_intra, period_note = quick_chart_period(d, intraday, period)
         if period_note:
             st.caption(period_note)
