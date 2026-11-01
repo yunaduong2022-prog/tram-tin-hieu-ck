@@ -230,10 +230,12 @@ def plot_frame(tf, item):
     fig.update_layout(height=690,template=TH.plotly_template(),
         paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',
         xaxis_rangeslider_visible=False,
-        title=f'{VIEW_LABEL[tf]} | '+('Đang hình thành / thiếu nến 15m' if item['provisional']
-              else 'Dữ liệu 15m đã thu thập' if intraday else 'Nến EOD đã xác nhận'),
-        margin=dict(l=12,r=48,t=60,b=22),
-        legend=dict(orientation='h',y=1.07,font=dict(size=11)),
+        # MIN_LEGEND_SEPARATE_TITLE_V1: render heading outside Plotly to prevent overlay.
+        title=None,
+        margin=dict(l=12,r=48,t=116,b=28),
+        legend=dict(orientation='h',x=0,y=1.025,
+                    xanchor='left',yanchor='bottom',
+                    bgcolor='rgba(0,0,0,0)',font=dict(size=10)),
         hovermode='x unified')
     if intraday:
         fig.update_xaxes(type='category',nticks=12)
@@ -281,5 +283,11 @@ def render_six_frame_panel(code, selected_tf, historical_eod=None, show_chart=Tr
         st.info('Khung đang chọn chưa có dữ liệu.')
         return
     if show_chart:
+        # Chart heading/caption are separate Streamlit rows, never layered over legend.
+        st.markdown(f'**{VIEW_LABEL[selected_tf]}**')
+        status = ('Đang hình thành / thiếu nến 15m' if item['provisional']
+                  else 'Dữ liệu 15m đã thu thập' if selected_tf in ('15m','1H','4H')
+                  else 'Nến EOD đã xác nhận')
+        st.caption(status)
         st.plotly_chart(plot_frame(selected_tf,item),use_container_width=True)
     st.caption('Nhãn Tạm tính không phải tín hiệu mua/bán được xác nhận. Các bộ lọc EOD và backtest hiện tại vẫn dùng nến đóng.')
