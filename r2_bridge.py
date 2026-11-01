@@ -35,6 +35,7 @@ ALLOWLIST = (
     'data/nhom_von_hoa_gia.csv',
     'data/thong_tin_chung.csv',
     'data/intraday_15m.csv',
+    'data/foreign_net_flow.csv',
 )
 REQUIRED = ('data/eod_prices.csv', 'data/intraday_15m.csv')
 LOCK = threading.RLock()
@@ -137,7 +138,9 @@ def _validate_headers(path, name):
         return
     with open(path, newline='', encoding='utf-8-sig') as f:
         headers = next(csv.reader(f), [])
-    if name == 'data/intraday_15m.csv':
+    if name == 'data/foreign_net_flow.csv':
+        required = {'trading_date', 'symbol', 'net_value_vnd', 'source_scope'}
+    elif name == 'data/intraday_15m.csv':
         required = {'symbol', 'time', 'open', 'high', 'low', 'close', 'volume'}
     elif name in ('data/eod_prices.csv', 'data/index_prices.csv'):
         required = {'Mã', 'Ngày'}

@@ -24,3 +24,6 @@ data/.startup_cache/
 data/.intraday_state/
 # R2 publish/download state and logs
 data/.cloud_sync/
+data/foreign_net_flow.csv
+data/.foreign_backups/
+data/.foreign_state/

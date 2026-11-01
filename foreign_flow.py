@@ -68,6 +68,10 @@ def _load_saved() -> pd.DataFrame:
 
 
 def render():
+    # VNSTOCK_FOREIGN_NET_AUTO_ROUTER_V1
+    if __import__('pathlib').Path('data/foreign_net_flow.csv').is_file():
+        import foreign_net_dashboard as _foreign_auto
+        return _foreign_auto.render()
     st.title("🌐 Dòng tiền khối ngoại")
     st.caption("Theo dõi mua/bán ròng, dòng tiền theo cổ phiếu và nhóm ngành. Đơn vị giá trị mặc định: tỷ đồng; cần thống nhất đơn vị ở nguồn dữ liệu.")
 
