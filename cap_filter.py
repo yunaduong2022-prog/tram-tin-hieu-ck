@@ -1,4 +1,4 @@
-"""Bộ lọc vốn hóa dùng chung cho app và các script Telegram: bỏ cổ phiếu có vốn hóa dưới MIN_CAP_BN tỷ đồng khỏi dữ liệu giá
+"""Bộ lọc vốn hóa dùng chung cho app và các script Telegram: bỏ cổ phiếu có vốn hóa từ MIN_CAP_BN tỷ đồng trở xuống khỏi dữ liệu giá
 ngay từ khi đọc (đỡ tốn RAM, không báo tín hiệu cho mã nhỏ). Không phụ thuộc Streamlit.
 
 Cách tính vốn hóa (tăng dần độ ưu tiên): data/stock_metadata.csv -> giá đóng cửa mới nhất x SLCP lưu hành
@@ -13,7 +13,7 @@ import os
 
 import pandas as pd
 
-MIN_CAP_BN = 900           # ngưỡng vốn hóa (tỷ đồng); đặt 0 để tắt bộ lọc
+MIN_CAP_BN = 800           # ngưỡng vốn hóa (tỷ đồng); đặt 0 để tắt bộ lọc
 KEEP_HELD = True           # True: mã đang nắm giữ vẫn được giữ dù vốn hóa nhỏ; False: bỏ hết không ngoại lệ
 HOLD_PATH = "data/co_phieu_cua_toi.csv"
 META_PATH, INFO_PATH, SHARES_PATH, MANUAL_PATH = ("data/stock_metadata.csv", "data/thong_tin_chung.csv",
@@ -63,7 +63,7 @@ def held_codes(path: str = HOLD_PATH) -> set[str]:
 
 
 def drop_small_caps(raw: pd.DataFrame, min_bn: float = MIN_CAP_BN, keep: set[str] | None = None) -> pd.DataFrame:
-    """Bỏ các mã vốn hóa dưới min_bn tỷ khỏi bảng giá (cột Mã, Ngày, Giá đóng cửa). keep: mã luôn giữ (mặc định: mã đang nắm giữ)."""
+    """Bỏ các mã vốn hóa từ min_bn tỷ trở xuống khỏi bảng giá (cột Mã, Ngày, Giá đóng cửa). keep: mã luôn giữ (mặc định: mã đang nắm giữ)."""
     if not min_bn or raw.empty:
         return raw
     last = raw.sort_values("Ngày").groupby("Mã")["Giá đóng cửa"].last()
@@ -71,5 +71,5 @@ def drop_small_caps(raw: pd.DataFrame, min_bn: float = MIN_CAP_BN, keep: set[str
     keep = {c.upper() for c in (keep if keep is not None else (held_codes() if KEEP_HELD else set()))}
     small = {c for c in last.index
              if str(c).upper() not in INDEX_CODES and str(c).upper() not in keep
-             and pd.notna(caps.get(str(c).upper())) and float(caps[str(c).upper()]) < min_bn}
+             and pd.notna(caps.get(str(c).upper())) and float(caps[str(c).upper()]) <= min_bn}
     return raw[~raw["Mã"].isin(small)] if small else raw

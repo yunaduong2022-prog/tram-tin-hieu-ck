@@ -265,13 +265,13 @@ def market_cap_map(prices: dict) -> dict:
 
 
 def drop_small_caps(raw: pd.DataFrame, min_bn: float = MIN_CAP_BN) -> pd.DataFrame:
-    """Bỏ các mã vốn hóa dưới min_bn tỷ đồng khỏi dữ liệu giá ngay từ đầu (đỡ tốn RAM). Chỉ số (VNINDEX...) và mã chưa có vốn hóa được giữ."""
+    """Bỏ các mã vốn hóa từ min_bn tỷ đồng trở xuống khỏi dữ liệu giá ngay từ đầu (đỡ tốn RAM). Chỉ số (VNINDEX...) và mã chưa có vốn hóa được giữ."""
     if not min_bn or raw.empty:
         return raw
     last = raw.sort_values("Ngày").groupby("Mã")["Giá đóng cửa"].last()
     caps = market_cap_map({str(c).upper(): float(p) for c, p in last.items() if pd.notna(p)})
     small = {c for c in last.index
-             if str(c).upper() not in E.INDEX_CODES and pd.notna(caps.get(str(c).upper())) and float(caps[str(c).upper()]) < min_bn}
+             if str(c).upper() not in E.INDEX_CODES and pd.notna(caps.get(str(c).upper())) and float(caps[str(c).upper()]) <= min_bn}
     return raw[~raw["Mã"].isin(small)] if small else raw
 
 

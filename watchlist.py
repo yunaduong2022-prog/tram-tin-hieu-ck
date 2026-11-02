@@ -42,7 +42,7 @@ GROUPS: dict[str, list[str]] = {
     "Công nghệ": ["FPT"],
     "Xây dựng": ["CDC", "VCG", "CTD"],
     "Họ Vingroup": ["VIC", "VHM", "VRE", "VPL", "VEF", "VNB"],
-    "Vật liệu xây dựng": ["HT1", "VGC", "NTP", "DHA", "VLB"],
+    "Vật liệu xây dựng": ["HT1", "VGC", "NTP", "DHA", "VLB", "SCL"],
     "Hàng công nghiệp": ["DHC", "HHP", "VEA", "MZG"],
     "Hàng tiêu dùng": ["TLG"],
     "Điện": ["NT2", "GEE", "POW", "REE", "PGV", "DNH", "VSH", "QTP", "HNA", "SBH", "GEG", "HND", "CHP", "TMP", "SHP", "PPC", "AVC", "VPD", "TBC"],
