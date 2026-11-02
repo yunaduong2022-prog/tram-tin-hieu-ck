@@ -1243,6 +1243,93 @@ def _hold_totals(v: pd.DataFrame) -> dict:
             "valid": valid, "estimated": estimated, "missing": missing}
 
 
+# VIP PORTFOLIO WEIGHT PIE v1: derived in-memory only; no data or credential writes.
+def _hold_allocation_rows(v: pd.DataFrame) -> tuple[list[tuple[str, float]], int]:
+    """Return (ticker, current market value in VND) and count of excluded rows.
+
+    Price is in thousand VND, quantity is actual shares. Never use entry/cost
+    price for current weights. A row with missing/nonpositive price or shares
+    is excluded rather than being silently treated as zero.
+    """
+    weights: dict[str, float] = {}
+    excluded = 0
+    for _, r in v.iterrows():
+        code = str(r.get("Mã", "")).strip().upper()
+        try:
+            price = float(r.get("Giá"))
+            quantity = float(r.get("KL nắm"))
+        except (ValueError, TypeError, OverflowError):
+            excluded += 1
+            continue
+        if not code or code in ("NAN", "NONE") or not (np.isfinite(price) and np.isfinite(quantity)) or price <= 0 or quantity <= 0:
+            excluded += 1
+            continue
+        weights[code] = weights.get(code, 0.0) + price * quantity * 1000.0
+    return sorted(weights.items(), key=lambda item: (-item[1], item[0])), excluded
+
+
+def _render_hold_allocation_chart(v: pd.DataFrame) -> None:
+    """Present current-weight chart beneath holding table; cash is session-only.
+
+    Without an entered cash amount, the denominator is the VALID STOCK HOLDINGS,
+    not someone's actual total assets. Cash is optional and is never persisted.
+    """
+    allocations, excluded = _hold_allocation_rows(v)
+    st.markdown("#### Tỷ trọng tài sản theo từng mã cổ phiếu")
+    cash = st.number_input(
+        "Tiền mặt (VNĐ) — tùy chọn để tính tỷ trọng trên cổ phiếu + tiền mặt",
+        min_value=0, value=0, step=1000000, format="%d",
+        key="vp_hold_allocation_cash_v1",
+        help="Chỉ nhập tiền mặt nếu muốn tính tỷ trọng trên tổng giá trị cổ phiếu và tiền mặt. Không lưu số tiền này vào danh mục.",
+    )
+    if not allocations:
+        st.info("Chưa đủ dữ liệu giá hiện tại và khối lượng nắm giữ để vẽ tỷ trọng cổ phiếu.")
+        return
+    labels = [code for code, _ in allocations]
+    amounts = [amount for _, amount in allocations]
+    if cash > 0:
+        labels.append("Tiền mặt")
+        amounts.append(float(cash))
+    total = sum(amounts)
+    if not np.isfinite(total) or total <= 0:
+        st.warning("Không có tổng giá trị hợp lệ để tính tỷ trọng.")
+        return
+    # plotly is already in the project's requirements.txt.
+    import plotly.graph_objects as go
+    fig = go.Figure(go.Pie(
+        labels=labels, values=amounts, hole=0.58,
+        sort=False, direction="clockwise",
+        textinfo="percent", textposition="inside",
+        hovertemplate="%{label}<br>%{value:,.0f} đ<br>%{percent}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=None, height=360, margin=dict(l=15, r=15, t=15, b=15),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="top", y=-0.08, xanchor="center", x=0.5),
+        font=dict(size=12),
+    )
+    c_chart, c_table = st.columns([1.35, 1.0])
+    with c_chart:
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    with c_table:
+        st.markdown("**Giá trị và tỷ trọng từng mã**")
+        details = pd.DataFrame({
+            "Mã / Tài sản": labels,
+            "Giá trị (VNĐ)": [f"{x:,.0f}" for x in amounts],
+            "Tỷ trọng": [f"{x / total * 100:.2f}%" for x in amounts],
+        })
+        st.dataframe(details, hide_index=True, use_container_width=True)
+        st.caption(f"Tổng giá trị đưa vào biểu đồ: {total:,.0f} đ")
+    if excluded:
+        st.caption(f"Không tính {excluded} mã thiếu giá hoặc khối lượng hợp lệ. Tỷ trọng chỉ tính trên các mã đủ dữ liệu.")
+    if cash == 0:
+        st.caption("Tỷ trọng được tính trên tổng giá trị CỔ PHIẾU đang nắm giữ, chưa bao gồm tiền mặt hoặc tài sản khác.")
+    else:
+        st.caption("Tỷ trọng tính trên các cổ phiếu đủ dữ liệu và tiền mặt vừa nhập; chưa bao gồm các loại tài sản khác.")
+    st.caption("Phân bổ của danh mục khuyến nghị, không đồng nghĩa tài sản thực tế của từng khách hàng.")
+
+
 def _hold_summary_html(totals: dict) -> tuple[str, str]:
     """Responsive overview above the table and a total row directly beneath it."""
     valid, missing, estimated = (totals[k] for k in ("valid", "missing", "estimated"))
@@ -1672,6 +1759,7 @@ def _render_group(status: str, d: pd.DataFrame, res, frames_d, fund_map, wb, met
             # Keep the original 15-column renderer unchanged to preserve older patches.
             top, bottom = _hold_summary_html(_hold_totals(v))
             st.markdown(top + table_html(v, k) + bottom, unsafe_allow_html=True)
+            _render_hold_allocation_chart(v)
         else:
             st.markdown(table_html(v, k), unsafe_allow_html=True)
         codes = list(v["Mã"])
