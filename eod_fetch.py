@@ -64,7 +64,7 @@ def normalize(raw: pd.DataFrame, sym: str) -> pd.DataFrame:
     out = pd.DataFrame({"Mã": sym, "Ngày": t.dt.tz_convert(TZ).dt.tz_localize(None).dt.normalize()})
     for c in PRICE:
         out[c] = pd.to_numeric(df[c], errors="coerce")
-    out[VOL] = pd.to_numeric(df[VOL], errors="coerce").fillna(0) if VOL in df else 0.0
+    out[VOL] = pd.to_numeric(df[VOL], errors="coerce") if VOL in df else float("nan")
     out = out.dropna(subset=["Ngày"] + PRICE)
     out = out[(out[PRICE] > 0).all(axis=1)]
     if out.empty:
@@ -161,7 +161,7 @@ def universe(args) -> list[str]:
 def maybe_login() -> None:
     key = os.getenv("VNSTOCK_API_KEY", "").strip()
     if not key:
-        print("Không có VNSTOCK_API_KEY: chạy ở cấp Khách (hạn mức chặt nhất).")
+        print("Không thấy biến môi trường VNSTOCK_API_KEY; trạng thái thiết bị VNStock cần kiểm tra riêng.")
         return
     import vnstock
     for name in ("login", "setup_api_key"):
@@ -186,6 +186,7 @@ def parse_args(argv=None):
     p.add_argument("--overlap-days", type=int, default=14, help="Số ngày lấy lại để phát hiện điều chỉnh giá")
     p.add_argument("--max-minutes", type=float, default=45, help="Dừng nếu chạy quá số phút này")
     p.add_argument("--full", action="store_true", help="Tải lại toàn bộ lịch sử từ --start cho mọi mã")
+    p.add_argument("--refresh-current", action="store_true", help="Force checking symbols already current")
     p.add_argument("--now", default="", help="Giả lập giờ VN 'YYYY-MM-DD HH:MM' (kiểm thử)")
     return p.parse_args(argv)
 
@@ -211,6 +212,13 @@ def main(argv=None) -> int:
     if not args.full and by_sym:      # mã chưa có / cũ nhất làm trước: chạy lại nhiều lần thì lần sau làm tiếp phần còn dở, không lặp lại từ đầu
         last_of = {s: g["Ngày"].max() for s, g in by_sym.items()}
         symbols.sort(key=lambda s: last_of.get(s, pd.Timestamp.min))
+    # Local weekday heuristic; not a Vietnam exchange holiday calendar.
+    target_session = now.tz_localize(None).normalize()
+    if session_open:
+        target_session -= pd.Timedelta(days=1)
+    while target_session.weekday() >= 5:
+        target_session -= pd.Timedelta(days=1)
+    already_current = 0
     market = Market()
     print(f"Rổ {len(symbols)} mã · kho hiện có {len(by_sym)} mã · nguồn thử: {', '.join(sources)} · "
           f"{'PHIÊN CHƯA ĐÓNG, sẽ bỏ nến hôm nay' if session_open else 'đã sau giờ đóng cửa'}")
@@ -220,7 +228,16 @@ def main(argv=None) -> int:
         if time.time() - t0 > args.max_minutes * 60:
             fatal = f"Quá {args.max_minutes:g} phút, dừng ở mã thứ {i}/{len(symbols)}"
             break
+        print(f"  [{i}/{len(symbols)}] {sym}: bat dau", flush=True)
         old = by_sym.get(sym)
+        # Skip API requests if this symbol already has the most recent weekday candle.
+        if (not args.full and not args.refresh_current and old is not None
+                and not old.empty and old["Ngày"].max() >= target_session):
+            updated[sym] = old
+            already_current += 1
+            if i % 20 == 0:
+                print(f"  ... {i}/{len(symbols)} symbols (skip API for current)", flush=True)
+            continue
         try:
             if args.full or old is None or old.empty:
                 merged, src = fetch_one(market, sym, args.start, end, sources, accept_empty=False)
@@ -248,6 +265,7 @@ def main(argv=None) -> int:
             print(f"  ... {i}/{len(symbols)} mã", flush=True)
         time.sleep(args.sleep)
 
+    print(f"Skipped API for {already_current} symbols already current.")
     skipped = [s for s in symbols if s not in updated and not any(f.startswith(s + ":") for f in failed)]
     if not updated:
         print("Không cập nhật được mã nào." + (f" Lý do: {fatal}" if fatal else ""))
@@ -260,16 +278,47 @@ def main(argv=None) -> int:
         result = result[result["Ngày"] < now.normalize().tz_localize(None)]
     result = result.drop_duplicates(["Mã", "Ngày"], keep="last").sort_values(["Mã", "Ngày"]).reset_index(drop=True)
     result[PRICE] = result[PRICE].round(2)
-    result[VOL] = result[VOL].fillna(0).round(0).astype("int64")
-    result[COLS].to_csv(CSV_PATH, index=False, date_format=DATE_FMT)
+    result[VOL] = result[VOL].round(0).astype("Int64")
+    # Write a complete temporary CSV before replacing the live file.
+    import tempfile
+    directory = os.path.dirname(os.path.abspath(CSV_PATH))
+    fd, temp_path = tempfile.mkstemp(
+        prefix=".eod_prices_",
+        suffix=".tmp",
+        dir=directory,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            result[COLS].to_csv(f, index=False, date_format=DATE_FMT)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, CSV_PATH)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
     latest = result["Ngày"].max()
     n_latest = int((result.groupby("Mã")["Ngày"].max() == latest).sum())
     meta = {"updated_at": now.strftime("%d/%m/%Y %H:%M") + " (giờ VN)", "latest_date": latest.strftime("%Y-%m-%d"),
             "symbols": int(result["Mã"].nunique()), "symbols_on_latest_date": n_latest, "rows": int(len(result)),
             "sources": used, "failed": failed[:50], "skipped": len(skipped), "adjusted": adjusted, "stopped": fatal}
-    with open(META_PATH, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=1)
+    # Write metadata atomically.
+    import tempfile
+    meta_dir = os.path.dirname(os.path.abspath(META_PATH))
+    fd, temp_meta = tempfile.mkstemp(
+        prefix=".eod_meta_",
+        suffix=".tmp",
+        dir=meta_dir,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=1)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_meta, META_PATH)
+    finally:
+        if os.path.exists(temp_meta):
+            os.remove(temp_meta)
 
     line = (f"Xong: {len(updated)}/{len(symbols)} mã cập nhật · ngày mới nhất {latest:%d/%m/%Y} ({n_latest} mã có nến này) · "
             f"nguồn {used} · lỗi {len(failed)} · điều chỉnh giá {len(adjusted)}" + (f" · DỪNG: {fatal}" if fatal else ""))
@@ -279,8 +328,8 @@ def main(argv=None) -> int:
             f.write(f"### Dữ liệu cuối phiên\n\n{line}\n\n" + ("\n".join(f"- {x}" for x in failed[:20]) if failed else "") + "\n")
     if fatal and fatal.startswith("Quá ") and updated:      # chỉ hết thời gian chạy: không phải lỗi, lần chạy sau sẽ làm tiếp các mã còn dở
         print(f"Còn {len(skipped)} mã chưa cập nhật trong lần này: chạy lại workflow để làm tiếp (mã cũ nhất được làm trước).")
-        return 0
-    return 0 if (not fatal and len(updated) >= 0.7 * len(symbols)) else 1
+        return 1
+    return 0 if (not fatal and not failed and not skipped and len(updated) == len(symbols)) else 1
 
 
 if __name__ == "__main__":

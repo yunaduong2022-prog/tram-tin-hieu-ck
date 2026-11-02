@@ -915,6 +915,24 @@ CSS = """
 @media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(8)::before{content:"KL"}}
 @media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(9)::before{content:"Kết quả"}}
 @media(max-width:1399px){.vpb.vp-closed .tp-tb tbody tr:not(.th) td:nth-child(10)::before{content:"Ghi chú"}}
+
+/* VIP PNL SUMMARY v1: visible only in Đang nắm giữ; no changes to 15-column table. */
+.vp-hold-kpis{background:linear-gradient(135deg,#0d2622,#113029);border:1px solid #21504a;
+  border-radius:14px;padding:13px 15px;margin:10px 0 12px;font-family:Inter,Roboto,"Segoe UI",sans-serif;color:#effaf6}
+.vp-hold-kpis .vp-hold-k-title{font-size:13px;font-weight:800;letter-spacing:.3px;margin-bottom:10px}
+.vp-hold-k-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.vp-hold-k-card{background:#16372f;border:1px solid #245448;border-radius:10px;min-width:0;padding:12px}
+.vp-hold-k-label{color:#93bdb0;font-size:12px;font-weight:600;margin-bottom:6px}
+.vp-hold-k-value{font-size:clamp(15px,1.6vw,22px);font-weight:800;line-height:1.25;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.vp-hold-k-note{font-size:11px;color:#93bdb0;margin-top:10px;line-height:1.5}
+.vp-hold-positive{color:#43dc93!important}.vp-hold-negative{color:#ff7176!important}.vp-hold-neutral{color:#f1f8f5!important}
+.vp-hold-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:8px 0 6px;padding:12px 16px;background:#14372f;border:1px solid #245448;border-radius:12px;
+  color:#f1f8f5;font-family:Inter,Roboto,"Segoe UI",sans-serif}
+.vp-hold-bottom-label{font-size:13px;font-weight:800}
+.vp-hold-bottom-value{font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;text-align:right}
+@media(max-width:900px){.vp-hold-k-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.vp-hold-k-card{padding:9px}.vp-hold-k-value{font-size:14px}}
 </style>
 """
 
@@ -1184,6 +1202,73 @@ def _hold_row_html(i: int, r) -> str:
     if thesis:
         main += f'<tr class="th"><td></td><td colspan="14">💡 <b>Luận điểm:</b> {_e(thesis)}</td></tr>'
     return main
+
+
+# VIP PNL SUMMARY v1 — accounting for open recommendations only; no data writes.
+def _hold_totals(v: pd.DataFrame) -> dict:
+    """Sum valid open positions in VND; price fields are in VND thousands.
+
+    The input is already filtered to All / Trung hạn / Dài hạn by _render_group.
+    An absent explicit fill uses the existing Entry fallback, and is disclosed.
+    Prices, quantities or current values that are missing/non-positive are NOT
+    silently treated as zero. Never sum individual percentage returns.
+    """
+    cost = market_value = 0.0
+    valid = estimated = missing = 0
+    for _, r in v.iterrows():
+        try:
+            entry = float(r.get("Entry"))
+            price = float(r.get("Giá"))
+            qty = float(r.get("KL nắm"))
+        except (ValueError, TypeError, OverflowError):
+            missing += 1
+            continue
+        if not (np.isfinite(entry) and np.isfinite(price) and np.isfinite(qty)
+                and entry > 0 and price > 0 and qty > 0):
+            missing += 1
+            continue
+        cost += entry * qty * 1000.0
+        market_value += price * qty * 1000.0
+        valid += 1
+        fill = r.get("Giá khớp")
+        try:
+            explicit = float(fill)
+        except (ValueError, TypeError, OverflowError):
+            explicit = float("nan")
+        if not np.isfinite(explicit) or explicit <= 0:
+            estimated += 1
+    gain = market_value - cost
+    return {"cost": cost, "value": market_value, "gain": gain,
+            "return_pct": (gain / cost * 100.0) if cost > 0 else None,
+            "valid": valid, "estimated": estimated, "missing": missing}
+
+
+def _hold_summary_html(totals: dict) -> tuple[str, str]:
+    """Responsive overview above the table and a total row directly beneath it."""
+    valid, missing, estimated = (totals[k] for k in ("valid", "missing", "estimated"))
+    color = ("vp-hold-positive" if totals["gain"] > 0 else
+             "vp-hold-negative" if totals["gain"] < 0 else "vp-hold-neutral")
+    def money(value: float, signed: bool = False) -> str:
+        return f"{value:+,.0f} đ" if signed else f"{value:,.0f} đ"
+    cost = money(totals["cost"]) if valid else "—"
+    value = money(totals["value"]) if valid else "—"
+    pnl = money(totals["gain"], signed=True) if valid else "—"
+    ret = f"{totals['return_pct']:+.2f}%" if valid else "—"
+    items = (("Tổng vốn", cost, ""), ("Giá trị hiện tại", value, ""),
+             ("Lãi/lỗ tạm tính", pnl, color), ("Hiệu suất", ret, color))
+    cards = "".join(f'<div class="vp-hold-k-card"><div class="vp-hold-k-label">{lab}</div>'
+                    f'<div class="vp-hold-k-value {cls}">{val}</div></div>' for lab, val, cls in items)
+    detail = f"Đã tính {valid}/{valid + missing} mã có đủ dữ liệu giá và khối lượng."
+    if missing:
+        detail += f" Có {missing} mã chưa đủ dữ liệu, không đưa vào tổng."
+    if estimated:
+        detail += f" Có {estimated} mã dùng giá giữa vùng mua vì chưa nhập giá khớp lệnh."
+    detail += " Chưa tính phí giao dịch, thuế và các điều chỉnh cổ tức; không phải danh mục sở hữu thực tế của từng khách."
+    top = (f'<section class="vp-hold-kpis"><div class="vp-hold-k-title">TỔNG QUAN KHUYẾN NGHỊ ĐANG NẮM GIỮ</div>'
+           f'<div class="vp-hold-k-grid">{cards}</div><div class="vp-hold-k-note">{detail}</div></section>')
+    bottom = (f'<div class="vp-hold-bottom"><div class="vp-hold-bottom-label">TỔNG CỘNG LÃI/LỖ TẠM TÍNH'
+              f' ({valid} mã đủ dữ liệu)</div><div class="vp-hold-bottom-value {color}">{pnl} · {ret}</div></div>')
+    return top, bottom
 
 
 def hold_table_html(v: pd.DataFrame) -> str:
@@ -1583,7 +1668,12 @@ def _render_group(status: str, d: pd.DataFrame, res, frames_d, fund_map, wb, met
         codes = list(d["Mã"])
     else:
         v = build_view(d, res, frames_d, fund_map, wb, meta_fn, ctx_fn)
-        st.markdown(table_html(v, k), unsafe_allow_html=True)
+        if status == 'Đang nắm giữ':
+            # Keep the original 15-column renderer unchanged to preserve older patches.
+            top, bottom = _hold_summary_html(_hold_totals(v))
+            st.markdown(top + table_html(v, k) + bottom, unsafe_allow_html=True)
+        else:
+            st.markdown(table_html(v, k), unsafe_allow_html=True)
         codes = list(v["Mã"])
     n_btn = 1 + (2 if admin else 0) + (1 if admin and status != "Đã đóng" else 0)
     row = st.columns([1.4] + [1] * n_btn + [4])

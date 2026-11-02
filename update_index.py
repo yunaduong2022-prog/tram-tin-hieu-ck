@@ -34,6 +34,7 @@ MEMBER_GROUPS = ("VNMIDCAP", "VNSMALLCAP")
 EOD_PRICES = "data/eod_prices.csv"
 # mã chuẩn lưu trong file -> các tên gọi thử lần lượt ở nguồn dữ liệu
 TARGETS = {
+    "VNINDEX": ["VNINDEX"],
     "VN30": ["VN30"],
     "VNMIDCAP": ["VNMIDCAP", "VNMidCap", "VNMID"],
     "VNSMALLCAP": ["VNSMALLCAP", "VNSmallCap", "VNSML", "VNSMALL"],
@@ -57,7 +58,7 @@ def _write(df: pd.DataFrame, path: str) -> None:
     df = df.copy()
     df["Ngày"] = pd.to_datetime(df["Ngày"])
     df[EF.PRICE] = df[EF.PRICE].round(2)
-    df[EF.VOL] = df[EF.VOL].fillna(0).round(0).astype("int64")
+    df[EF.VOL] = df[EF.VOL].round(0).astype("Int64")
     df = df.drop_duplicates(["Mã", "Ngày"], keep="last").sort_values(["Mã", "Ngày"]).reset_index(drop=True)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     df[EF.COLS].to_csv(path, index=False, date_format=EF.DATE_FMT)
@@ -147,6 +148,7 @@ def parse_args(argv=None):
     p.add_argument("--sources", default="vci,kbs,vnd", help="Thứ tự nguồn vnstock thử lần lượt")
     p.add_argument("--overlap-days", type=int, default=14, help="Số ngày lấy lại khi cập nhật tăng dần")
     p.add_argument("--full", action="store_true", help="Tải lại toàn bộ lịch sử từ --start")
+    p.add_argument("--only", default="", help="Chỉ cập nhật một chỉ số được chọn")
     p.add_argument("--no-members", action="store_true", help="Không lấy giá cổ phiếu thành viên nhóm vốn hóa")
     p.add_argument("--member-days", type=int, default=400, help="Số ngày lịch sử lấy cho cổ phiếu thành viên")
     p.add_argument("--member-minutes", type=float, default=20, help="Dừng phần cổ phiếu thành viên nếu chạy quá số phút này")
@@ -174,7 +176,8 @@ def main(argv=None, market=None) -> int:
     by_code = {c: g for c, g in store.groupby("Mã")}
     updated, failed, fatal = {}, [], None
 
-    for code, aliases in TARGETS.items():
+    selected = {args.only.upper(): TARGETS[args.only.upper()]} if args.only and args.only.upper() in TARGETS else TARGETS
+    for code, aliases in selected.items():
         old = by_code.get(code)
         full = args.full or old is None or old.empty
         start = args.start if full else (old["Ngày"].max() - pd.Timedelta(days=args.overlap_days)).strftime("%Y-%m-%d")
@@ -219,7 +222,7 @@ def main(argv=None, market=None) -> int:
     _write(result, CSV_PATH)
 
     latest = pd.to_datetime(result["Ngày"]).max()
-    print(f"Xong: {len(updated)}/{len(TARGETS)} chỉ số · ngày mới nhất {latest:%d/%m/%Y} · lỗi {len(failed)}"
+    print(f"Xong: {len(updated)}/{len(selected)} chỉ số · ngày mới nhất {latest:%d/%m/%Y} · lỗi {len(failed)}"
           + (f" · DỪNG: {fatal}" if fatal else ""))
     if not args.no_members and not fatal:
         try:

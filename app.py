@@ -55,16 +55,16 @@ import crosshair as CH
 import draw_tools as DT
 
 st.set_page_config(layout="wide", page_title="Trạm Tín Hiệu | Min Trading", page_icon=BR.page_icon())
+# Private R2 mirror (only when [market_sync] is configured in Streamlit Secrets).
+import r2_bridge as R2B
+_R2_SYNC_STATUS = R2B.sync_for_streamlit()
+
 
 # Read-only synthetic R2 transport test. Does not load market data.
 if st.query_params.get('r2_check') == '1':
     from r2_cloud_probe import render_probe as _render_r2_probe
     _render_r2_probe()
     st.stop()
-
-# Private R2 mirror (only when [market_sync] is configured in Streamlit Secrets).
-import r2_bridge as R2B
-_R2_SYNC_STATUS = R2B.sync_for_streamlit()
 
 
 TH.inject()
