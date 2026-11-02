@@ -662,6 +662,41 @@ def recommend(price, buy, stop, sell, wbreason: str, status: str = "Chờ mua") 
     return "CHỜ VỀ VÙNG MUA", "gray", f"Giá cao hơn vùng mua {(price / buy[1] - 1) * 100:.1f}%"
 
 
+
+# Admin-selected DXP/SCL may be absent from the screener even though genuine OHLCV exists.
+# Fallback is read-only. No synthetic candle or buy/sell signal is created.
+@st.cache_data(show_spinner=False, max_entries=3)
+def _vip_extra_eod_cached(path: str, stamp_ns: int, byte_size: int) -> dict:
+    codes = {"DXP", "SCL"}
+    cols = ["Mã", "Ngày", "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa", "Khối lượng khớp lệnh"]
+    parts = []
+    for chunk in pd.read_csv(path, usecols=cols, dtype={"Mã": str, "Ngày": str}, encoding="utf-8-sig", chunksize=80000):
+        hit = chunk[chunk["Mã"].astype(str).str.strip().str.upper().isin(codes)].copy()
+        if len(hit):
+            hit["Mã"] = hit["Mã"].astype(str).str.strip().str.upper()
+            parts.append(hit)
+    if not parts:
+        return {}
+    d = pd.concat(parts, ignore_index=True)
+    d["Ngày"] = pd.to_datetime(d["Ngày"], format="%d/%m/%Y", errors="coerce")
+    d = d.dropna(subset=["Ngày"])
+    for col in cols[2:]:
+        d[col] = pd.to_numeric(d[col], errors="coerce")
+    d = d.dropna(subset=["Giá đóng cửa"])
+    d = d[d["Giá đóng cửa"] > 0]
+    return {c: g.sort_values("Ngày").drop_duplicates("Ngày", keep="last").tail(30).reset_index(drop=True)
+            for c, g in d.groupby("Mã") if len(g) >= 2}
+
+
+def _vip_extra_eod() -> dict:
+    path = os.path.join("data", "eod_prices.csv")
+    try:
+        st_ = os.stat(path)
+        return _vip_extra_eod_cached(path, st_.st_mtime_ns, st_.st_size)
+    except (OSError, ValueError, KeyError, pd.errors.ParserError):
+        return {}
+
+
 # ------------------------------------------------------------------ BẢNG HIỂN THỊ
 def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, fund_map: dict, wb: pd.DataFrame,
                meta_fn, ctx_fn) -> pd.DataFrame:
@@ -669,10 +704,13 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
     score = dict(zip(res["Mã"].astype(str).str.upper(), pd.to_numeric(res["Score"], errors="coerce"))) if "Score" in res.columns else {}
     wbmap = wb.drop_duplicates("Mã", keep="first").set_index("Mã").to_dict("index") if wb is not None and not wb.empty else {}
     fgn = foreign_map()
+    extra_eod = _vip_extra_eod()
     rows = []
     for _, p in plans.iterrows():
         code = p["Mã"]
         g = frames_d[frames_d["Mã"] == code].sort_values("Ngày").tail(30)
+        if g.empty and code in extra_eod:
+            g = extra_eod[code]  # Real EOD only; FA/TA fields missing remain unscored.
         if g.empty:
             rows.append({"Mã": code, "_nodata": True})
             continue
@@ -1783,6 +1821,18 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
     ss = st.session_state
     admin = bool(ss.get("vp_admin"))
     available = set(res["Mã"].astype(str).str.upper())
+    # Also accept stock codes present in the actual daily frame even if the screener omits them.
+    if frames_d is not None and "Mã" in frames_d.columns:
+        available.update(frames_d["Mã"].dropna().astype(str).str.upper())
+    extra_eod = _vip_extra_eod()
+    available.update(extra_eod.keys())
+    if extra_eod:
+        valid_day = pd.to_datetime(frames_d["Ngày"], errors="coerce").max() if "Ngày" in frames_d.columns else pd.NaT
+        older = [f"{code}: {g['Ngày'].max():%d/%m/%Y}" for code, g in extra_eod.items()
+                 if pd.notna(valid_day) and g["Ngày"].max() < valid_day]
+        if older:
+            st.caption("⚠ Giá EOD gần nhất của " + ", ".join(older) +
+                       ". Đây không phải giá của phiên mới nhất; không tự tạo nến khi mã không có giao dịch.")
     plans = load()
     groups = {s_: plans[plans["Trạng thái"] == s_] for s_ in STATUSES}
     st.markdown(CSS + _hero_html(len(groups["Chờ mua"]) + len(groups["Đang nắm giữ"])), unsafe_allow_html=True)
