@@ -511,7 +511,22 @@ if str(st.query_params.get("diag_scl", "")) == "1":
 _sess = raw.groupby("Mã").size()         # số phiên THỰC của từng mã (tính từ dữ liệu gốc; frames chỉ giữ DAILY_KEEP phiên gần nhất để đỡ RAM)
 n_sessions = int(_sess.min())
 latest_df = df[df["Ngày"] == latest_date]
-DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}"
+# TRAM_CK_EOD_LATEST_BAR_CACHE_KEY_V1
+# DAILY_KEEP trims each stock back to 750 bars. A newly added SCL candle can
+# replace the oldest candle without changing the overall market date or
+# len(frames["D"]). The old DATA_KEY then incorrectly reused the cached
+# E.analyze_frame() result (analyze_cached excludes _frames from its cache hash).
+# Hash the latest ACTUAL daily OHLCV bar for every ticker: tiny (~281 rows),
+# deterministic, and sensitive to revised prices or newly available candles.
+import hashlib as _cache_hashlib
+_cache_cols = ["Mã", "Ngày", "Giá mở cửa", "Giá cao nhất", "Giá thấp nhất",
+               "Giá đóng cửa", "Khối lượng khớp lệnh"]
+_cache_last_bars = (df.sort_values(["Mã", "Ngày"])
+                    .drop_duplicates(subset=["Mã"], keep="last")[_cache_cols])
+_cache_bytes = _cache_last_bars.to_csv(
+    index=False, date_format="%Y-%m-%d", float_format="%.8g").encode("utf-8")
+_cache_bar_id = _cache_hashlib.blake2s(_cache_bytes, digest_size=8).hexdigest()
+DATA_KEY = f"{latest_date:%Y%m%d}-{len(df)}-{_cache_bar_id}"
 WY_KEY = f"{DATA_KEY}-{float(latest_df['Giá đóng cửa'].sum()):.2f}"
 WY_TABLE = _PREPARED["wy"] if data_mode == MODE_EOD and _PREPARED is not None else wyckoff_table(df, WY_KEY)
 if data_mode == "Vnstock tự động":
