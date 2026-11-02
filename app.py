@@ -449,6 +449,65 @@ except Exception as e:
 
 df = frames["D"]
 latest_date = df["Ngày"].max()
+
+# TRAM_CK_READONLY_SCL_CLOUD_DIAG_V1
+if str(st.query_params.get("diag_scl", "")) == "1":
+    import csv as _diag_csv
+
+    def _diag_last_date(rows):
+        valid = []
+        for value in rows:
+            t = pd.to_datetime(value, errors="coerce", dayfirst=True)
+            if pd.notna(t):
+                valid.append(pd.Timestamp(t))
+        return max(valid).strftime("%d/%m/%Y") if valid else "KHONG CO"
+
+    _diag_csv_dates = []
+    _diag_csv_rows = 0
+    _diag_csv_error = ""
+    try:
+        with open(EOD_CSV, "r", encoding="utf-8-sig", newline="") as _diag_file:
+            for _diag_row in _diag_csv.DictReader(_diag_file):
+                if str(_diag_row.get("Mã", "")).strip().upper() == "SCL":
+                    _diag_csv_rows += 1
+                    _diag_csv_dates.append(_diag_row.get("Ngày", ""))
+    except Exception as _diag_err:
+        _diag_csv_error = type(_diag_err).__name__
+
+    def _diag_frame(frame):
+        try:
+            part = frame.loc[frame["Mã"].astype(str).str.upper() == "SCL", "Ngày"]
+            return _diag_last_date(part), int(len(part))
+        except Exception:
+            return "KHONG CO", 0
+
+    _diag_raw_day, _diag_raw_count = _diag_frame(raw)
+    _diag_frame_day, _diag_frame_count = _diag_frame(frames["D"])
+    _diag_status = _R2_SYNC_STATUS if isinstance(_R2_SYNC_STATUS, dict) else {}
+    _diag_r2_flag = ("ACTIVE" if isinstance(_R2_SYNC_STATUS, dict) else "NOT ACTIVE / NO RESULT")
+    _diag_outcome = str(_diag_status.get("status", ""))[:40]
+    _diag_meta_day = str(read_eod_meta().get("latest_date", ""))[:24]
+    st.title("Chẩn đoán EOD SCL trên Streamlit Cloud")
+    st.caption("Chỉ đọc dữ liệu, không cập nhật VNStock, không sửa CSV, cache hoặc R2.")
+    st.table(pd.DataFrame([
+        {"Nguồn": "CSV trên máy chủ", "Nến SCL gần nhất": _diag_last_date(_diag_csv_dates), "Số nến SCL": _diag_csv_rows},
+        {"Nguồn": "raw đã nạp", "Nến SCL gần nhất": _diag_raw_day, "Số nến SCL": _diag_raw_count},
+        {"Nguồn": "frames[D] vẽ biểu đồ", "Nến SCL gần nhất": _diag_frame_day, "Số nến SCL": _diag_frame_count},
+    ]))
+    st.write("Ngày EOD chung:", f"{latest_date:%d/%m/%Y}")
+    st.write("Ngày metadata:", _diag_meta_day or "Không ghi")
+    st.write("Prepared startup cache:", "YES" if _PREPARED is not None else "NO")
+    st.write("R2 state:", _diag_r2_flag, _diag_outcome)
+    if _diag_csv_error:
+        st.error("CSV read error: " + _diag_csv_error)
+    if _diag_frame_day == "02/11/2026":
+        st.success("frames[D] đã có nến SCL 02/11. Nếu chart còn 30/10, kiểm tra lựa chọn khung, vùng zoom hoặc phiên app cũ.")
+    elif _diag_last_date(_diag_csv_dates) == "02/11/2026":
+        st.warning("CSV đã có nến mới, nhưng khung biểu đồ còn cũ: kiểm tra prepared cache / clean_raw / frames.")
+    else:
+        st.error("CSV trên Streamlit chưa có nến 02/11; cần sửa nguồn triển khai/R2 thay vì vẽ thêm nến giả.")
+    st.stop()
+
 _sess = raw.groupby("Mã").size()         # số phiên THỰC của từng mã (tính từ dữ liệu gốc; frames chỉ giữ DAILY_KEEP phiên gần nhất để đỡ RAM)
 n_sessions = int(_sess.min())
 latest_df = df[df["Ngày"] == latest_date]
