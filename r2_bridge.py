@@ -247,6 +247,72 @@ def _atomic_json(path, item):
         if os.path.exists(temp): os.unlink(temp)
 
 
+# TRAM_CK_R2_NEWER_EOD_GUARD_V1
+
+def _preserve_newer_local_eod(local, downloaded, temp_dir):
+    """Merge only real local EOD rows newer than R2's latest row per symbol.
+
+    GitHub EOD may be ahead for an individual ticker even if the overall R2
+    snapshot has the same latest market date. R2 wins for all dates it already
+    contains. No synthetic bars, no interpolation, no VNStock requests.
+    """
+    def day_key(value):
+        s = str(value).strip()
+        if re.fullmatch(r'\d{2}/\d{2}/\d{4}', s):
+            # Validate date, not just string shape.
+            from datetime import datetime as _datetime
+            _datetime.strptime(s, '%d/%m/%Y')
+            return int(s[6:10] + s[3:5] + s[:2])
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}', s):
+            from datetime import datetime as _datetime
+            _datetime.strptime(s, '%Y-%m-%d')
+            return int(s.replace('-', ''))
+        raise ValueError('Unexpected EOD date format in R2/GitHub: ' + s[:16])
+
+    with open(downloaded, newline='', encoding='utf-8-sig') as stream:
+        reader = csv.DictReader(stream)
+        remote_header = list(reader.fieldnames or [])
+        if not {'Mã', 'Ngày'}.issubset(remote_header):
+            raise ValueError('R2 EOD missing Ma/Ngay header')
+        last_remote = {}
+        for row in reader:
+            sym = str(row['Mã']).strip().upper()
+            d = day_key(row['Ngày'])
+            if sym and d > last_remote.get(sym, 0):
+                last_remote[sym] = d
+
+    additions = []
+    with open(local, newline='', encoding='utf-8-sig') as stream:
+        reader = csv.DictReader(stream)
+        local_header = list(reader.fieldnames or [])
+        if set(local_header) != set(remote_header):
+            raise ValueError('GitHub and R2 EOD columns differ; safe stop')
+        seen = set()
+        for row in reader:
+            sym = str(row['Mã']).strip().upper()
+            d = day_key(row['Ngày'])
+            if sym and d > last_remote.get(sym, 0):
+                key = (sym, d)
+                if key in seen:
+                    raise ValueError('Duplicate new GitHub EOD key for ' + sym)
+                seen.add(key)
+                additions.append(row)
+
+    if not additions:
+        return downloaded
+    # Local history is valid, and R2 has no candle this recent for those codes.
+    # Append exactly these existing source rows; indicators will be recomputed.
+    merged = Path(temp_dir) / 'r2_plus_newer_github_eod.csv'
+    with open(merged, 'w', newline='', encoding='utf-8') as out:
+        writer = csv.DictWriter(out, fieldnames=remote_header)
+        writer.writeheader()
+        with open(downloaded, newline='', encoding='utf-8-sig') as inp:
+            for row in csv.DictReader(inp):
+                writer.writerow(row)
+        for row in additions:
+            writer.writerow(row)
+    return merged
+
 def mirror(*, s3, conf, root=ROOT):
     """Read verified R2 snapshot into Streamlit's local data folder."""
     root = Path(root)
@@ -281,6 +347,8 @@ def mirror(*, s3, conf, root=ROOT):
         try:
             for name, staged in incoming:
                 local = root / name
+                if name == 'data/eod_prices.csv' and local.is_file():
+                    staged = _preserve_newer_local_eod(local, staged, temp)
                 local.parent.mkdir(parents=True, exist_ok=True)
                 previous = backup_dir / Path(name).name
                 existed = local.is_file()
