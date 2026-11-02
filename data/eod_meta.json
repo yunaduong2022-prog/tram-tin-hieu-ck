@@ -1,11 +1,11 @@
 {
- "updated_at": "01/11/2026 03:51 (giờ VN)",
- "latest_date": "2026-10-30",
- "symbols": 266,
- "symbols_on_latest_date": 249,
- "rows": 490212,
+ "updated_at": "02/11/2026 20:48 (giờ VN)",
+ "latest_date": "2026-11-02",
+ "symbols": 281,
+ "symbols_on_latest_date": 246,
+ "rows": 512050,
  "sources": {
-  "kbs": 1
+  "vci": 264
  },
  "failed": [],
  "skipped": 0,
