@@ -1,3 +1,7 @@
+# SSI kháng cự ngắn quanh 21.50
+
+## Chứng khoán, bđs trading lướt lát được
+
 # <NHÓM NGÀNH CHỨNG KHOÁN>
 
 Em khá là kỳ vọng hiện tại là đáy của thanh khoản thị trường.
