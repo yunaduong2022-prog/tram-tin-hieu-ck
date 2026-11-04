@@ -3777,3 +3777,18 @@ def route():
 
 
 route()
+
+
+# MIN_MARKET_PRICE_BRIDGE_START
+# Read-only EOD panel. Loaded at end so existing auth/navigation runs first.
+try:
+    import min_market_price_bridge as _min_market_price_bridge
+    _min_market_price_bridge.render_market_price_panel()
+except Exception:
+    # Fail closed for quote UI; do not change EOD, portfolio or VIP calculations.
+    try:
+        import streamlit as _min_st
+        _min_st.warning("Bang gia EOD + DNSE tam thoi khong kha dung; cac tinh nang cu van duoc giu nguyen.")
+    except Exception:
+        pass
+# MIN_MARKET_PRICE_BRIDGE_END
