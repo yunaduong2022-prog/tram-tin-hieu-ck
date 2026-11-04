@@ -1,4 +1,4 @@
-"""Read-only stock overview built from local EOD, 15m and optional metadata.
+"""Read-only stock overview built from local EOD and optional metadata.
 
 No VNStock requests, no writes, no customer/portfolio files, no secrets reads.
 """
@@ -12,7 +12,6 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 EOD_COLS = ('Ngày', 'Giá mở cửa', 'Giá cao nhất', 'Giá thấp nhất', 'Giá đóng cửa', 'Khối lượng khớp lệnh')
-INTRADAY = Path('data/intraday_15m.csv')
 FOREIGN = Path('data/foreign_net_flow.csv')
 
 
@@ -56,35 +55,6 @@ def row_for_code(path: str, code: str):
         return {}
 
 
-def intraday_for_code(code):
-    p = INTRADAY
-    if not p.is_file():
-        return pd.DataFrame()
-    try:
-        d = read_table(str(p), p.stat().st_mtime_ns)
-        required = {'symbol', 'time', 'open', 'high', 'low', 'close', 'volume'}
-        if not required.issubset(d.columns):
-            return pd.DataFrame()
-        d = d.loc[d['symbol'].astype(str).str.upper().eq(code), list(required)].copy()
-        if d.empty:
-            return d
-        d['time'] = pd.to_datetime(d['time'], errors='coerce', utc=True).dt.tz_convert('Asia/Ho_Chi_Minh')
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            d[col] = pd.to_numeric(d[col], errors='coerce')
-        d = d.dropna(subset=['time', 'open', 'high', 'low', 'close', 'volume'])
-        d = d[(d[['open','high','low','close']].min(axis=1)>0) & (d['volume']>=0) &
-              (d['high']>=d[['open','close','low']].max(axis=1)) &
-              (d['low']<=d[['open','close','high']].min(axis=1))]
-        d = d.drop_duplicates('time', keep='last').sort_values('time')
-        # The source collector is responsible for finalized bars. Do not present
-        # an unfinished bar as confirmed if one is unexpectedly present.
-        now = pd.Timestamp.now(tz='Asia/Ho_Chi_Minh')
-        d = d.loc[d['time'] + pd.Timedelta(minutes=15) <= now]
-        return d.tail(400)
-    except (OSError, ValueError, KeyError, UnicodeDecodeError, TypeError):
-        return pd.DataFrame()
-
-
 def foreign_for_code(code):
     """Only verified rank entries, no invented 20-day or full-market totals."""
     p = FOREIGN
@@ -114,77 +84,36 @@ def normalize_eod(g):
     return d.sort_values('Ngày').drop_duplicates('Ngày', keep='last')
 
 
-def make_candle(d, intraday=False):
-    x = d['time'].dt.strftime('%d/%m %H:%M') if intraday else d['Ngày']
-    o,h,l,c,v = ('open','high','low','close','volume') if intraday else EOD_COLS[1:]
-    fig=make_subplots(rows=2,cols=1,shared_xaxes=True,vertical_spacing=.045,row_heights=[.76,.24])
-    fig.add_trace(go.Candlestick(x=x,open=d[o],high=d[h],low=d[l],close=d[c],name='OHLC',
-                                 increasing_line_color='#089981',decreasing_line_color='#F23645'),row=1,col=1)
-    fig.add_trace(go.Bar(x=x,y=d[v],name='KL',marker_color='#b48329',opacity=.65),row=2,col=1)
-    fig.update_layout(template='plotly_dark',height=340,margin=dict(l=8,r=8,t=10,b=15),
-                      paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',
-                      showlegend=False,xaxis_rangeslider_visible=False)
-    fig.update_xaxes(showgrid=False)
-    if intraday:
-        fig.update_xaxes(type='category', nticks=12)
+def make_candle(d):
+    x = d['Ngày']
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                        vertical_spacing=.045, row_heights=[.76, .24])
+    fig.add_trace(go.Candlestick(x=x, open=d['Giá mở cửa'], high=d['Giá cao nhất'],
+        low=d['Giá thấp nhất'], close=d['Giá đóng cửa'], name='OHLC',
+        increasing_line_color='#089981', decreasing_line_color='#F23645'), row=1, col=1)
+    fig.add_trace(go.Bar(x=x, y=d['Khối lượng khớp lệnh'], name='Khối lượng',
+                         marker_color='#b48329', opacity=.65), row=2, col=1)
+    fig.update_layout(template='plotly_dark', height=340,
+        margin=dict(l=8, r=8, t=10, b=15),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=False, xaxis_rangeslider_visible=False)
+    fig.update_xaxes(showgrid=False, rangeslider_visible=False)
     return fig
 
 
-
-
-def quick_chart_period(d, intraday, period):
-    """Show real candles at the selected interval from *stored* EOD or 15m data.
-
-    MIN_HOURLY_CANDLE_STYLE_V1: 1H and VN-session 4H are OHLC aggregates of 15m,
-    not four 15m candles disguised as a 1H chart. Missing bars are not fabricated.
-    """
+def quick_chart_period(d, period):
+    """D/W/M candles aggregated from confirmed EOD prices only."""
     if d is None or d.empty:
-        return pd.DataFrame(), False, 'Chưa có dữ liệu giá EOD để tham chiếu.'
-    latest_eod = pd.to_datetime(d.iloc[-1]['Ngày']).date()
-    valid = pd.DataFrame()
-    if intraday is not None and not intraday.empty and 'time' in intraday.columns:
-        valid = intraday.dropna(subset=['time']).sort_values('time')
-    has_current_15m = (not valid.empty and
-                       valid.iloc[-1]['time'].date() >= latest_eod)
-    if period == '15 phút':
-        if valid.empty:
-            return pd.DataFrame(), True, 'Chưa có nến 15 phút đã đóng của mã này.'
-        return valid.tail(200), True, (
-            f'15 phút: nến gần nhất {valid.iloc[-1]["time"]:%d/%m/%Y %H:%M}; không phải realtime.')
-    if period in ('1 giờ', '4 giờ'):
-        if valid.empty:
-            return pd.DataFrame(), True, 'Chưa có dữ liệu 15 phút để tạo nến giờ OHLC.'
-        src=valid.copy()
-        # Floor by Vietnam exchange wall-clock hours; 4H = one Vietnam session.
-        bucket=(src['time'].dt.floor('h') if period == '1 giờ'
-                else src['time'].dt.normalize())
-        src['_hour_bucket']=bucket
-        candles=src.groupby('_hour_bucket',sort=True).agg({
-            'time':'last','open':'first','high':'max','low':'min',
-            'close':'last','volume':'sum'}).reset_index(drop=True)
-        candles=candles.tail(140 if period == '1 giờ' else 65)
-        stamp=candles.iloc[-1]['time']
-        stale_note='' if has_current_15m else ' · Dữ liệu giờ chưa cập nhật tới phiên EOD mới nhất.'
-        vn_note=' · 4H = một phiên khớp lệnh Việt Nam (không phải nến 4 giờ quốc tế).' if period=='4 giờ' else ''
-        return candles, True, (
-            f'{period}: {len(candles)} nến OHLC tổng hợp từ 15m đã lưu; '
-            f'nến mới nhất đến {stamp:%d/%m/%Y %H:%M}.'+vn_note+stale_note+
-            ' Nến giờ có thể thiếu dữ liệu khi thiếu nến 15m.')
-    if period in ('1 ngày','1 tuần'):
-        days = 1 if period == '1 ngày' else 5
-        if has_current_15m:
-            dates = sorted(valid['time'].dt.date.unique())[-days:]
-            portion = valid.loc[valid['time'].dt.date.isin(set(dates))]
-            if not portion.empty:
-                return portion, True, (
-                    f'{period}: {len(dates)}/{days} phiên có nến 15m đã đóng; '
-                    f'mới nhất {portion.iloc[-1]["time"]:%d/%m/%Y %H:%M}.')
-        return d.tail(days), False, (
-            f'{period}: nến 15 phút chưa đủ mới; dùng {min(len(d),days)} nến EOD đã xác nhận.')
-    size = {'1 tháng':21,'3 tháng':63,'6 tháng':126,'1 năm':252,'Tất cả':len(d)}.get(period)
-    if size is None:
-        raise ValueError('Unknown stock quick-chart range: '+str(period))
-    return d.tail(size), False, ''
+        return pd.DataFrame()
+    if period == '1D':
+        return d.tail(120).copy()
+    if period not in ('1W', '1M'):
+        raise ValueError('Unsupported EOD chart period: ' + str(period))
+    key = d['Ngày'].dt.to_period('W-FRI' if period == '1W' else 'M')
+    return d.groupby(key, sort=True).agg({
+        'Ngày': 'last', 'Giá mở cửa': 'first', 'Giá cao nhất': 'max',
+        'Giá thấp nhất': 'min', 'Giá đóng cửa': 'last',
+        'Khối lượng khớp lệnh': 'sum'}).reset_index(drop=True).tail(156 if period == '1W' else 120)
 
 
 def render_profile(g, code, fund):
@@ -202,7 +131,6 @@ def render_profile(g, code, fund):
     general=row_for_code('data/thong_tin_chung.csv', code)
     bctc=row_for_code('data/bctc.csv', code)
     shares=row_for_code('data/shares_outstanding.csv',code)
-    intraday=intraday_for_code(code)
     foreign=foreign_for_code(code)
     name=text_value(fund.get('Tên công ty'))
     if name=='Chưa có dữ liệu':
@@ -211,33 +139,30 @@ def render_profile(g, code, fund):
     exchange=text_value(bctc.get('Sàn'))
 
     st.markdown(f'### {code} · {name}')
-    st.caption(f'{exchange} · {sector} · Giá EOD đã xác nhận: {date} · Theo dõi 15m từ nến đã đóng (nếu có)')
+    st.caption(f'{exchange} · {sector} · Giá EOD đã xác nhận: {date} · Khung 1D / 1W / 1M')
     k1,k2,k3,k4=st.columns(4)
     k1.metric('Giá EOD (nghìn đồng)',display(eod_close),f'{change:+.2f}%' if change is not None else None)
     k2.metric('KL EOD (cp)',display(latest['Khối lượng khớp lệnh'],',.0f'))
     k3.metric('Vốn hóa (tỷ đồng)', display(fund.get('Vốn hóa TT'),',.0f'))
-    k4.metric('Giá 15m đã đóng (nghìn đồng)' if not intraday.empty else 'Biên độ EOD',
-              display(intraday.iloc[-1]['close']) if not intraday.empty else display((number(latest['Giá cao nhất'])/number(latest['Giá thấp nhất'])-1)*100 if number(latest['Giá thấp nhất']) else None,'.2f','%'))
-    st.caption(f"OHLC EOD ({date}): O {display(latest['Giá mở cửa'])} · H {display(latest['Giá cao nhất'])} · L {display(latest['Giá thấp nhất'])} · C {display(latest['Giá đóng cửa'])}" +
-               (f" | 15m đã đóng: {intraday.iloc[-1]['time']:%d/%m %H:%M}" if not intraday.empty else ' | Chưa có nến 15m của mã'))
+    _low = number(latest['Giá thấp nhất'])
+    _high = number(latest['Giá cao nhất'])
+    _range = (_high / _low - 1) * 100 if _low and _high else None
+    k4.metric('Biên độ EOD (%)', display(_range, '.2f', '%'))
+    st.caption(f"OHLC EOD ({date}): O {display(latest['Giá mở cửa'])} · H {display(latest['Giá cao nhất'])} · L {display(latest['Giá thấp nhất'])} · C {display(latest['Giá đóng cửa'])}")
 
     left,right=st.columns([1.35,1],gap='large')
     with left:
         st.markdown('**Biểu đồ nhanh**')
-        # QUICK_CHART_V3_1H_1D_1W: explicit choices; new widget key clears stale UI state.
-        choices = ['15 phút','1 giờ','4 giờ','1 ngày','1 tuần','1 tháng','3 tháng','6 tháng','1 năm','Tất cả']
-        default = '1 ngày' if not intraday.empty else '1 tháng'
-        period = st.selectbox('Khoảng biểu đồ', choices, index=choices.index(default),
-                              key=f'min_profile_quick_v4_{code}')
-        st.caption('Xem nhanh · 1H và 4H tổng hợp nến OHLC từ 15m; 1 ngày / 1 tuần dùng nến 15m đã đóng khi có; kỳ dài dùng EOD.')
-        selected, use_intra, period_note = quick_chart_period(d, intraday, period)
-        if period_note:
-            st.caption(period_note)
+        choices = ['1D', '1W', '1M']
+        period = st.selectbox('Khung biểu đồ', choices, index=0,
+                              key=f'min_profile_eod_v1_{code}')
+        st.caption('Nến Ngày / Tuần / Tháng đều được gộp từ giá EOD đã xác nhận.')
+        selected = quick_chart_period(d, period)
         if selected.empty:
-            st.info('Chưa đủ dữ liệu nến đã đóng cho khoảng thời gian này. Chọn kỳ dài hơn hoặc kiểm tra lần cập nhật 15m.')
+            st.info('Chưa có nến EOD cho khung thời gian đã chọn.')
         else:
-            st.plotly_chart(make_candle(selected,use_intra), use_container_width=True)
-        st.caption('Biểu đồ nhanh từ dữ liệu đã lưu. Tab Biểu đồ chính giữ đầy đủ 6 khung và bộ chỉ báo.')
+            st.plotly_chart(make_candle(selected), use_container_width=True)
+        st.caption(f'Giá và chỉ báo dùng ngày dữ liệu thực có của {code}; không tạo phiên bị thiếu.')
     with right:
         st.markdown('**Hồ sơ doanh nghiệp & định giá**')
         slcp = number(general.get('SLCP lưu hành (cp)')) or number(shares.get('Số CP lưu hành'))
@@ -290,4 +215,4 @@ def render_profile(g, code, fund):
         from proprietary_dashboard import render_detail
         render_detail(code, d)
 
-    st.caption('Thông tin phục vụ nghiên cứu cá nhân. Nguồn EOD / Intraday / BCTC có thời điểm cập nhật khác nhau.')
+    st.caption('Thông tin phục vụ nghiên cứu cá nhân. Nguồn EOD / BCTC có thời điểm cập nhật khác nhau.')

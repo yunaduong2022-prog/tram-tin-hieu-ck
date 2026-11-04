@@ -39,7 +39,7 @@ ALLOWLIST = (
     'data/foreign_stock_flow.csv',
     'data/foreign_net_flow.csv',
 )
-REQUIRED = ('data/eod_prices.csv', 'data/intraday_15m.csv')
+REQUIRED = ('data/eod_prices.csv', 'data/index_prices.csv')
 LOCK = threading.RLock()
 _LAST_CHECK = 0.0
 _LAST_OUTCOME = None
@@ -129,7 +129,10 @@ def validate_manifest(manifest, conf):
             raise ValueError('R2 object key không khớp nội dung file.')
         records[path] = obj
     if not all(p in records for p in REQUIRED):
-        raise ValueError('Manifest thiếu giá EOD hoặc dữ liệu nến 15 phút.')
+        # Legacy R2 manifests may contain EOD + intraday but no index.
+        # They remain readable during migration to EOD + index.
+        if not ('data/eod_prices.csv' in records and 'data/intraday_15m.csv' in records):
+            raise ValueError('Manifest thiếu EOD cổ phiếu và EOD chỉ số.')
     return records
 
 
@@ -162,11 +165,13 @@ def publish(*, s3, conf, root=ROOT, dry_run=False):
         raise PermissionError('Chưa xác nhận quyền phân phối dữ liệu thị trường; không xuất dữ liệu.')
     root = Path(root)
     if not all((root / f).is_file() for f in REQUIRED):
-        raise FileNotFoundError('Thiếu EOD hoặc intraday CSV trên Windows.')
+        raise FileNotFoundError('Thiếu dữ liệu EOD cổ phiếu hoặc chỉ số trên Windows.')
     for lock in ('data/.intraday_state/session_15m.lock', 'data/.intraday_state/update.lock'):
         if (root / lock).exists():
             raise RuntimeError('Đang thu thập VNStock; đợi lượt cập nhật hoàn tất mới xuất dữ liệu.')
-    files = [p for p in ALLOWLIST if (root / p).is_file()]
+    # Keep legacy intraday path readable for old manifests, but publish
+    # ONLY EOD and public auxiliary data in future R2 snapshots.
+    files = [p for p in ALLOWLIST if p != 'data/intraday_15m.csv' and (root / p).is_file()]
     with tempfile.TemporaryDirectory(prefix='r2_snap_') as temp:
         # Make a consistent local snapshot; never upload a CSV still being written.
         staged = []
