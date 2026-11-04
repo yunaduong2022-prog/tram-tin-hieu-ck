@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
+import hourly_native_1h as NH
 
 EOD_COLS = ('Ngày', 'Giá mở cửa', 'Giá cao nhất', 'Giá thấp nhất', 'Giá đóng cửa', 'Khối lượng khớp lệnh')
 FOREIGN = Path('data/foreign_net_flow.csv')
@@ -139,7 +140,7 @@ def render_profile(g, code, fund):
     exchange=text_value(bctc.get('Sàn'))
 
     st.markdown(f'### {code} · {name}')
-    st.caption(f'{exchange} · {sector} · Giá EOD đã xác nhận: {date} · Khung 1D / 1W / 1M')
+    st.caption(f'{exchange} · {sector} · Giá EOD đã xác nhận: {date} · Khung 1H / 1D / 1W / 1M')
     k1,k2,k3,k4=st.columns(4)
     k1.metric('Giá EOD (nghìn đồng)',display(eod_close),f'{change:+.2f}%' if change is not None else None)
     k2.metric('KL EOD (cp)',display(latest['Khối lượng khớp lệnh'],',.0f'))
@@ -153,15 +154,27 @@ def render_profile(g, code, fund):
     left,right=st.columns([1.35,1],gap='large')
     with left:
         st.markdown('**Biểu đồ nhanh**')
-        choices = ['1D', '1W', '1M']
+        choices = ['1H', '1D', '1W', '1M']
         period = st.selectbox('Khung biểu đồ', choices, index=0,
                               key=f'min_profile_eod_v1_{code}')
-        st.caption('Nến Ngày / Tuần / Tháng đều được gộp từ giá EOD đã xác nhận.')
-        selected = quick_chart_period(d, period)
-        if selected.empty:
-            st.info('Chưa có nến EOD cho khung thời gian đã chọn.')
+        if period == '1H':
+            p_hour = NH.FILE
+            try:
+                selected = NH.read_symbol(p_hour, code)
+            except (OSError, ValueError, KeyError):
+                selected = pd.DataFrame()
+            if selected.empty:
+                st.info('Chưa có nến VCI 1H nguyên gốc cho mã này trên máy chủ.')
+            else:
+                st.caption(f"VCI nguyên gốc 1H · tới {selected['Ngày'].iloc[-1]:%H:%M %d/%m/%Y} giờ VN")
+                st.plotly_chart(make_candle(selected), use_container_width=True)
         else:
-            st.plotly_chart(make_candle(selected), use_container_width=True)
+            st.caption('Nến Ngày / Tuần / Tháng đều được gộp từ giá EOD đã xác nhận.')
+            selected = quick_chart_period(d, period)
+            if selected.empty:
+                st.info('Chưa có nến EOD cho khung thời gian đã chọn.')
+            else:
+                st.plotly_chart(make_candle(selected), use_container_width=True)
         st.caption(f'Giá và chỉ báo dùng ngày dữ liệu thực có của {code}; không tạo phiên bị thiếu.')
     with right:
         st.markdown('**Hồ sơ doanh nghiệp & định giá**')

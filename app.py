@@ -13,6 +13,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import hourly_native_1h as NH
 import signal_source_policy as SSP
 import startup_accel as SC
 import fund_guard as FG
@@ -162,8 +163,8 @@ _STRETCH = ({"width": "stretch"} if "width" in inspect.signature(st.plotly_chart
             else {"use_container_width": True})
 _STRETCH_DF = ({"width": "stretch"} if "width" in inspect.signature(st.dataframe).parameters
                else {"use_container_width": True})
-TF_LABEL = {"D": "Ngày (1D)", "W": "Tuần (1W)", "M": "Tháng (1M)"}
-BARS_SHOWN = {"D": 200, "W": 156, "M": 120}
+TF_LABEL = {"1H": "Giờ (1H)", "D": "Ngày (1D)", "W": "Tuần (1W)", "M": "Tháng (1M)"}
+BARS_SHOWN = {"1H": 180, "D": 200, "W": 156, "M": 120}
 MA_LAYER = "Giá MA (D/W)"                              # lớp chỉ hiện GIÁ TRỊ MA20/MA50 ngày + tuần dưới dòng chỉ số, không vẽ đường
 CANDLE_UP, CANDLE_DN = "#089981", "#F23645"      # màu nến tăng / giảm (kiểu TradingView), đặt ngay trong app.py nên không phụ thuộc vnindex_view.py
 MA20_COLOR = "#FF4FD8"          # đường MA20 + nhãn giá bên phải: hồng magenta, không trùng Ichimoku (xanh dương / cam / xanh lá nhạt / hồng cam), Supertrend, Hull, EMA, Bollinger, nến. Muốn đổi màu chỉ sửa dòng này
@@ -2575,6 +2576,17 @@ def alert_banner(a, tf):
 
 # ------------------------------------------------------------------ BIỂU ĐỒ
 def future_date(last, tf, k):
+    if tf == "1H":
+        # Chart coordinates for projected Kumo ONLY, never fabricated OHLCV.
+        stamp = pd.Timestamp(last)
+        slots = (9, 10, 11, 13, 14)
+        for _ in range(max(0, int(k))):
+            next_hour = next((h for h in slots if h > stamp.hour), None)
+            if next_hour is None:
+                stamp = stamp.normalize() + pd.offsets.BDay(1) + pd.Timedelta(hours=9)
+            else:
+                stamp = stamp.normalize() + pd.Timedelta(hours=next_hour)
+        return stamp
     if tf == "D":
         return last + pd.offsets.BDay(k)
     return last + (pd.Timedelta(weeks=k) if tf == "W" else pd.DateOffset(months=k))
@@ -2700,7 +2712,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig = make_subplots(rows=1 + len(subs), cols=1, shared_xaxes=True, vertical_spacing=DATE_GAP_PX / height, row_heights=heights)
     # hộp thông tin khi rê chuột vào nến: "T6, 24/10/2026" + Mở / Cao / Thấp / Đóng (giống biểu đồ VNINDEX)
     _kl = pd.to_numeric(t["Khối lượng khớp lệnh"], errors="coerce").to_numpy()
-    _tip = [f"<b>{VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}<br>" + (f"KL {v_ / 1e6:,.2f} triệu cp" if pd.notna(v_) else "KL chưa có dữ liệu")
+    _tip = [f"<b>{pd.Timestamp(d_).strftime('%d/%m/%Y %H:%M') if tf == '1H' else VV._cross_label(pd.Timestamp(d_), tf)}</b><br>Mở {o_:,.2f} · Cao {h_:,.2f}<br>Thấp {l_:,.2f} · Đóng {c_:,.2f}<br>" + (f"KL {v_ / 1e6:,.2f} triệu cp" if pd.notna(v_) else "KL chưa có dữ liệu")
             for d_, o_, h_, l_, c_, v_ in zip(x, t["Giá mở cửa"], t["Giá cao nhất"], t["Giá thấp nhất"], t["Giá đóng cửa"], _kl)]
 
     fig.add_trace(go.Candlestick(x=x, open=t["Giá mở cửa"], high=t["Giá cao nhất"], low=t["Giá thấp nhất"],
@@ -2936,8 +2948,18 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
     fig.update_xaxes(range=[x.iloc[0], fx], rangeslider_visible=False)
     if tf == "D":
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    fig.update_xaxes(hoverformat="%d/%m/%Y")
-    fig.update_xaxes(tickformatstops=DATE_TICK_STOPS, tickangle=0, ticks="outside", ticklen=4, tickfont=dict(size=11))
+    elif tf == "1H":
+        # Hide nights/lunch/weekends on the chart axis, NOT in the data.
+        fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"]),
+                                      dict(bounds=[15, 9], pattern="hour"),
+                                      dict(bounds=[11.5, 13], pattern="hour")])
+    fig.update_xaxes(hoverformat="%d/%m/%Y %H:%M" if tf == "1H" else "%d/%m/%Y")
+    if tf == "1H":
+        fig.update_xaxes(tickformat="%H:%M\n%d/%m", tickangle=0,
+                         ticks="outside", ticklen=4, tickfont=dict(size=11))
+    else:
+        fig.update_xaxes(tickformatstops=DATE_TICK_STOPS, tickangle=0,
+                         ticks="outside", ticklen=4, tickfont=dict(size=11))
     if not subs:
         fig.update_xaxes(showticklabels=True, row=1, col=1)       # có khung chỉ báo phía dưới (Khối lượng...) thì nhãn ngày chỉ nằm ở đáy cùng, không lặp giữa các khung
     if metrics:
@@ -3116,10 +3138,11 @@ def metrics_html(metrics, code="", name="") -> str:
 
 
 # Thanh chọn khoảng thời gian dưới biểu đồ (kiểu TradingView): mỗi mốc = số nến hiển thị gần nhất; trục giá tự co giãn theo vùng chọn
-RANGE_OPTS = {"D": [("5D", 5), ("1M", 22), ("3M", 65), ("6M", 130), ("1Y", 250), ("2Y", 500), ("3Y", 750), ("Tất cả", None)],
+RANGE_OPTS = {"1H": [("5D", 25), ("1M", 110), ("3M", 320), ("Tất cả", None)],
+              "D": [("5D", 5), ("1M", 22), ("3M", 65), ("6M", 130), ("1Y", 250), ("2Y", 500), ("3Y", 750), ("Tất cả", None)],
               "W": [("3M", 13), ("6M", 26), ("1Y", 52), ("2Y", 104), ("3Y", 156), ("5Y", 260), ("Tất cả", None)],
               "M": [("1Y", 12), ("2Y", 24), ("3Y", 36), ("5Y", 60), ("10Y", 120), ("Tất cả", None)]}
-RANGE_DEFAULT = {"D": "1Y", "W": "3Y", "M": "10Y"}
+RANGE_DEFAULT = {"1H": "1M", "D": "1Y", "W": "3Y", "M": "10Y"}
 
 
 def _range_opts(tf: str, n_total: int) -> list:
@@ -3224,6 +3247,11 @@ def _single_eod_symbol_cached(path, mtime_ns, code):
     return EAO.read_symbol(path, code)
 
 
+@st.cache_data(show_spinner=False, max_entries=16)
+def _native_hourly_symbol_cached(path, mtime_ns, code):
+    return NH.read_symbol(path, code)
+
+
 def page_stock():
     st.title("📊 Cổ phiếu")
     header()
@@ -3249,9 +3277,86 @@ def page_stock():
     _sm = st.session_state.pop("_star_msg", None)
     if _sm:
         (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
-    tf = c2.selectbox("Khung thời gian", ["D", "W", "M"], format_func=TF_LABEL.get)
+    tf = c2.selectbox("Khung thời gian", ["1H", "D", "W", "M"], index=1, format_func=TF_LABEL.get)
     if data_mode == MODE_EOD:
-        st.caption(f"Kho EOD: {len(all_eod)} mã · Biểu đồ 1D/1W/1M từ giá cuối phiên, không sử dụng nến 15 phút.")
+        st.caption(f"Kho EOD: {len(all_eod)} mã · 1H: VCI nguyên gốc · 1D/1W/1M: EOD đã xác nhận.")
+    if tf == "1H":
+        hourly_path = NH.FILE
+        if not hourly_path.is_file():
+            st.warning("Chưa có kho nến 1H VCI trực tiếp trên máy chủ. Cập nhật qua Windows và đồng bộ R2 khi được cấp quyền.")
+            return
+        try:
+            hourly_raw = _native_hourly_symbol_cached(
+                str(hourly_path), hourly_path.stat().st_mtime_ns, code)
+        except (OSError, ValueError, KeyError) as exc:
+            st.error(f"Kho nến 1H không hợp lệ ({type(exc).__name__}); không dùng nến 15 phút hoặc EOD để thay thế.")
+            return
+        if len(hourly_raw) < 2:
+            st.info(f"{code}: chưa có đủ nến 1H nguyên gốc do VCI cung cấp.")
+            return
+        hourly_g = E.add_indicators(hourly_raw)
+        stamp = pd.Timestamp(hourly_g['Ngày'].iat[-1])
+        latest_hour_eod = raw.loc[raw['Mã'].astype(str).str.upper().eq(code), 'Ngày']
+        if len(latest_hour_eod) and stamp.normalize() < pd.Timestamp(latest_hour_eod.max()).normalize():
+            st.warning(f"Dữ liệu 1H của {code} mới đến {stamp:%d/%m/%Y}; cũ hơn EOD gần nhất.")
+        st.caption(f"Nguồn gốc: VCI · interval=1H · nến cuối {stamp:%H:%M %d/%m/%Y} (giờ VN) "
+                   f"· {len(hourly_g)} nến đã lưu · KHÔNG phải nến 15m tổng hợp.")
+        st.caption("Dữ liệu 1H là dữ liệu quan sát; không kết hợp giá EOD vào nến hoặc tự sinh tín hiệu giao dịch 1H.")
+        hourly_layers_all = pick_layers()
+        hourly_allowed = {"MA20", "Bollinger", "Dual Ichimoku", "EMA 50/200",
+                          "Hull Suite", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"}
+        hourly_layers = [key for key in hourly_layers_all if key in hourly_allowed]
+        if len(hourly_g) < 30:
+            hourly_layers = [key for key in hourly_layers if key == "Khối lượng"]
+        if len(hourly_g) < 129:
+            st.caption("Kijun 129 (1H) cần ít nhất 129 nến; đường chưa đủ lịch sử sẽ không hiển thị.")
+        info_hour = stock_row(code)
+        header_metrics = (_chart_metrics(code, info_hour) if info_hour is not None
+                          else [{"label": "Giá", "value": "—"}])
+        close = float(hourly_g['Giá đóng cửa'].iat[-1])
+        prev = float(hourly_g['Giá đóng cửa'].iat[-2])
+        delta = close - prev
+        pc = PX_UP if delta > 0 else PX_DOWN if delta < 0 else PX_FLAT
+        for m in header_metrics:
+            if m['label'] == 'Giá':
+                m['value'], m['px_color'] = f"{close:,.2f}", pc
+                m['px_chg'] = f"{delta:+.2f} ({(delta / prev * 100 if prev else 0):+.2f}%)"
+                m['sub'] = ''
+            if m['label'] == 'Vol vs MA10':
+                r = pd.to_numeric(hourly_g['Vol_vs_MA10'].iat[-1], errors='coerce')
+                m['value'] = f"{float(r):.1f}x" if pd.notna(r) else '—'
+        mob = is_mobile()
+        drag, cfg, bars = 'pan', {'displayModeBar': True}, None
+        if mob:
+            st.markdown(metrics_html(header_metrics, code, _chart_name(code)), unsafe_allow_html=True)
+            mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True,
+                            key="mob_chart_mode")
+            drag, cfg = mobile_chart_opts(mode)
+            nmax = min(BARS_SHOWN['1H'], len(hourly_g))
+            if nmax > 30:
+                bars = st.slider("Số nến 1H hiển thị", 30, nmax, min(90, nmax),
+                                 key="mob_bars_native_1H")
+        else:
+            bars = range_bars('1H', len(hourly_g))
+        main_hour, side_hour = st.columns([2.2, 1])
+        with main_hour:
+            figure = make_chart({'g': hourly_g, 'enough': False}, code, '1H', hourly_layers,
+                                None if mob else header_metrics, mob, bars, drag,
+                                sub_hdr_right=not mob)
+            st.plotly_chart(figure, config=cfg, **_STRETCH)
+            if not mob:
+                range_bar_ui('1H', len(hourly_g))
+                CH.inject()
+                DT.inject(code, '1H')
+        with side_hour:
+            st.markdown('**Chỉ báo tham khảo · 1H nguyên gốc**')
+            st.metric('Giá đóng nến giờ', f"{close:,.2f}")
+            for label, key in [('MA20', 'MA20'), ('MA50', 'MA50'),
+                               ('RSI (14)', 'RSI'), ('MACD', 'MACD')]:
+                val = pd.to_numeric(hourly_g[key].iat[-1], errors='coerce')
+                st.caption(f"{label}: {val:.2f}" if pd.notna(val) else f"{label}: chưa đủ dữ liệu")
+            st.caption('P/E, P/B, ROE và vốn hóa (nếu có) lấy từ hồ sơ EOD; giá/MA/RSI/MACD ở biểu đồ từ VCI 1H.')
+        return
     include_short = c3.toggle("Mô phỏng cả lệnh Bán (short)", value=False,
                               help="Thị trường VN không bán khống được, mặc định chỉ tính lệnh Mua.")
     layers = pick_layers()

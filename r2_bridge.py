@@ -35,6 +35,7 @@ ALLOWLIST = (
     'data/nhom_von_hoa_gia.csv',
     'data/thong_tin_chung.csv',
     'data/intraday_15m.csv',
+    'data/hourly_native_1h.csv',
     'data/proprietary_flow.csv',
     'data/foreign_stock_flow.csv',
     'data/foreign_net_flow.csv',
@@ -151,6 +152,8 @@ def _validate_headers(path, name):
         required = {'trading_date', 'symbol', 'net_value_vnd', 'source_scope'}
     elif name == 'data/intraday_15m.csv':
         required = {'symbol', 'time', 'open', 'high', 'low', 'close', 'volume'}
+    elif name == 'data/hourly_native_1h.csv':
+        required = {'Mã', 'Ngày', 'Giá mở cửa', 'Giá cao nhất', 'Giá thấp nhất', 'Giá đóng cửa', 'Khối lượng khớp lệnh', 'source', 'interval'}
     elif name in ('data/eod_prices.csv', 'data/index_prices.csv'):
         required = {'Mã', 'Ngày'}
     else:
@@ -169,8 +172,8 @@ def publish(*, s3, conf, root=ROOT, dry_run=False):
     for lock in ('data/.intraday_state/session_15m.lock', 'data/.intraday_state/update.lock'):
         if (root / lock).exists():
             raise RuntimeError('Đang thu thập VNStock; đợi lượt cập nhật hoàn tất mới xuất dữ liệu.')
-    # Keep legacy intraday path readable for old manifests, but publish
-    # ONLY EOD and public auxiliary data in future R2 snapshots.
+    # Keep legacy 15m readable but never republish it; optional native VCI
+    # 1H goes to private R2 only after distribution rights confirmation.
     files = [p for p in ALLOWLIST if p != 'data/intraday_15m.csv' and (root / p).is_file()]
     with tempfile.TemporaryDirectory(prefix='r2_snap_') as temp:
         # Make a consistent local snapshot; never upload a CSV still being written.

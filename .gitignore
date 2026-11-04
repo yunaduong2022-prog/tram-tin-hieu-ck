@@ -31,3 +31,7 @@ data/proprietary_flow.csv
 data/.proprietary_state/
 data/foreign_stock_flow.csv
 data/.foreign_stock_state/
+
+# Direct VCI 1H source OHLCV: local Windows only until rights-confirmed private R2 publish.
+data/hourly_native_1h.csv
+data/.native_hourly_1h_state.json
