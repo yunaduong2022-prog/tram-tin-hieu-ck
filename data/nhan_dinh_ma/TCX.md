@@ -1,3 +1,4 @@
+# TCX kháng cự ngắn hạn quanh 30
 # TCB, TCX báo cáo lợi nhuận rất tốt. TCX 1 trong những con tăng trưởng lợi nhuận tốt nhất của nhóm Chứng khoán.
 
 # Nhóm chứng khoán những con kia ko tăng trưởng được bởi vì thanh khoản thị trường quá thấp.
