@@ -3644,6 +3644,9 @@ def _route_inner():
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Lọc tất cả CP": return page_filter()
+        if sub == "Bảng giá trong phiên":
+            import intraday_r2_view as _kbs_r2_board
+            return _kbs_r2_board.render()
         if sub == "Bộ lọc Realtime": return page_realtime_filter()
         if sub == "Chờ mua": return page_wait_buy()
         if sub == "Tăng mạnh": return page_surge()
