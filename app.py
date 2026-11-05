@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import hourly_native_1h as NH
+import dnse_chart_source as DC
 import signal_source_policy as SSP
 import startup_accel as SC
 import fund_guard as FG
@@ -3252,6 +3253,12 @@ def _native_hourly_symbol_cached(path, mtime_ns, code):
     return NH.read_symbol(path, code)
 
 
+@st.cache_data(ttl=600, max_entries=32, show_spinner="Đang tải nến DNSE...")
+def _dnse_chart_cached(code, tf, api_key, api_secret):
+    # Credentials are used solely for server-side authentication; never logged.
+    return DC.fetch(code, tf, api_key, api_secret)
+
+
 def page_stock():
     st.title("📊 Cổ phiếu")
     header()
@@ -3278,6 +3285,85 @@ def page_stock():
     if _sm:
         (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
     tf = c2.selectbox("Khung thời gian", ["1H", "D", "W", "M"], index=1, format_func=TF_LABEL.get)
+    # Chart-only DNSE mode: leave EOD/VCI scanners, VIP, forecasts, Backtest,
+    # index pages, Redis, and R2 workflows untouched. Fail closed on DNSE errors.
+    if DC.enabled(st.secrets):
+        _cfg = st.secrets.get("dnse_chart", {})
+        try:
+            _candles = _dnse_chart_cached(code, tf, str(_cfg.get("api_key", "")),
+                                          str(_cfg.get("api_secret", "")))
+        except (DC.CandleSourceError, ValueError, OSError, KeyError) as _err:
+            st.error(f"DNSE {tf}: {type(_err).__name__}: {_err}")
+            st.info("Không thay bằng nến EOD/VCI hoặc nến 15 phút. Kiểm tra quyền API và định dạng dữ liệu DNSE.")
+            return
+        if len(_candles) < 2:
+            st.warning(f"DNSE {tf}: {code} chưa có đủ hai nến OHLCV hợp lệ.")
+            return
+        _g = E.add_indicators(_candles)
+        _source = "nến 1D DNSE gộp theo tháng" if tf == "M" else f"nến {tf} DNSE nguyên gốc"
+        _last = pd.Timestamp(_g["Ngày"].iat[-1])
+        st.caption(f"Biểu đồ: {_source} · {_last:%d/%m/%Y %H:%M} (giờ VN) · {len(_g)} nến. "
+                   "Dữ liệu tài chính và bộ lọc vẫn từ kho EOD/nguồn khác.")
+        if len(_g) < 129:
+            st.caption("Ichimoku dài hạn có thể chưa đủ lịch sử để hiển thị.")
+        _layers = [x for x in pick_layers() if x in {
+            "MA20", "Bollinger", "Dual Ichimoku", "EMA 50/200", "Hull Suite",
+            "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"}]
+        if len(_g) < 30:
+            _layers = [x for x in _layers if x == "Khối lượng"]
+        _close = float(_g["Giá đóng cửa"].iat[-1])
+        _prev = float(_g["Giá đóng cửa"].iat[-2])
+        _delta = _close - _prev
+        _pct = _delta / _prev * 100 if _prev else 0.0
+        _pc = PX_UP if _delta > 0 else PX_DOWN if _delta < 0 else PX_FLAT
+        _info = stock_row(code)
+        if _info is not None:
+            _metrics = _chart_metrics(code, _info)
+        else:
+            _metrics = [{"label": "Giá", "value": "—"}]
+        for _met in _metrics:
+            if _met["label"] == "Giá":
+                _met.update(value=f"{_close:,.2f}", px_color=_pc,
+                            px_chg=f"{_delta:+.2f} ({_pct:+.2f}%)", sub="")
+            if _met["label"] == "Vol vs MA10":
+                _r = pd.to_numeric(_g["Vol_vs_MA10"].iat[-1], errors="coerce")
+                _met["value"] = f"{float(_r):.1f}x" if pd.notna(_r) else "—"
+        _mob = is_mobile()
+        _drag, _plot_cfg = "pan", {"displayModeBar": True}
+        _n = None
+        if _mob:
+            st.markdown(metrics_html(_metrics, code, _chart_name(code)),
+                        unsafe_allow_html=True)
+            _mode = st.radio("Thao tác trên biểu đồ", MOBILE_MODES, horizontal=True,
+                             key="mob_chart_dnse_mode")
+            _drag, _plot_cfg = mobile_chart_opts(_mode)
+            _max = min(BARS_SHOWN[tf], len(_g))
+            if _max > 30:
+                _n = st.slider("Số nến hiển thị", 30, _max, min(90, _max),
+                               key=f"mob_bars_dnse_{tf}")
+        else:
+            _n = range_bars(tf, len(_g), ns="dnse_")
+        _main, _side = st.columns([2.2, 1])
+        with _main:
+            _figure = make_chart({"g": _g, "enough": False}, code, tf, _layers,
+                                 None if _mob else _metrics, _mob, _n, _drag,
+                                 sub_hdr_right=not _mob)
+            st.plotly_chart(_figure, config=_plot_cfg, **_STRETCH)
+            if not _mob:
+                range_bar_ui(tf, len(_g), ns="dnse_")
+                CH.inject()
+                DT.inject(code, tf)
+        with _side:
+            st.markdown("**Chỉ báo từ nến DNSE**")
+            st.metric("Giá đóng nến", f"{_close:,.2f}", f"{_pct:+.2f}%")
+            for _label, _key in (("MA20", "MA20"), ("MA50", "MA50"),
+                                  ("RSI (14)", "RSI"), ("MACD", "MACD")):
+                _v = pd.to_numeric(_g[_key].iat[-1], errors="coerce")
+                st.caption(f"{_label}: {_v:.2f}" if pd.notna(_v)
+                           else f"{_label}: chưa đủ dữ liệu")
+            st.caption("P/E, P/B, ROE, vốn hóa: nguồn EOD hiện có. "
+                       "Điểm số/VIP/Backtest không bị thay đổi sang DNSE.")
+        return
     if data_mode == MODE_EOD:
         st.caption(f"Kho EOD: {len(all_eod)} mã · 1H: VCI nguyên gốc · 1D/1W/1M: EOD đã xác nhận.")
     if tf == "1H":
