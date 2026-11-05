@@ -9,3 +9,6 @@ vnstock>=5.0.1
 psutil>=5.9
 boto3>=1.34,<2
 dnse-sdk-openapi
+boto3>=1.34,<2
+dnse-sdk-openapi
+msgpack>=1.1,<2
