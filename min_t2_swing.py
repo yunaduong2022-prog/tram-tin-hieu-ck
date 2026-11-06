@@ -308,7 +308,7 @@ def _table_html(data):
         day = pd.to_datetime(r["Ngày tín hiệu"], errors="coerce")
         day_txt = day.strftime("%d/%m/%Y") if pd.notna(day) else "—"
         fields = [cell('<b>' + e(r["Mã"]) + '</b>'), cell(e(day_txt)), cell(e(r["Tín hiệu"])),
-                  cell(e(age_txt)), cell(e(_fmt_number(r["Giá tín hiệu"]))), cell('<b>' + e(_fmt_number(now)) + '</b>'),
+                  cell(e(age_txt)), cell(e(_fmt_number(r["Giá tín hiệu"]))), cell('<span class="t2eodval">' + e(_fmt_number(now)) + '</span>', "t2eod"),
                   cell(e(_fmt_signed(gain)), gain_cls), cell(e(_fmt_number(r["RSI14"]))),
                   cell(e(_fmt_number(r["Vol/TB20"])) + "x"),
                   cell(level(r["Cắt lỗ tham khảo"], now, stop=True)),
@@ -323,12 +323,16 @@ def _table_html(data):
     .t2table th,.t2table td{border-bottom:1px solid #6b728033;padding:10px 10px;text-align:left;vertical-align:middle;white-space:nowrap}
     .t2table th{background:#64748b18;position:sticky;top:0;font-weight:700}
     .t2table tr:hover td{background:#64748b12}
+    .t2table th.t2eod-head{background:#12634c;color:#f0fff8;box-shadow:inset 0 -2px 0 #43c6a0;text-align:center}
+    .t2table td.t2eod{background:rgba(20,117,86,.20);border-left:1px solid rgba(65,188,143,.24);border-right:1px solid rgba(65,188,143,.24);text-align:center;min-width:82px}
+    .t2table tr:hover td.t2eod{background:rgba(20,117,86,.30)}
+    .t2eodval{display:inline-block;color:#eafff3;font-size:16px;line-height:1.3;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.15px}
     .t2table .green{color:#16a34a;font-weight:600}.t2table .red{color:#dc2626;font-weight:600}
     .t2stack{display:flex;flex-direction:column;gap:2px}.t2pct{font-size:11px}
     .t2src{font-size:10px;color:inherit;opacity:.65;max-width:140px;white-space:normal}
     .t2table td.note{min-width:180px;max-width:250px;white-space:normal}
     </style>"""
-    return style + '<div class="t2outer"><table class="t2table"><thead><tr>' + "".join('<th>'+e(h)+'</th>' for h in headers) + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table></div>'
+    return style + '<div class="t2outer"><table class="t2table"><thead><tr>' + "".join('<th class="t2eod-head">'+e(h)+'</th>' if h == 'Giá EOD' else '<th>'+e(h)+'</th>' for h in headers) + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table></div>'
 
 
 def render(daily, asof, groups=None):
