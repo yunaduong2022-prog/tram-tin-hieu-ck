@@ -13,6 +13,7 @@ COLS = ["Mã", "Ngày", "Giá mở cửa", "Giá cao nhất", "Giá thấp nhấ
 HORIZONS = (2, 5, 10, 15, 20, 30)
 LABELS = {
     "EARLY": "Dòng tiền vào sớm",
+    "MA20_VOLUME": "Vượt MA20 + Volume",
     "BREAKOUT": "Breakout ngắn hạn",
     "CONTINUE": "Tiếp diễn ngắn hạn",
 }
@@ -39,6 +40,7 @@ def _indicators(g: pd.DataFrame) -> pd.DataFrame:
     c, h, lo, v = [g[k].astype(float) for k in ("Giá đóng cửa", "Giá cao nhất", "Giá thấp nhất", "Khối lượng khớp lệnh")]
     g["MA9"] = c.rolling(9, min_periods=9).mean()
     g["MA20"] = c.rolling(20, min_periods=20).mean()
+    g["MA20_prev"] = g["MA20"].shift(1)  # MIN_T2_MA20_VOLUME_INDEPENDENT_V1
     g["VolTB20"] = v.shift(1).rolling(20, min_periods=20).mean()
     g["VolRatio"] = v / g["VolTB20"].where(g["VolTB20"] > 0)
     delta = c.diff()
@@ -107,6 +109,29 @@ def _candidate(row) -> tuple[str, str] | None:
     return None
 
 
+
+
+
+def _ma20_volume_event(row):
+    """True first close above MA20 with confirmed volume/price/RSI at this EOD.
+
+    This is an independent early event, not a replacement for BREAKOUT/EARLY.
+    Previous bar MA20 and volume denominator exclude the signal bar.
+    """
+    required = ("Giá đóng cửa", "PrevClose", "Giá mở cửa", "MA20",
+                "MA20_prev", "VolRatio", "VolTB20", "RSI14", "RSI_prev",
+                "ClosePos", "Khối lượng khớp lệnh")
+    values = [pd.to_numeric(row.get(name, np.nan), errors="coerce") for name in required]
+    if any(pd.isna(x) or not np.isfinite(float(x)) for x in values):
+        return None
+    c, prev_c, o, ma20, prev_ma20, vr, avg_v, rsi, old_rsi, close_pos, volume = map(float, values)
+    if c < 5 or avg_v < 100_000 or volume <= 0:
+        return None
+    crossed = prev_c <= prev_ma20 and c > ma20
+    if (crossed and c > prev_c and c >= o and close_pos >= 0.60
+            and vr >= 1.5 and rsi > old_rsi):
+        return ("MA20_VOLUME", "Vượt MA20 từ dưới lên; KL ≥1.5x TB20; RSI tăng; nến tích cực")
+    return None
 
 
 def _two_targets(row, price):
@@ -186,32 +211,38 @@ def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
             dt = row["Ngày"]
             if dt not in recent and dt != asof_date:
                 continue
-            choice = _candidate(row)
-            if choice is None:
-                continue
-            category, note = choice
-            if category in last and i - last[category] <= cooldown:
-                continue
-            last[category] = i
-            price = float(row["Giá đóng cửa"])
-            stop = _nearest_support(row, price)
-            tp1, src1, tp2, src2 = _two_targets(row, price)
-            valid_risk = np.isfinite(stop) and 0 < stop < price
-            rr1 = (tp1 - price) / (price - stop) if valid_risk and np.isfinite(tp1) else np.nan
-            rr2 = (tp2 - price) / (price - stop) if valid_risk and np.isfinite(tp2) else np.nan
-            age = len(g)-1-i if g.iloc[-1]["Ngày"] == asof_date else np.nan
-            item = {"Mã":code, "Ngày tín hiệu":dt, "Tín hiệu":LABELS[category], "Giá tín hiệu":price,
-                    "RSI14":round(float(row["RSI14"]),2), "Vol/TB20":round(float(row["VolRatio"]),2),
-                    "Giá EOD":float(g.iloc[-1]["Giá đóng cửa"]) if g.iloc[-1]["Ngày"] == asof_date else np.nan,
-                    "Từ tín hiệu (%)":round((float(g.iloc[-1]["Giá đóng cửa"])/price-1)*100,2) if g.iloc[-1]["Ngày"] == asof_date else np.nan,
-                    "Cắt lỗ tham khảo": stop, "Mục tiêu 1":tp1, "Nguồn TP1":src1,
-                    "Mục tiêu 2":tp2, "Nguồn TP2":src2, "R:R TP1":rr1, "R:R TP2":rr2,
-                    "Ghi chú":note, "Phiên từ tín hiệu":age}
-            for h in HORIZONS:
-                item[f"T+{h} (%)"] = round((float(g.iloc[i+h]["Giá đóng cửa"])/price-1)*100,2) if i+h<len(g) else np.nan
-            events.append(item)
-            if dt == asof_date:
-                current.append(item)
+            # MIN_T2_MA20_VOLUME_INDEPENDENT_V1: independent event per setup, same-day overlap allowed.
+            choices = []
+            ma20_choice = _ma20_volume_event(row)
+            if ma20_choice is not None:
+                choices.append(ma20_choice)
+            legacy_choice = _candidate(row)
+            if legacy_choice is not None:
+                choices.append(legacy_choice)
+            for choice in choices:
+                category, note = choice
+                if category in last and i - last[category] <= cooldown:
+                    continue
+                last[category] = i
+                price = float(row["Giá đóng cửa"])
+                stop = _nearest_support(row, price)
+                tp1, src1, tp2, src2 = _two_targets(row, price)
+                valid_risk = np.isfinite(stop) and 0 < stop < price
+                rr1 = (tp1 - price) / (price - stop) if valid_risk and np.isfinite(tp1) else np.nan
+                rr2 = (tp2 - price) / (price - stop) if valid_risk and np.isfinite(tp2) else np.nan
+                age = len(g)-1-i if g.iloc[-1]["Ngày"] == asof_date else np.nan
+                item = {"Mã":code, "Ngày tín hiệu":dt, "Tín hiệu":LABELS[category], "Giá tín hiệu":price,
+                        "RSI14":round(float(row["RSI14"]),2), "Vol/TB20":round(float(row["VolRatio"]),2),
+                        "Giá EOD":float(g.iloc[-1]["Giá đóng cửa"]) if g.iloc[-1]["Ngày"] == asof_date else np.nan,
+                        "Từ tín hiệu (%)":round((float(g.iloc[-1]["Giá đóng cửa"])/price-1)*100,2) if g.iloc[-1]["Ngày"] == asof_date else np.nan,
+                        "Cắt lỗ tham khảo": stop, "Mục tiêu 1":tp1, "Nguồn TP1":src1,
+                        "Mục tiêu 2":tp2, "Nguồn TP2":src2, "R:R TP1":rr1, "R:R TP2":rr2,
+                        "Ghi chú":note, "Phiên từ tín hiệu":age}
+                for h in HORIZONS:
+                    item[f"T+{h} (%)"] = round((float(g.iloc[i+h]["Giá đóng cửa"])/price-1)*100,2) if i+h<len(g) else np.nan
+                events.append(item)
+                if dt == asof_date:
+                    current.append(item)
     history = pd.DataFrame(events, columns=columns)
     now = pd.DataFrame(current, columns=columns)
     if not history.empty:
@@ -304,7 +335,7 @@ def render(daily, asof, groups=None):
     import streamlit as st
     st.title("Trading T+2 · Dòng tiền vào sớm")
     st.caption("EOD đã xác nhận, không phải giá realtime. Mỗi dòng là một tín hiệu theo ngày; mức mục tiêu tính tại ngày tín hiệu.")
-    st.info("Phát hiện dòng tiền vào sớm / breakout / tiếp diễn. TP1/TP2 là hai vùng cản hợp lệ gần nhất (đỉnh lịch sử hoặc MA); không bảo đảm đạt mục tiêu.")
+    st.info("Phát hiện vượt MA20 + Volume / dòng tiền vào sớm / breakout / tiếp diễn. TP1/TP2 là hai vùng cản hợp lệ gần nhất (đỉnh lịch sử hoặc MA); không bảo đảm đạt mục tiêu.")
     d = prepare(daily, asof)
     if d.empty:
         st.warning("Dữ liệu EOD chưa đầy đủ để chạy bộ lọc.")
@@ -325,9 +356,9 @@ def render(daily, asof, groups=None):
     # Versioned cache function: the previous release cached the old schema
     # without "Mục tiêu 1" / "Mục tiêu 2", causing a pandas KeyError in HTML.
     @st.cache_data(show_spinner="Đang tính tín hiệu lịch sử EOD…", ttl=3600)
-    def _cached_scan_t2_nearest_support_v3(df, date, schema_version):
+    def _cached_scan_t2_ma20volume_v4(df, date, schema_version):
         return scan(df, asof=date)
-    _, hist = _cached_scan_t2_nearest_support_v3(d, str(pd.Timestamp(asof).date()), "t2_nearest_support_v3")
+    _, hist = _cached_scan_t2_ma20volume_v4(d, str(pd.Timestamp(asof).date()), "t2_ma20volume_v4")
     required_schema = {"Mục tiêu 1", "Nguồn TP1", "Mục tiêu 2", "Nguồn TP2", "R:R TP1", "R:R TP2"}
     # Recover locally if a cache migration or deployment ever returns a stale frame.
     if not required_schema.issubset(hist.columns):
