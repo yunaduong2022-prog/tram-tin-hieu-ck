@@ -10,6 +10,46 @@ import streamlit as st
 import waiting_buy as WB
 import ma_top10 as TOP
 
+
+# MIN_STATE_MAP_ADVANCED_FILTER_V1
+_FILTER_KEYS = ("sm_adv_state", "sm_adv_ma", "sm_adv_rs", "sm_adv_signal",
+                "sm_adv_rr", "sm_adv_dist", "sm_adv_sort")
+
+
+def _reset_advanced_filters():
+    for key in _FILTER_KEYS:
+        st.session_state.pop(key, None)
+    st.session_state.pop("state_map_sector", None)
+    st.session_state.pop("state_map_search", None)
+
+
+def _filter_advanced(table, state=None, ma_min=None, rs_min=None,
+                     signal_min=None, rr_min=None, support_max=None, sort_by="MA"):
+    """Filter the ALREADY-classified rows; never recompute signals, price or RR."""
+    out = table.copy()
+    if state is not None:
+        out = out[out["Nhóm gốc"] == state]
+    for col, floor in (("Điểm MA /100", ma_min), ("RS20 (%)", rs_min),
+                       ("Điểm tín hiệu", signal_min), ("R:R", rr_min)):
+        if floor is not None:
+            value = pd.to_numeric(out[col], errors="coerce")
+            out = out[value.notna() & (value >= floor)]
+    if support_max is not None:
+        price = pd.to_numeric(out["Giá EOD"], errors="coerce")
+        support = pd.to_numeric(out["Hỗ trợ"], errors="coerce")
+        distance = (price / support - 1) * 100
+        out = out[(support > 0) & (price >= support) &
+                  distance.notna() & (distance <= support_max)]
+    cols = {"MA": "Điểm MA /100", "RS20": "RS20 (%)",
+            "R:R": "R:R", "Signal": "Điểm tín hiệu"}
+    if sort_by in cols:
+        out = out.sort_values([cols[sort_by], "Mã"],
+                              ascending=[False, True], na_position="last")
+    else:
+        out = out.sort_values("Mã", ascending=True)
+    return out
+
+
 DISPLAY_GROUPS = (
     (WB.G1, "MUA ĐỦ ĐIỀU KIỆN THEO BỘ LỌC"),
     (WB.G2, "CHỜ ĐIỂM MUA"),
@@ -164,6 +204,35 @@ def render(wb, screener, daily, index_daily, asof, groups):
     table = build(wb,screener,daily,index_daily,asof,groups,sector)
     if query:
         table = table[table["Mã"].str.contains(query, regex=False)]
+    # Advanced filters act on the already-calculated table, not on its signal engine.
+    base_count = len(table)
+    with st.expander("🔍 Lọc cổ phiếu nâng cao", expanded=False):
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            state_label = st.selectbox("Trạng thái", ["Tất cả"] + [label for _, label in DISPLAY_GROUPS], key="sm_adv_state")
+            ma_label = st.selectbox("Điểm MA tối thiểu", ["Tất cả", "50", "65", "70", "80", "90"], key="sm_adv_ma")
+            rs_label = st.selectbox("RS20 tối thiểu", ["Tất cả", "0%", "+3%", "+5%", "+10%"], key="sm_adv_rs")
+        with f2:
+            signal_label = st.selectbox("Điểm tín hiệu tối thiểu", ["Tất cả", "4", "5", "6", "7", "8"], key="sm_adv_signal")
+            rr_label = st.selectbox("R:R tối thiểu", ["Tất cả", "1.5", "2", "2.5", "3"], key="sm_adv_rr")
+            dist_label = st.selectbox("Khoảng cách hỗ trợ", ["Tất cả", "≤ 2%", "≤ 3%", "≤ 5%"], key="sm_adv_dist")
+        with f3:
+            sort_label = st.selectbox("Sắp xếp", ["Điểm MA giảm dần", "RS20 giảm dần", "R:R giảm dần", "Điểm tín hiệu giảm dần", "Mã A–Z"], key="sm_adv_sort")
+            st.button("↺ Đặt lại bộ lọc", key="sm_adv_reset", on_click=_reset_advanced_filters)
+    selected_state = next((source for source, label in DISPLAY_GROUPS if label == state_label), None)
+    choices = {"Điểm MA giảm dần": "MA", "RS20 giảm dần": "RS20",
+               "R:R giảm dần": "R:R", "Điểm tín hiệu giảm dần": "Signal", "Mã A–Z": "Code"}
+    table = _filter_advanced(
+        table, state=selected_state,
+        ma_min=None if ma_label == "Tất cả" else float(ma_label),
+        rs_min=None if rs_label == "Tất cả" else float(rs_label.replace("%", "")),
+        signal_min=None if signal_label == "Tất cả" else float(signal_label),
+        rr_min=None if rr_label == "Tất cả" else float(rr_label),
+        support_max=None if dist_label == "Tất cả" else float(dist_label.replace("≤", "").replace("%", "").strip()),
+        sort_by=choices[sort_label])
+    st.caption(f"**Kết quả lọc: {len(table)}/{base_count} mã** · Các tiêu chí được kết hợp đồng thời (AND). Dữ liệu thiếu không được tự điền.")
+    if table.empty:
+        st.info("Không có mã phù hợp. Thử giảm ngưỡng hoặc đặt lại bộ lọc.")
     st.caption("RS20: hiệu suất tương đối 20 phiên với VN-Index · Điểm MA: /100 · Điểm tín hiệu: thang điểm gốc · R:R tính từ Giá vào/Cắt lỗ/Mục tiêu 1 thực tế; — là thiếu dữ liệu.")
     for source, label in DISPLAY_GROUPS:
         subset = table[table["Nhóm gốc"] == source].copy()
