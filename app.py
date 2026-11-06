@@ -3731,7 +3731,7 @@ def _route_inner():
     if main == "Ngành" and sub == "Xếp hạng cổ phiếu":
         return page_sector_ranking("rank")
     if main == "Bộ lọc & Backtest" and sub == "Trading T+2":
-        return T2S.render(frames["D"], latest_date, WL.GROUPS)  # MIN_T2_SWING_V1
+        return T2S.render(frames["D"], latest_date, WL.GROUPS, context_loader=lambda code: __import__("min_three_tab_context").build_context(code, frames["D"], _wb_table(), res_df, VV.index_daily(raw), latest_date, WL.GROUPS))  # MIN_3TAB_CONTEXT_V1
     if main == "Bộ lọc & Backtest" and sub == "Bản đồ trạng thái cổ phiếu":
         return SMV.render(_wb_table(), res_df, frames["D"], VV.index_daily(raw), latest_date, WL.GROUPS)  # MIN_STATE_MAP_V1
     if main == "Bộ lọc & Backtest" and sub == "Cấu trúc MA":

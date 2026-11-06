@@ -518,7 +518,7 @@ def _table_html(data):
     return style + '<div class="t2outer"><table class="t2table"><thead><tr>' + "".join('<th class="t2eod-head">'+e(h)+'</th>' if h == 'Giá EOD' else '<th>'+e(h)+'</th>' for h in headers) + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table></div>'
 
 
-def render(daily, asof, groups=None):
+def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V1
     import streamlit as st
     st.title("Trading T+2 · Dòng tiền vào sớm")
     st.caption("Dữ liệu EOD đã xác nhận, không phải realtime. Giá tín hiệu, hỗ trợ và R:R gốc cố định tại ngày phát tín hiệu; TP1/TP2 trên bảng được cập nhật theo giá EOD hiện tại.")
@@ -584,6 +584,15 @@ def render(daily, asof, groups=None):
     hist = hist.sort_values([sortkeys[order], "Mã"], ascending=[False, True], na_position="last")
     viewed = hist if limit == "Tất cả" else hist.head(int(limit))
     viewed = _add_dynamic_targets(viewed, d, float(tp_gap.rstrip("%")))
+    # MIN_3TAB_CONTEXT_V1: load source context only for a single searched ticker.
+    if callable(context_loader) and len(search_codes) == 1:
+        active_code = next(iter(search_codes))
+        if active_code in set(viewed["Mã"]):
+            try:
+                from min_three_tab_context import render_context
+                render_context(context_loader(active_code), viewed)
+            except (ValueError, KeyError, TypeError, ImportError) as exc:
+                st.caption("Bối cảnh liên tab chưa khả dụng: " + str(exc))
     st.markdown(_table_html(viewed), unsafe_allow_html=True)
     st.caption("TP1/TP2 trên bảng là KHÁNG CỰ ĐỘNG tính từ EOD mới nhất; cản quá gần có trong Ghi chú. R:R TP1/TP2 đối với tín hiệu T+0–T+15 tính theo TP/Cắt lỗ hiển thị và Giá EOD; tín hiệu cũ giữ R:R gốc. % dưới các mức giá = (mức / Giá EOD − 1) × 100. Cắt lỗ vẫn là hỗ trợ tại ngày tín hiệu. '—' là không tìm được cản hợp lệ.")
     st.subheader("Thống kê quan sát · Chưa phải backtest giao dịch")
