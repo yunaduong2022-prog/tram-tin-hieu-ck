@@ -1,6 +1,7 @@
 ﻿Setup,Nhãn,Tín hiệu,Đã vào,Đã đóng,Đang mở,Ngày đầu,Ngày cuối,Lãi 20p % (TB),Vs VNI 20p % (TB),N 20p,Lãi 40p % (TB),Vs VNI 40p % (TB),N 40p,Lãi 60p % (TB),Vs VNI 60p % (TB),N 60p,R backtest (toàn kỳ),R backtest (OOS),Đủ mẫu
-BOTTOM,Bùng nổ sau khi giảm sâu (đáy),2,0,0,0,2026-11-05,2026-11-05,,,0,,,0,,,0,0.333,0.123,False
-BREAKOUT,Bùng nổ vượt đỉnh + khối lượng,3,0,0,0,2026-11-05,2026-11-05,,,0,,,0,,,0,0.076,-0.11,False
-TREND,Xu hướng tăng,1,0,0,0,2026-11-05,2026-11-05,,,0,,,0,,,0,0.29,0.099,False
-RANGE,Giữa Tenkan và Kijun: chờ,6,0,0,0,2026-11-05,2026-11-05,,,0,,,0,,,0,0.176,-0.09,False
-WEAK,Yếu: dưới mây và dưới Tenkan/Kijun,5,0,0,0,2026-11-05,2026-11-05,,,0,,,0,,,0,-0.019,-0.315,False
+BOTTOM,Bùng nổ sau khi giảm sâu (đáy),4,2,0,2,2026-11-05,2026-11-06,,,0,,,0,,,0,0.333,0.123,False
+BASE_HL,Bùng nổ sau tích lũy đáy nâng,1,0,0,0,2026-11-06,2026-11-06,,,0,,,0,,,0,0.264,0.166,False
+BREAKOUT,Bùng nổ vượt đỉnh + khối lượng,4,3,0,3,2026-11-05,2026-11-06,,,0,,,0,,,0,0.076,-0.11,False
+TREND,Xu hướng tăng,1,1,0,1,2026-11-05,2026-11-05,,,0,,,0,,,0,0.29,0.099,False
+RANGE,Giữa Tenkan và Kijun: chờ,11,6,0,6,2026-11-05,2026-11-06,,,0,,,0,,,0,0.176,-0.09,False
+WEAK,Yếu: dưới mây và dưới Tenkan/Kijun,8,5,0,5,2026-11-05,2026-11-06,,,0,,,0,,,0,-0.019,-0.315,False

@@ -1,16 +1,14 @@
 {
- "updated_at": "05/11/2026 22:17 (giờ VN)",
- "latest_date": "2026-11-05",
+ "updated_at": "06/11/2026 22:33 (giờ VN)",
+ "latest_date": "2026-11-06",
  "symbols": 281,
- "symbols_on_latest_date": 248,
- "rows": 512795,
+ "symbols_on_latest_date": 247,
+ "rows": 513042,
  "sources": {
   "vci": 265
  },
  "failed": [],
  "skipped": 0,
- "adjusted": [
-  "QTP"
- ],
+ "adjusted": [],
  "stopped": null
 }
