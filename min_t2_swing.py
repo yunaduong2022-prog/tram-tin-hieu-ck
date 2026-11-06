@@ -299,10 +299,19 @@ def render(daily, asof, groups=None):
     with c4:
         state = st.selectbox("Trạng thái", ["Tất cả", "Mới T+0", "Đang theo dõi"], key="t2_state")
     symbols = set(str(x).upper() for x in (groups or {}).get(sector, [])) if sector != "Toàn thị trường" else None
+    # Versioned cache function: the previous release cached the old schema
+    # without "Mục tiêu 1" / "Mục tiêu 2", causing a pandas KeyError in HTML.
     @st.cache_data(show_spinner="Đang tính tín hiệu lịch sử EOD…", ttl=3600)
-    def _cached_scan(df, date):
+    def _cached_scan_t2_unified_schema_v2(df, date, schema_version):
         return scan(df, asof=date)
-    _, hist = _cached_scan(d, str(pd.Timestamp(asof).date()))
+    _, hist = _cached_scan_t2_unified_schema_v2(d, str(pd.Timestamp(asof).date()), "t2_unified_schema_v2")
+    required_schema = {"Mục tiêu 1", "Nguồn TP1", "Mục tiêu 2", "Nguồn TP2", "R:R TP1", "R:R TP2"}
+    # Recover locally if a cache migration or deployment ever returns a stale frame.
+    if not required_schema.issubset(hist.columns):
+        _, hist = scan(d, asof=asof)
+    if not required_schema.issubset(hist.columns):
+        st.error("Dữ liệu bộ lọc T+2 chưa đúng phiên bản. Vui lòng kiểm tra bản triển khai.")
+        return
     if symbols is not None:
         hist = hist[hist["Mã"].isin(symbols)]
     if kind != "Tất cả":
