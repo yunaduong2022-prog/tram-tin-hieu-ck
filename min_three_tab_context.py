@@ -114,11 +114,13 @@ def _eod_volume_context(daily, code, asof):
     range_pct = (candle_range / low * 100.0) if candle_range > 0 else 0.0
     upper_wick = (high - max(opened, close)) / candle_range * 100.0 if candle_range > 0 else 0.0
     lower_wick = (min(opened, close) - low) / candle_range * 100.0 if candle_range > 0 else 0.0
+    # MIN_T2_EOD_BODY_RANGE_V1: physical candle body, excluding wicks.
+    body_pct = abs(close - opened) / candle_range * 100.0 if candle_range > 0 else 0.0
     return {"vol_ratio": float(volumes.iloc[-1] / prior.mean()), "close": close,
             "prev_close": float(previous_close), "open": opened,
             "close_pos": pos, "range_pct": range_pct,
             "upper_wick_pct": upper_wick, "lower_wick_pct": lower_wick,
-            "flat_candle": candle_range == 0.0}
+            "body_pct": body_pct, "flat_candle": candle_range == 0.0}
 
 
 def _t2_trade_assessment(context, latest, volume):
@@ -167,6 +169,23 @@ def _t2_trade_assessment(context, latest, volume):
             return "Có dư địa T+ · Khối lượng cao nhưng nến đỏ"
         return "Có dư địa T+ · Chưa đủ xác nhận giá–khối lượng"
     return "Chưa đủ điều kiện T+ theo dư địa và R:R"
+
+
+# MIN_T2_EOD_BODY_RANGE_V1
+
+def _t2_body_label(volume):
+    """Descriptive shape, NOT inferred order flow or a buy/sell signal."""
+    if not volume:
+        return "Chưa đủ dữ liệu nến"
+    if volume.get("flat_candle"):
+        return "Nến một giá · Không xác nhận lực mua/bán"
+    body = float(volume["body_pct"])
+    close, opened = float(volume["close"]), float(volume["open"])
+    if body < 25:
+        return "Thân nhỏ · Giằng co"  # includes a doji, regardless of tiny color
+    direction = "Nến xanh" if close > opened else "Nến đỏ" if close < opened else "Nến trung tính"
+    strength = "thân lớn" if body >= 60 else "thân vừa"
+    return f"{direction} {strength}"
 
 
 def _t2_candle_explanation(volume):
@@ -253,17 +272,20 @@ def render_context(context, viewed, daily=None):
             st.metric("R:R TP1", fmt(rr1))
         # Explain close location and candle shape alongside volume EOD.
         if vol is not None:
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.metric("Vị trí đóng cửa (Position)", fmt(vol["close_pos"] * 100, "%"))
             with c2:
                 st.metric("Biên độ nến High–Low", fmt(vol["range_pct"], "%"))
             with c3:
                 st.metric("Bóng trên / biên độ", fmt(vol["upper_wick_pct"], "%"))
+            with c4:
+                st.metric("Thân nến / biên độ", fmt(vol["body_pct"], "%"))
+            st.write("Phân loại nến EOD:", _t2_body_label(vol))
             st.caption(_t2_candle_explanation(vol))
         else:
             st.caption("Nến EOD: Chưa đủ dữ liệu OHLC đồng nhất để phân tích.")
         st.write("Đánh giá T+:", _t2_trade_assessment(context, latest, vol))
-        st.caption("Position = (Đóng cửa − Thấp nhất) / (Cao nhất − Thấp nhất) × 100; biên độ nến = (Cao nhất − Thấp nhất) / Thấp nhất × 100. Nến một giá: Position quy ước 50%, không tự xác nhận lực mua.")
+        st.caption("Position = (Đóng cửa − Thấp nhất) / (Cao nhất − Thấp nhất) × 100; biên độ nến = (Cao nhất − Thấp nhất) / Thấp nhất × 100. Thân/biên độ = |Đóng cửa − Mở cửa| / (Cao nhất − Thấp nhất) × 100. Thân nhỏ <25%, thân vừa 25–<60%, thân lớn ≥60% (ngưỡng mô tả, không phải tín hiệu mua). Nến một giá: Position quy ước 50%, thân 0%.")
         st.caption("Vol/TB20 EOD lấy khối lượng phiên mới nhất chia trung bình 20 phiên trước. Không phải Vol/TB20 của ngày phát tín hiệu.")
         st.caption("Trạng thái và kháng cự gần lấy từ Bản đồ trạng thái; cấu trúc MA lấy từ tab Cấu trúc MA. TP1/TP2 lấy từ tín hiệu T+2 mới nhất đang hiển thị. Cản gần không phải TP.")
