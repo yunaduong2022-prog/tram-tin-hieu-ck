@@ -286,6 +286,9 @@ def render_context(context, viewed, daily=None):
         else:
             st.caption("Nến EOD: Chưa đủ dữ liệu OHLC đồng nhất để phân tích.")
         st.write("Đánh giá T+:", _t2_trade_assessment(context, latest, vol))
+        # MIN_T2_EXIT_GUARD_V1
+        from min_t2_position_guard import render_guard
+        render_guard(context, viewed, daily)
         st.caption("Position = (Đóng cửa − Thấp nhất) / (Cao nhất − Thấp nhất) × 100; biên độ nến = (Cao nhất − Thấp nhất) / Thấp nhất × 100. Thân/biên độ = |Đóng cửa − Mở cửa| / (Cao nhất − Thấp nhất) × 100. Thân nhỏ <25%, thân vừa 25–<60%, thân lớn ≥60% (ngưỡng mô tả, không phải tín hiệu mua). Nến một giá: Position quy ước 50%, thân 0%.")
         st.caption("Vol/TB20 EOD lấy khối lượng phiên mới nhất chia trung bình 20 phiên trước. Không phải Vol/TB20 của ngày phát tín hiệu.")
         st.caption("Trạng thái và kháng cự gần lấy từ Bản đồ trạng thái; cấu trúc MA lấy từ tab Cấu trúc MA. TP1/TP2 lấy từ tín hiệu T+2 mới nhất đang hiển thị. Cản gần không phải TP.")
