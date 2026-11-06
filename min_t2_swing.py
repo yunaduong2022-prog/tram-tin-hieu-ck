@@ -64,6 +64,9 @@ def _indicators(g: pd.DataFrame) -> pd.DataFrame:
         g[f"Prev{period}High"] = h.shift(1).rolling(period, min_periods=period).max()
     for period in (50, 100, 200):
         g[f"MA{period}"] = c.rolling(period, min_periods=period).mean()
+    # MIN_T2_NEAREST_SUPPORT_V1: prior-session lows exclude signal candle.
+    g["Prev3Low"] = lo.shift(1).rolling(3, min_periods=3).min()
+    g["Prev5Low"] = lo.shift(1).rolling(5, min_periods=5).min()
     g["Prev10Low"] = lo.shift(1).rolling(10, min_periods=10).min()
     g["Prev20Low"] = lo.shift(1).rolling(20, min_periods=20).min()
     g["PrevClose"] = c.shift(1)
@@ -132,6 +135,23 @@ def _two_targets(row, price):
     return one[0], one[1], two[0], two[1]
 
 
+def _nearest_support(row, price):
+    """Closest valid MA or prior low strictly below signal price, using only signal-day data.
+
+    No arbitrary 7% cutoff or synthetic support. MA is calculated through EOD
+    signal day; price lows use ONLY earlier sessions. Missing data is ignored.
+    """
+    if not np.isfinite(price) or price <= 0:
+        return np.nan
+    candidates = []
+    for col in ("MA9", "MA20", "MA50", "MA100", "MA200",
+                "Prev3Low", "Prev5Low", "Prev10Low", "Prev20Low"):
+        value = pd.to_numeric(row.get(col, np.nan), errors="coerce")
+        if pd.notna(value) and np.isfinite(float(value)) and 0 < float(value) < price:
+            candidates.append(float(value))
+    return max(candidates) if candidates else np.nan
+
+
 def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
     """Returns (current candidates, historical first events) without lookahead.
 
@@ -174,7 +194,7 @@ def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
                 continue
             last[category] = i
             price = float(row["Giá đóng cửa"])
-            stop = float(row["Prev10Low"]) if np.isfinite(row["Prev10Low"]) and row["Prev10Low"] < price else np.nan
+            stop = _nearest_support(row, price)
             tp1, src1, tp2, src2 = _two_targets(row, price)
             valid_risk = np.isfinite(stop) and 0 < stop < price
             rr1 = (tp1 - price) / (price - stop) if valid_risk and np.isfinite(tp1) else np.nan
@@ -298,13 +318,16 @@ def render(daily, asof, groups=None):
         sector = st.selectbox("Ngành", ["Toàn thị trường"] + list((groups or {}).keys()), key="t2_sector")
     with c4:
         state = st.selectbox("Trạng thái", ["Tất cả", "Mới T+0", "Đang theo dõi"], key="t2_state")
+    # MIN_T2_SYMBOL_SEARCH_V1: filter only the display; preserve full-market scan/cache.
+    symbol_query = st.text_input("Lọc theo mã cổ phiếu", placeholder="VD: CEO, DXG, HDG", key="t2_symbol_search")
+    search_codes = {part.strip().upper() for part in symbol_query.replace(";", ",").replace(" ", ",").split(",") if part.strip()}
     symbols = set(str(x).upper() for x in (groups or {}).get(sector, [])) if sector != "Toàn thị trường" else None
     # Versioned cache function: the previous release cached the old schema
     # without "Mục tiêu 1" / "Mục tiêu 2", causing a pandas KeyError in HTML.
     @st.cache_data(show_spinner="Đang tính tín hiệu lịch sử EOD…", ttl=3600)
-    def _cached_scan_t2_unified_schema_v2(df, date, schema_version):
+    def _cached_scan_t2_nearest_support_v3(df, date, schema_version):
         return scan(df, asof=date)
-    _, hist = _cached_scan_t2_unified_schema_v2(d, str(pd.Timestamp(asof).date()), "t2_unified_schema_v2")
+    _, hist = _cached_scan_t2_nearest_support_v3(d, str(pd.Timestamp(asof).date()), "t2_nearest_support_v3")
     required_schema = {"Mục tiêu 1", "Nguồn TP1", "Mục tiêu 2", "Nguồn TP2", "R:R TP1", "R:R TP2"}
     # Recover locally if a cache migration or deployment ever returns a stale frame.
     if not required_schema.issubset(hist.columns):
@@ -314,6 +337,8 @@ def render(daily, asof, groups=None):
         return
     if symbols is not None:
         hist = hist[hist["Mã"].isin(symbols)]
+    if search_codes:
+        hist = hist[hist["Mã"].isin(search_codes)]
     if kind != "Tất cả":
         hist = hist[hist["Tín hiệu"] == kind]
     if min_vol != "Tất cả":
@@ -337,7 +362,7 @@ def render(daily, asof, groups=None):
     hist = hist.sort_values([sortkeys[order], "Mã"], ascending=[False, True], na_position="last")
     viewed = hist if limit == "Tất cả" else hist.head(int(limit))
     st.markdown(_table_html(viewed), unsafe_allow_html=True)
-    st.caption("% dưới Cắt lỗ, TP1, TP2 = (mức giá / Giá EOD − 1) × 100. Màu thể hiện khoảng cách thực tế; cắt lỗ màu đỏ. R:R TP1/TP2 tính cố định theo giá tín hiệu, không tính lại từ EOD hiện tại. '—' là thiếu mức hợp lệ.")
+    st.caption("Cắt lỗ tham khảo = hỗ trợ gần nhất dưới giá tín hiệu (MA9/20/50/100/200 hoặc đáy 3/5/10/20 phiên trước). % dưới Cắt lỗ, TP1, TP2 = (mức giá / Giá EOD − 1) × 100. Màu thể hiện khoảng cách thực tế; cắt lỗ màu đỏ. R:R TP1/TP2 tính cố định theo giá tín hiệu, không tính lại từ EOD hiện tại. '—' là thiếu mức hợp lệ.")
     st.subheader("Thống kê quan sát · Chưa phải backtest giao dịch")
     st.dataframe(summary(hist), hide_index=True, use_container_width=True)
     st.caption("T+2/5/10/15/20/30 là biến động đóng cửa của cổ phiếu sau tín hiệu, không phải lợi nhuận đã giao dịch. Chưa tính phí, thuế, trượt giá, khớp lệnh, hoặc ngày có quyền bán. Tín hiệu lịch sử dựng lại theo quy tắc không nhìn trước.")
