@@ -11,10 +11,9 @@ ALL = "Tất cả BĐS"
 SUBSECTORS = OrderedDict([
     ("Nhà ở – đô thị", (
         "VHM", "NVL", "KDH", "DXG", "DIG", "PDR", "NLG", "TCH", "AGG",
-        "NTL", "HQC", "SGR", "HPX", "HDC", "LDG", "NBB", "SCR", "QCG", "VPI")),
+        "NTL", "HQC", "SGR", "HPX", "HDC", "LDG", "NBB", "SCR", "QCG", "VPI", "CEO")),
     ("Khu công nghiệp", ("KBC", "IDC", "SZC", "BCM", "IJC", "VGC")),
     ("Thương mại – bán lẻ", ("VRE",)),
-    ("Nghỉ dưỡng – du lịch", ("CEO",)),
     ("Dịch vụ – môi giới", ("DXS", "CRE")),
     ("Đa ngành – kết hợp", ("VIC", "HDG", "HTN", "HHS")),
 ])
@@ -23,7 +22,7 @@ SUBSECTORS = OrderedDict([
 SECONDARY = {
     "TCH": "ô tô", "VGC": "vật liệu xây dựng", "IJC": "hạ tầng",
     "HDG": "năng lượng", "VIC": "tập đoàn đa ngành", "HHS": "ô tô",
-    "HTN": "xây dựng", "CEO": "nhà ở",
+    "HTN": "xây dựng", "CEO": "nghỉ dưỡng – du lịch",
 }
 
 
