@@ -181,7 +181,13 @@ def render(daily: pd.DataFrame, groups: dict[str, list[str]], eod_date=None, nam
         rank_sector = f"Bất động sản · {bds_segment}"
         rank_groups = dict(groups)
         rank_groups[rank_sector] = sorted(_MA_BDS.symbols_for(bds_segment, groups[sector]))
-    _ma_top10.render_top10(d, daily, asof, rank_sector, rank_groups)
+    # MIN_RS20_INDEX_CSV_V1: reuse the existing cached EOD index reader.
+    import vnindex_view as _vnindex_view
+    try:
+        _index_eod = _vnindex_view.index_daily(None)
+    except (OSError, ValueError, KeyError, pd.errors.ParserError):
+        _index_eod = pd.DataFrame()
+    _ma_top10.render_top10(d, daily, asof, rank_sector, rank_groups, index_daily=_index_eod)
     if sector != "Toàn thị trường":
         allowed = (rank_groups[rank_sector] if sector == "Bất động sản" and bds_segment != _MA_BDS.ALL
                    else groups[sector])

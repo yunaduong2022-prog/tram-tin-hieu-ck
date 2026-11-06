@@ -33,7 +33,7 @@ def _clean_history(daily):
     return d.sort_values(["Mã", "Ngày"]).drop_duplicates(["Mã", "Ngày"], keep="last")
 
 
-def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None):
+def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None, index_daily=None):
     """Two ranked tables (total and short-term), strictly on asof EOD.
 
     100-point transparent rules:
@@ -52,13 +52,26 @@ def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None
     group_set = None
     if sector != "Toàn thị trường":
         group_set = {str(v).strip().upper() for v in (groups or {}).get(sector, [])}
-    index = pd.DataFrame()
-    for sym in _INDEX:
-        tmp = h[h["Mã"] == sym].set_index("Ngày")["Giá đóng cửa"]
-        if not tmp.empty and cutoff in tmp.index:
-            index = tmp
-            break
-    rs_exists = not isinstance(index, pd.DataFrame) and not index.empty
+    # MIN_RS20_INDEX_CSV_V1: index_daily is read from existing index_prices.csv.
+    # Keep exactly matched trading dates; do not forward-fill missing index bars.
+    index = pd.Series(dtype="float64")
+    if isinstance(index_daily, pd.DataFrame) and {"Ngày", "Giá đóng cửa"}.issubset(index_daily.columns):
+        idx = index_daily[["Ngày", "Giá đóng cửa"]].copy()
+        idx["Ngày"] = pd.to_datetime(idx["Ngày"], errors="coerce", dayfirst=True).dt.normalize()
+        idx["Giá đóng cửa"] = pd.to_numeric(idx["Giá đóng cửa"], errors="coerce")
+        idx = idx.dropna(subset=["Ngày", "Giá đóng cửa"])
+        idx = idx[(idx["Giá đóng cửa"] > 0) & (idx["Ngày"] <= cutoff)]
+        if not idx.empty:
+            index = (idx.sort_values("Ngày").drop_duplicates("Ngày", keep="last")
+                     .set_index("Ngày")["Giá đóng cửa"])
+    # Backward compatible: reuse index rows embedded in the stock input if needed.
+    if cutoff not in index.index:
+        for sym in _INDEX:
+            tmp = h[h["Mã"] == sym].set_index("Ngày")["Giá đóng cửa"]
+            if not tmp.empty and cutoff in tmp.index:
+                index = tmp
+                break
+    rs_exists = bool(not index.empty and cutoff in index.index)
     labels = names or {}
     rows = []
     for sym, part in h.groupby("Mã", sort=False):
@@ -106,10 +119,10 @@ def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None
     return total, short, rs_exists
 
 
-def render_top10(snapshot, daily, asof, sector, groups):
+def render_top10(snapshot, daily, asof, sector, groups, index_daily=None):
     """Render directly above stock cards, scoped only by selected sector."""
     names = dict(zip(snapshot["Mã"], snapshot["Tên công ty"])) if "Tên công ty" in snapshot else {}
-    overall, short, has_index = rank_ma(daily, asof, groups, sector, names)
+    overall, short, has_index = rank_ma(daily, asof, groups, sector, names, index_daily=index_daily)
     st.subheader("🏆 Top 10 cổ phiếu mạnh nhất theo cấu trúc MA")
     st.caption(f"Phạm vi: {sector} · EOD {pd.Timestamp(asof):%d/%m/%Y} · chỉ xếp hạng mã đủ MA10/20/50/100/200 và có giá đúng ngày. Top 10 độc lập với bộ lọc tìm kiếm/trạng thái bên dưới.")
     tabs = st.tabs(["Top 10 tổng hợp", "Top 10 ngắn hạn (T+15–T+30)"])
@@ -120,11 +133,12 @@ def render_top10(snapshot, daily, asof, sector, groups):
                 continue
             view = frame[["Mã", "Tên công ty", "Giá", key, "RS20"]].copy()
             view.insert(0, "Hạng", range(1, len(view)+1))
+            view["RS20"] = view["RS20"].map(lambda v: f"{float(v):+.2f}" if pd.notna(v) else "—")
             view = view.rename(columns={"Giá":"Giá EOD (nghìn đồng)",key:"Điểm / 100", "RS20":"RS20 so VN-Index (%)"})
             st.dataframe(view, hide_index=True, use_container_width=True,
                          column_config={"Điểm / 100":st.column_config.ProgressColumn("Điểm / 100", min_value=0, max_value=100, format="%d"),
                                         "Giá EOD (nghìn đồng)":st.column_config.NumberColumn("Giá EOD (nghìn đồng)",format="%.2f"),
-                                        "RS20 so VN-Index (%)":st.column_config.NumberColumn("RS20 so VN-Index (%)",format="%+.2f")})
+                                        "RS20 so VN-Index (%)":st.column_config.TextColumn("RS20 so VN-Index (%)")})
     if not has_index:
         st.caption("RS20: không có chuỗi VN-Index chuẩn cùng phiên trong dữ liệu đầu vào, nên chưa cộng tối đa 10 điểm RS20 (điểm thực tế tối đa 90). Không thay bằng thị trường giả định.")
     st.caption("Tổng hợp = giá trên 5 MA (40đ) + trật tự MA (40đ) + MA10/MA20 cùng dốc lên (10đ) + RS20 dương (10đ). Ngắn hạn = vị trí giá so MA10/20/50 (50đ) + MA10>MA20 và MA20>MA50 (30đ) + độ dốc (10đ) + RS20 (10đ). Điểm là thước đo kỹ thuật, không phải khuyến nghị mua.")
