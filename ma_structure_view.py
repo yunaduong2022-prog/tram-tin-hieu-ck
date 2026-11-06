@@ -156,6 +156,9 @@ def render(daily: pd.DataFrame, groups: dict[str, list[str]], eod_date=None, nam
         horizon = st.selectbox("Khung xu hướng", ["Tất cả", "Ngắn hạn", "Trung hạn", "Dài hạn"], key="ma_structure_horizon")
     with c4:
         status = st.selectbox("Trạng thái", ["Tất cả", TREND_UP, TREND_DOWN, TREND_OTHER, "Giá trên MA20", "Giá về gần MA20 (±2%)", "Giá về gần MA50 (±2%)", "MA10 cắt lên MA20"], key="ma_structure_status")
+    # MIN_MA_TOP10_V1: rank verified same-session EOD before card-only filters.
+    import ma_top10 as _ma_top10
+    _ma_top10.render_top10(d, daily, asof, sector, groups)
     if sector != "Toàn thị trường":
         d = d[d["Mã"].isin(groups[sector])]
     if query.strip():
