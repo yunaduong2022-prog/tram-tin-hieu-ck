@@ -14,25 +14,57 @@ def _num(value):
     return float(v) if pd.notna(v) and np.isfinite(float(v)) else np.nan
 
 
-def prepare_code(daily, code, asof):
-    """Only genuine complete daily observations <= asof; never forward-fill."""
+def prepare_code(daily, code, asof, start=None):
+    """EOD bars limited to the data window actually needed.
+
+    Current MA assessment: discard only an invalid *older prefix*; preserve
+    every genuine valid observation after the newest invalid candle.
+    Signal lifecycle: validate the complete inclusive signal-to-asof window;
+    one missing or malformed observation makes the outcome indeterminate.
+    Never replace a missing candle, and never make a historical fill claim.
+    """
     if daily is None or daily.empty or not set(COLS).issubset(daily.columns):
         return pd.DataFrame()
+    asof_day = pd.Timestamp(asof).normalize()
     t = daily.loc[daily['Mã'].astype(str).str.upper().str.strip() == str(code).upper()].copy()
+    if t.empty:
+        return pd.DataFrame()
     t['Ngày'] = pd.to_datetime(t['Ngày'], errors='coerce').dt.normalize()
     for col in COLS[2:]:
         t[col] = pd.to_numeric(t[col], errors='coerce')
-    t = t.dropna(subset=['Ngày', *COLS[2:]]).sort_values('Ngày').drop_duplicates('Ngày', keep='last')
-    t = t.loc[t['Ngày'] <= pd.Timestamp(asof).normalize()].reset_index(drop=True)
-    if t.empty or t.iloc[-1]['Ngày'] != pd.Timestamp(asof).normalize():
+    # Ambiguous duplicates in the requested window cannot establish a unique candle.
+    t = t.loc[t['Ngày'].notna() & (t['Ngày'] <= asof_day)].sort_values('Ngày')
+    if start is not None:
+        start_day = pd.Timestamp(start).normalize()
+        t = t.loc[t['Ngày'] >= start_day]
+    else:
+        start_day = None
+    if t.empty or t.iloc[-1]['Ngày'] != asof_day:
         return pd.DataFrame()
-    valid = ((t['Giá thấp nhất'] > 0) & (t['Giá cao nhất'] >= t['Giá thấp nhất']) &
-             (t['Giá mở cửa'].between(t['Giá thấp nhất'], t['Giá cao nhất'])) &
-             (t['Giá đóng cửa'].between(t['Giá thấp nhất'], t['Giá cao nhất'])) &
+    if bool(t['Ngày'].duplicated().any()):
+        # Do not silently choose a favorable duplicate OHLC candle.
+        if start_day is not None:
+            return pd.DataFrame()
+        last_duplicate = t.index[t['Ngày'].duplicated(keep=False)][-1]
+        t = t.loc[t['Ngày'] > t.loc[last_duplicate, 'Ngày']]
+        if t.empty:
+            return pd.DataFrame()
+    valid = (t[list(COLS[2:])].notna().all(axis=1) &
+             (t['Giá thấp nhất'] > 0) &
+             (t['Giá cao nhất'] >= t['Giá thấp nhất']) &
+             t['Giá mở cửa'].between(t['Giá thấp nhất'], t['Giá cao nhất']) &
+             t['Giá đóng cửa'].between(t['Giá thấp nhất'], t['Giá cao nhất']) &
              (t['Khối lượng khớp lệnh'] >= 0))
-    if not bool(valid.all()):
-        return pd.DataFrame()  # do not conceal malformed candles for stop test
-    return t
+    if start_day is not None:
+        if not bool(valid.all()) or t.iloc[0]['Ngày'] != start_day:
+            return pd.DataFrame()
+    elif not bool(valid.all()):
+        # An old invalid candle must not mask an otherwise valid recent MA20.
+        last_bad = t.loc[~valid, 'Ngày'].max()
+        t = t.loc[t['Ngày'] > last_bad]
+        if t.empty:
+            return pd.DataFrame()
+    return t.reset_index(drop=True)
 
 
 def exit_condition(daily, code, asof):
@@ -44,9 +76,10 @@ def exit_condition(daily, code, asof):
     v = g['Khối lượng khớp lệnh']
     ma = c.rolling(20, min_periods=20).mean()
     # Same EMA20 settings as waiting_buy._features, no min_periods.
-    ema = c.ewm(span=20, adjust=False).mean()
+    ema = c.ewm(span=20, adjust=False).mean() if len(g) >= 60 else None
     price, prev = float(c.iloc[-1]), float(c.iloc[-2])
-    m, pm, em, pem = map(float, (ma.iloc[-1], ma.iloc[-2], ema.iloc[-1], ema.iloc[-2]))
+    m, pm = float(ma.iloc[-1]), float(ma.iloc[-2])
+    em, pem = (float(ema.iloc[-1]), float(ema.iloc[-2])) if ema is not None else (np.nan, np.nan)
     vr = float(v.iloc[-1] / v.iloc[-21:-1].mean()) if v.iloc[-21:-1].mean() > 0 else np.nan
     hi, lo = float(g['Giá cao nhất'].iloc[-1]), float(g['Giá thấp nhất'].iloc[-1])
     pos = (price - lo) / (hi - lo) if hi > lo else 0.5
@@ -70,8 +103,10 @@ def exit_condition(daily, code, asof):
         status, reason = 'SUY YẾU', 'Giá đang dưới MA20; cần theo dõi lực cầu và mức cắt lỗ.'
     else:
         status, reason = 'THEO DÕI GIỮ', 'Giá chưa đóng dưới MA20; không có cảnh báo bán theo điều kiện MA20 hiện tại.'
-    if price < em:
+    if np.isfinite(em) and price < em:
         reason += ' Giá dưới EMA20.'
+    elif not np.isfinite(em):
+        reason += ' EMA20 chưa đủ 60 phiên liên tục sau nến lỗi để khởi tạo đáng tin cậy.'
     return {'status': status, 'reason': reason, 'ma20': m, 'ema20': em,
             'prev_ma20': pm, 'prev_ema20': pem, 'price': price,
             'vol_ratio': vr, 'position': pos * 100, 'pv_code': pv,
@@ -86,11 +121,23 @@ def signal_lifecycle(daily, signal, asof):
     Never treat raised dynamic stop as if active since the signal day.
     """
     code = str(signal.get('Mã', '')).upper()
-    g = prepare_code(daily, code, asof)
     dt = pd.to_datetime(signal.get('Ngày tín hiệu'), errors='coerce')
-    if g.empty or pd.isna(dt):
+    if pd.isna(dt):
+        return {'status': 'CHƯA ĐỦ DỮ LIỆU', 'note': 'Ngày tín hiệu không hợp lệ.', 'date': None}
+    g = prepare_code(daily, code, asof, start=dt)
+    if g.empty:
         return {'status': 'CHƯA ĐỦ DỮ LIỆU', 'note': 'Không xác minh được lịch sử EOD của tín hiệu.', 'date': None}
     dt = pd.Timestamp(dt).normalize()
+    # Missing ticker bars on market trading days may conceal stop/TP touches.
+    # Suspension/no-trading and a missing data feed cannot be distinguished here.
+    market_days = pd.to_datetime(daily['Ngày'], errors='coerce').dt.normalize()
+    market_days = set(market_days.loc[(market_days >= dt) &
+                                     (market_days <= pd.Timestamp(asof).normalize())].dropna())
+    symbol_days = set(g['Ngày'])
+    if market_days - symbol_days:
+        return {'status': 'CHƯA ĐỦ DỮ LIỆU',
+                'note': 'Có phiên thị trường thiếu OHLC của mã trong giai đoạn từ tín hiệu; không suy ra chạm cắt lỗ/TP.',
+                'date': None}
     ids = g.index[g['Ngày'] == dt].tolist()
     if len(ids) != 1:
         return {'status': 'CHƯA ĐỦ DỮ LIỆU', 'note': 'Không tìm thấy đúng một nến của ngày tín hiệu.', 'date': None}
@@ -142,7 +189,7 @@ def render_guard(context, viewed, daily):
             a,b,c = st.columns(3)
             a.metric('Giá EOD', f"{risk['price']:.2f}")
             b.metric('MA20 ngày', f"{risk['ma20']:.2f}")
-            c.metric('EMA20 ngày', f"{risk['ema20']:.2f}")
+            c.metric('EMA20 ngày', f"{risk['ema20']:.2f}" if np.isfinite(risk['ema20']) else '—')
         st.write('Cảnh báo kỹ thuật hiện tại:', risk['status'])
         st.caption(risk['reason'])
         latest = selected.iloc[0]
