@@ -59,6 +59,11 @@ def _indicators(g: pd.DataFrame) -> pd.DataFrame:
     g["RSI_prev"] = rsi.shift(1)
     g["RSI_3prev"] = rsi.shift(3)
     g["Prev20High"] = h.shift(1).rolling(20, min_periods=20).max()
+    # Every level is known at the signal-day EOD; historical highs exclude the signal candle.
+    for period in (60, 120, 250):
+        g[f"Prev{period}High"] = h.shift(1).rolling(period, min_periods=period).max()
+    for period in (50, 100, 200):
+        g[f"MA{period}"] = c.rolling(period, min_periods=period).mean()
     g["Prev10Low"] = lo.shift(1).rolling(10, min_periods=10).min()
     g["Prev20Low"] = lo.shift(1).rolling(20, min_periods=20).min()
     g["PrevClose"] = c.shift(1)
@@ -99,6 +104,34 @@ def _candidate(row) -> tuple[str, str] | None:
     return None
 
 
+
+
+def _two_targets(row, price):
+    """Nearest distinct overhead levels known on the signal date; never synthesize a 2R price."""
+    if not np.isfinite(price) or price <= 0:
+        return np.nan, "", np.nan, ""
+    candidates = []
+    # Price structures from completed PRIOR sessions; signal-candle MA is already known at EOD.
+    for column, label in (("Prev20High", "Đỉnh 20P"), ("Prev60High", "Đỉnh 60P"),
+                          ("Prev120High", "Đỉnh 120P"), ("Prev250High", "Đỉnh 250P"),
+                          ("MA20", "MA20"), ("MA50", "MA50"),
+                          ("MA100", "MA100"), ("MA200", "MA200")):
+        val = row.get(column, np.nan)
+        if pd.notna(val) and np.isfinite(float(val)) and float(val) > price:
+            candidates.append((float(val), label))
+    candidates.sort(key=lambda x: x[0])
+    distinct = []
+    # Levels closer than 0.5% are one zone, not two artificial separate targets.
+    for value, label in candidates:
+        if distinct and (value / distinct[-1][0] - 1) < 0.005:
+            distinct[-1] = (distinct[-1][0], distinct[-1][1] + " / " + label)
+        else:
+            distinct.append((value, label))
+    one = distinct[0] if len(distinct) > 0 else (np.nan, "")
+    two = distinct[1] if len(distinct) > 1 else (np.nan, "")
+    return one[0], one[1], two[0], two[1]
+
+
 def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
     """Returns (current candidates, historical first events) without lookahead.
 
@@ -108,7 +141,8 @@ def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
     """
     d = prepare(daily, asof)
     columns = ["Mã", "Ngày tín hiệu", "Tín hiệu", "Giá tín hiệu", "RSI14", "Vol/TB20",
-               "Giá EOD", "Từ tín hiệu (%)", "Cắt lỗ tham khảo", "Mục tiêu gần", "R:R tham khảo", "Ghi chú", "Phiên từ tín hiệu"] + [f"T+{h} (%)" for h in HORIZONS]
+               "Giá EOD", "Từ tín hiệu (%)", "Cắt lỗ tham khảo", "Mục tiêu 1", "Nguồn TP1",
+               "Mục tiêu 2", "Nguồn TP2", "R:R TP1", "R:R TP2", "Ghi chú", "Phiên từ tín hiệu"] + [f"T+{h} (%)" for h in HORIZONS]
     if d.empty:
         return pd.DataFrame(columns=columns), pd.DataFrame(columns=columns)
     asof_date = pd.Timestamp(asof).normalize() if asof is not None else d["Ngày"].max()
@@ -141,14 +175,17 @@ def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
             last[category] = i
             price = float(row["Giá đóng cửa"])
             stop = float(row["Prev10Low"]) if np.isfinite(row["Prev10Low"]) and row["Prev10Low"] < price else np.nan
-            target = float(row["Prev20High"]) if np.isfinite(row["Prev20High"]) and row["Prev20High"] > price else np.nan
-            rr = (target - price)/(price-stop) if np.isfinite(stop) and np.isfinite(target) else np.nan
+            tp1, src1, tp2, src2 = _two_targets(row, price)
+            valid_risk = np.isfinite(stop) and 0 < stop < price
+            rr1 = (tp1 - price) / (price - stop) if valid_risk and np.isfinite(tp1) else np.nan
+            rr2 = (tp2 - price) / (price - stop) if valid_risk and np.isfinite(tp2) else np.nan
             age = len(g)-1-i if g.iloc[-1]["Ngày"] == asof_date else np.nan
             item = {"Mã":code, "Ngày tín hiệu":dt, "Tín hiệu":LABELS[category], "Giá tín hiệu":price,
                     "RSI14":round(float(row["RSI14"]),2), "Vol/TB20":round(float(row["VolRatio"]),2),
                     "Giá EOD":float(g.iloc[-1]["Giá đóng cửa"]) if g.iloc[-1]["Ngày"] == asof_date else np.nan,
                     "Từ tín hiệu (%)":round((float(g.iloc[-1]["Giá đóng cửa"])/price-1)*100,2) if g.iloc[-1]["Ngày"] == asof_date else np.nan,
-                    "Cắt lỗ tham khảo": stop, "Mục tiêu gần":target, "R:R tham khảo":rr,
+                    "Cắt lỗ tham khảo": stop, "Mục tiêu 1":tp1, "Nguồn TP1":src1,
+                    "Mục tiêu 2":tp2, "Nguồn TP2":src2, "R:R TP1":rr1, "R:R TP2":rr2,
                     "Ghi chú":note, "Phiên từ tín hiệu":age}
             for h in HORIZONS:
                 item[f"T+{h} (%)"] = round((float(g.iloc[i+h]["Giá đóng cửa"])/price-1)*100,2) if i+h<len(g) else np.nan
@@ -178,52 +215,120 @@ def summary(history: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+
+def _fmt_number(val, digits=2):
+    x = pd.to_numeric(val, errors="coerce")
+    return f"{float(x):,.{digits}f}" if pd.notna(x) and np.isfinite(float(x)) else "—"
+
+
+def _fmt_signed(val):
+    x = pd.to_numeric(val, errors="coerce")
+    return f"{float(x):+.2f}%" if pd.notna(x) and np.isfinite(float(x)) else "—"
+
+
+def _table_html(data):
+    """One scrollable table. All percent figures under levels use the latest EOD, not entry."""
+    import html
+    headers = ["Mã", "Ngày tín hiệu", "Loại tín hiệu", "Tuổi", "Giá tín hiệu", "Giá EOD",
+               "% từ tín hiệu", "RSI14", "Vol/TB20", "Cắt lỗ", "TP1", "TP2",
+               "R:R TP1", "R:R TP2", "Ghi chú"]
+    def e(x):
+        return html.escape(str(x), quote=True)
+    def cell(x, cls=""):
+        return '<td class="' + cls + '">' + x + '</td>'
+    def level(value, current, source="", stop=False):
+        val = pd.to_numeric(value, errors="coerce")
+        now = pd.to_numeric(current, errors="coerce")
+        if pd.isna(val) or not np.isfinite(float(val)) or float(val) <= 0:
+            return "—"
+        pct = ((float(val) / float(now)) - 1) * 100 if pd.notna(now) and np.isfinite(float(now)) and float(now) > 0 else np.nan
+        # A level already passed is still shown with its true signed percentage.
+        color = "red" if stop or (np.isfinite(pct) and pct < 0) else "green"
+        hint = '<span class="t2src">' + e(source) + '</span>' if source else ""
+        below = '<span class="t2pct ' + color + '">' + e(_fmt_signed(pct)) + '</span>'
+        return '<div class="t2stack"><b>' + e(_fmt_number(val)) + '</b>' + below + hint + '</div>'
+    rows = []
+    for _, r in data.iterrows():
+        now = r["Giá EOD"]
+        gain = pd.to_numeric(r["Từ tín hiệu (%)"], errors="coerce")
+        gain_cls = "green" if pd.notna(gain) and gain > 0 else "red" if pd.notna(gain) and gain < 0 else ""
+        age = pd.to_numeric(r["Phiên từ tín hiệu"], errors="coerce")
+        age_txt = "T+" + str(int(age)) if pd.notna(age) and np.isfinite(float(age)) else "—"
+        day = pd.to_datetime(r["Ngày tín hiệu"], errors="coerce")
+        day_txt = day.strftime("%d/%m/%Y") if pd.notna(day) else "—"
+        fields = [cell('<b>' + e(r["Mã"]) + '</b>'), cell(e(day_txt)), cell(e(r["Tín hiệu"])),
+                  cell(e(age_txt)), cell(e(_fmt_number(r["Giá tín hiệu"]))), cell('<b>' + e(_fmt_number(now)) + '</b>'),
+                  cell(e(_fmt_signed(gain)), gain_cls), cell(e(_fmt_number(r["RSI14"]))),
+                  cell(e(_fmt_number(r["Vol/TB20"])) + "x"),
+                  cell(level(r["Cắt lỗ tham khảo"], now, stop=True)),
+                  cell(level(r["Mục tiêu 1"], now, r["Nguồn TP1"])),
+                  cell(level(r["Mục tiêu 2"], now, r["Nguồn TP2"])),
+                  cell(e(_fmt_number(r["R:R TP1"]))), cell(e(_fmt_number(r["R:R TP2"]))),
+                  cell(e(r["Ghi chú"]), "note")]
+        rows.append('<tr>' + "".join(fields) + '</tr>')
+    style = """<style>
+    .t2outer{overflow-x:auto;max-width:100%;border:1px solid #6b728055;border-radius:10px}
+    .t2table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px;line-height:1.35}
+    .t2table th,.t2table td{border-bottom:1px solid #6b728033;padding:10px 10px;text-align:left;vertical-align:middle;white-space:nowrap}
+    .t2table th{background:#64748b18;position:sticky;top:0;font-weight:700}
+    .t2table tr:hover td{background:#64748b12}
+    .t2table .green{color:#16a34a;font-weight:600}.t2table .red{color:#dc2626;font-weight:600}
+    .t2stack{display:flex;flex-direction:column;gap:2px}.t2pct{font-size:11px}
+    .t2src{font-size:10px;color:inherit;opacity:.65;max-width:140px;white-space:normal}
+    .t2table td.note{min-width:180px;max-width:250px;white-space:normal}
+    </style>"""
+    return style + '<div class="t2outer"><table class="t2table"><thead><tr>' + "".join('<th>'+e(h)+'</th>' for h in headers) + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table></div>'
+
+
 def render(daily, asof, groups=None):
     import streamlit as st
     st.title("Trading T+2 · Dòng tiền vào sớm")
-    st.caption("Tín hiệu nghiên cứu dựa trên EOD đã xác nhận. Không phải khuyến nghị mua và không tự đặt lệnh.")
-    st.info("Tập trung phát hiện sớm nhịp hồi, breakout, tiếp diễn ngắn hạn. Không cần chờ MA100/MA200 đảo chiều. RSI, KL và cấu trúc giá là điều kiện đồng thời, không bảo đảm sinh lời.")
+    st.caption("EOD đã xác nhận, không phải giá realtime. Mỗi dòng là một tín hiệu theo ngày; mức mục tiêu tính tại ngày tín hiệu.")
+    st.info("Phát hiện dòng tiền vào sớm / breakout / tiếp diễn. TP1/TP2 là hai vùng cản hợp lệ gần nhất (đỉnh lịch sử hoặc MA); không bảo đảm đạt mục tiêu.")
     d = prepare(daily, asof)
     if d.empty:
         st.warning("Dữ liệu EOD chưa đầy đủ để chạy bộ lọc.")
         return
-    c1,c2,c3 = st.columns(3)
+    c1,c2,c3,c4 = st.columns(4)
     with c1:
         kind = st.selectbox("Loại tín hiệu", ["Tất cả"] + list(LABELS.values()), key="t2_kind")
     with c2:
-        min_vol = st.selectbox("Vol/TB20 tối thiểu", ["Tất cả", "1.1x", "1.5x", "2.0x", "3.0x"],key="t2_vol")
+        min_vol = st.selectbox("Vol/TB20 tối thiểu", ["Tất cả", "1.1x", "1.5x", "2.0x", "3.0x"], key="t2_vol")
     with c3:
-        sector = st.selectbox("Ngành", ["Toàn thị trường"] + list((groups or {}).keys()),key="t2_sector")
+        sector = st.selectbox("Ngành", ["Toàn thị trường"] + list((groups or {}).keys()), key="t2_sector")
+    with c4:
+        state = st.selectbox("Trạng thái", ["Tất cả", "Mới T+0", "Đang theo dõi"], key="t2_state")
     symbols = set(str(x).upper() for x in (groups or {}).get(sector, [])) if sector != "Toàn thị trường" else None
-    # Cache on the EOD date and basic dataset fingerprint, not user input.
     @st.cache_data(show_spinner="Đang tính tín hiệu lịch sử EOD…", ttl=3600)
     def _cached_scan(df, date):
         return scan(df, asof=date)
-    now, hist = _cached_scan(d, str(pd.Timestamp(asof).date()))
+    _, hist = _cached_scan(d, str(pd.Timestamp(asof).date()))
     if symbols is not None:
-        now = now[now["Mã"].isin(symbols)]
         hist = hist[hist["Mã"].isin(symbols)]
     if kind != "Tất cả":
-        now = now[now["Tín hiệu"] == kind]
         hist = hist[hist["Tín hiệu"] == kind]
     if min_vol != "Tất cả":
-        v = float(min_vol.replace("x",""))
-        now = now[now["Vol/TB20"]>=v]
-        hist = hist[hist["Vol/TB20"]>=v]
-    st.metric("Mã có tín hiệu mới tại EOD", len(now))
-    show = ["Mã", "Tín hiệu", "Giá tín hiệu", "RSI14", "Vol/TB20", "Cắt lỗ tham khảo", "Mục tiêu gần", "R:R tham khảo", "Ghi chú"]
-    st.subheader("Tín hiệu mới của phiên")
-    if now.empty:
-        st.caption("Phiên này không có mã đáp ứng các điều kiện. Không tự nới ngưỡng.")
-    else:
-        st.dataframe(now[show], hide_index=True, use_container_width=True)
-    st.subheader("Lịch sử tín hiệu gần đây và diễn biến sau tín hiệu")
-    st.caption("Tín hiệu được dựng lại từ lịch sử EOD bằng quy tắc không nhìn trước, chưa lưu nhật ký bất biến theo thời gian. T+n là biến động giá đóng cửa sau n phiên, không phải lợi nhuận thực nhận. Không tính phí/thuế/trượt giá và chưa mô phỏng khả năng khớp lệnh hoặc bán T+2.")
+        hist = hist[hist["Vol/TB20"] >= float(min_vol.replace("x", ""))]
+    if state == "Mới T+0":
+        hist = hist[hist["Phiên từ tín hiệu"] == 0]
+    elif state == "Đang theo dõi":
+        hist = hist[hist["Phiên từ tín hiệu"] > 0]
+    st.metric("Số tín hiệu phù hợp", len(hist))
+    st.subheader("Bảng theo dõi Trading T+2")
     if hist.empty:
-        st.info("Chưa có sự kiện phù hợp trong 90 phiên gần đây.")
+        st.info("Không có tín hiệu đáp ứng bộ lọc.")
         return
-    hcols = ["Ngày tín hiệu", "Mã", "Tín hiệu", "Giá tín hiệu", "Giá EOD", "Từ tín hiệu (%)", "Phiên từ tín hiệu", "Vol/TB20", "RSI14"] + [f"T+{h} (%)" for h in HORIZONS]
-    st.dataframe(hist[hcols],hide_index=True,use_container_width=True)
+    s1, s2 = st.columns(2)
+    with s1:
+        order = st.selectbox("Sắp xếp", ["Ngày mới nhất", "% từ tín hiệu cao", "Vol/TB20 cao", "R:R TP1 cao"], key="t2_sort")
+    with s2:
+        limit = st.selectbox("Số dòng hiển thị", [30, 60, 100, "Tất cả"], key="t2_limit")
+    sortkeys = {"Ngày mới nhất": "Ngày tín hiệu", "% từ tín hiệu cao": "Từ tín hiệu (%)",
+                "Vol/TB20 cao": "Vol/TB20", "R:R TP1 cao": "R:R TP1"}
+    hist = hist.sort_values([sortkeys[order], "Mã"], ascending=[False, True], na_position="last")
+    viewed = hist if limit == "Tất cả" else hist.head(int(limit))
+    st.markdown(_table_html(viewed), unsafe_allow_html=True)
+    st.caption("% dưới Cắt lỗ, TP1, TP2 = (mức giá / Giá EOD − 1) × 100. Màu thể hiện khoảng cách thực tế; cắt lỗ màu đỏ. R:R TP1/TP2 tính cố định theo giá tín hiệu, không tính lại từ EOD hiện tại. '—' là thiếu mức hợp lệ.")
     st.subheader("Thống kê quan sát · Chưa phải backtest giao dịch")
-    st.dataframe(summary(hist),hide_index=True,use_container_width=True)
-    st.caption("Các mốc T+ chưa đủ dữ liệu sẽ để trống, không giả định lợi nhuận. Cần kiểm thử ngoài mẫu và có chi phí trước khi dùng tín hiệu để giao dịch thực.")
+    st.dataframe(summary(hist), hide_index=True, use_container_width=True)
+    st.caption("T+2/5/10/15/20/30 là biến động đóng cửa của cổ phiếu sau tín hiệu, không phải lợi nhuận đã giao dịch. Chưa tính phí, thuế, trượt giá, khớp lệnh, hoặc ngày có quyền bán. Tín hiệu lịch sử dựng lại theo quy tắc không nhìn trước.")
