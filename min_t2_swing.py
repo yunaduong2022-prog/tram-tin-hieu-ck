@@ -441,12 +441,31 @@ def _fmt_signed(val):
     return f"{float(x):+.2f}%" if pd.notna(x) and np.isfinite(float(x)) else "—"
 
 
+# MIN_T2_RR_EOD_DISPLAY_V1
+def _rr_for_display(row, target_col, original_rr_col):
+    """Displayed risk/reward: EOD/active TP/active stop for T+0..15; old R:R otherwise.
+
+    Never modifies stored signal-day risk/reward; if there is no positive
+    remaining reward or stop distance, display a dash (NaN).
+    """
+    age = pd.to_numeric(row.get("Phiên từ tín hiệu"), errors="coerce")
+    if pd.isna(age) or not np.isfinite(float(age)) or not 0 <= float(age) <= 15:
+        return row.get(original_rr_col, np.nan)
+    now = pd.to_numeric(row.get("Giá EOD"), errors="coerce")
+    stop = pd.to_numeric(row.get("Cắt lỗ tham khảo"), errors="coerce")
+    tp = pd.to_numeric(row.get(target_col), errors="coerce")
+    if (pd.isna(now) or pd.isna(stop) or pd.isna(tp)
+            or not np.all(np.isfinite([float(now), float(stop), float(tp)]))
+            or float(now) <= float(stop) or float(tp) <= float(now)):
+        return np.nan
+    return round((float(tp) - float(now)) / (float(now) - float(stop)), 10)
+
 def _table_html(data):
     """One scrollable table. All percent figures under levels use the latest EOD, not entry."""
     import html
     headers = ["Mã", "Ngày tín hiệu", "Loại tín hiệu", "Tuổi", "Giá tín hiệu", "Giá EOD",
                "% từ tín hiệu", "RSI14", "Vol/TB20", "Cắt lỗ", "TP1", "TP2",
-               "R:R gốc 1", "R:R gốc 2", "Ghi chú"]
+               "R:R TP1", "R:R TP2", "Ghi chú"]
     def e(x):
         return html.escape(str(x), quote=True)
     def cell(x, cls=""):
@@ -478,7 +497,7 @@ def _table_html(data):
                   cell(level(r["Cắt lỗ tham khảo"], now, stop=True)),
                   cell(level(r["Mục tiêu 1"], now, r["Nguồn TP1"])),
                   cell(level(r["Mục tiêu 2"], now, r["Nguồn TP2"])),
-                  cell(e(_fmt_number(r["R:R TP1"]))), cell(e(_fmt_number(r["R:R TP2"]))),
+                  cell(e(_fmt_number(_rr_for_display(r, "Mục tiêu 1", "R:R TP1")))), cell(e(_fmt_number(_rr_for_display(r, "Mục tiêu 2", "R:R TP2")))),
                   cell(e(r["Ghi chú"]), "note")]
         rows.append('<tr>' + "".join(fields) + '</tr>')
     style = """<style>
@@ -563,7 +582,7 @@ def render(daily, asof, groups=None):
     viewed = hist if limit == "Tất cả" else hist.head(int(limit))
     viewed = _add_dynamic_targets(viewed, d, float(tp_gap.rstrip("%")))
     st.markdown(_table_html(viewed), unsafe_allow_html=True)
-    st.caption("TP1/TP2 trên bảng là KHÁNG CỰ ĐỘNG tính từ EOD mới nhất; cản quá gần có trong Ghi chú. R:R gốc 1/2 tính theo TP GỐC và giá/stop ngày tín hiệu, KHÔNG áp dụng cho TP động. % dưới các mức giá = (mức / Giá EOD − 1) × 100. Cắt lỗ vẫn là hỗ trợ tại ngày tín hiệu. '—' là không tìm được cản hợp lệ.")
+    st.caption("TP1/TP2 trên bảng là KHÁNG CỰ ĐỘNG tính từ EOD mới nhất; cản quá gần có trong Ghi chú. R:R TP1/TP2 đối với tín hiệu T+0–T+15 tính theo TP/Cắt lỗ hiển thị và Giá EOD; tín hiệu cũ giữ R:R gốc. % dưới các mức giá = (mức / Giá EOD − 1) × 100. Cắt lỗ vẫn là hỗ trợ tại ngày tín hiệu. '—' là không tìm được cản hợp lệ.")
     st.subheader("Thống kê quan sát · Chưa phải backtest giao dịch")
     st.dataframe(summary(hist), hide_index=True, use_container_width=True)
     st.caption("T+2/5/10/15/20/30 là biến động đóng cửa của cổ phiếu sau tín hiệu, không phải lợi nhuận đã giao dịch. Chưa tính phí, thuế, trượt giá, khớp lệnh, hoặc ngày có quyền bán. Tín hiệu lịch sử dựng lại theo quy tắc không nhìn trước.")
