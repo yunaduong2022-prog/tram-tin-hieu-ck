@@ -33,7 +33,7 @@ def _clean_history(daily):
     return d.sort_values(["Mã", "Ngày"]).drop_duplicates(["Mã", "Ngày"], keep="last")
 
 
-def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None, index_daily=None):
+def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None, index_daily=None, limit=10):
     """Two ranked tables (total and short-term), strictly on asof EOD.
 
     100-point transparent rules:
@@ -114,8 +114,8 @@ def rank_ma(daily, asof, groups=None, sector="Toàn thị trường", names=None
     if not rows:
         return empty.copy(), empty.copy(), rs_exists
     table = pd.DataFrame(rows)
-    total = table.sort_values(["Tổng hợp","Ngắn hạn","Mã"], ascending=[False,False,True]).head(10).reset_index(drop=True)
-    short = table.sort_values(["Ngắn hạn","Tổng hợp","Mã"], ascending=[False,False,True]).head(10).reset_index(drop=True)
+    total = table.sort_values(["Tổng hợp","Ngắn hạn","Mã"], ascending=[False,False,True]).head(limit if limit is not None else len(table)).reset_index(drop=True)
+    short = table.sort_values(["Ngắn hạn","Tổng hợp","Mã"], ascending=[False,False,True]).head(limit if limit is not None else len(table)).reset_index(drop=True)
     return total, short, rs_exists
 
 
