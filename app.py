@@ -29,6 +29,7 @@ import nav as NAV
 import theme as TH
 import brand as BR
 import stock_tabs as ST
+import ma_structure_view as MAV  # MIN_MA_STRUCTURE_V1
 import mtf_levels as ML
 import waiting_buy as WB
 import action_summary as AS
@@ -3727,6 +3728,8 @@ def _route_inner():
         return page_sector_ranking("profit")
     if main == "Ngành" and sub == "Xếp hạng cổ phiếu":
         return page_sector_ranking("rank")
+    if main == "Bộ lọc & Backtest" and sub == "Cấu trúc MA":
+        return MAV.render(frames["D"], WL.GROUPS, latest_date, name_of=_chart_name)  # MIN_MA_STRUCTURE_V1
     if main == "Bộ lọc & Backtest":
         if sub == "Mua ngay": return page_buy_now()
         if sub == "Lọc tất cả CP": return page_filter()
