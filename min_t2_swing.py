@@ -252,6 +252,170 @@ def scan(daily: pd.DataFrame, asof=None, recent_sessions=90, cooldown=5):
     return now, history
 
 
+# MIN_T2_DYNAMIC_TP_BREAKEVEN_T15_V3
+
+
+def _dynamic_resistance_eod(history, min_gap_pct=3.0):
+    """Two useful overhead levels at latest EOD, with nearby resistance warnings.
+
+    Only completed EOD candles are used. Historical swing highs need 3 bars
+    to their right for confirmation; invalidate a swing once any LATER close
+    exceeded its price. Merge near-duplicate levels (0.5%).
+    """
+    empty = (float("nan"), "", float("nan"), "", "")
+    if history is None or len(history) < 20:
+        return empty
+    h = pd.to_numeric(history["Giá cao nhất"], errors="coerce").to_numpy(dtype=float)
+    c = pd.to_numeric(history["Giá đóng cửa"], errors="coerce").to_numpy(dtype=float)
+    price = c[-1]
+    if not np.isfinite(price) or price <= 0:
+        return empty
+    levels = []
+    # Confirmed local peaks (3 bars left, 3 bars right), all known by this EOD.
+    for j in range(max(3, len(h) - 501), len(h) - 3):
+        peak = h[j]
+        if not np.isfinite(peak) or peak <= 0:
+            continue
+        left = h[j-3:j]
+        right = h[j+1:j+4]
+        if not np.all(np.isfinite(left)) or not np.all(np.isfinite(right)):
+            continue
+        if peak <= np.max(left) or peak < np.max(right):
+            continue
+        later_close = c[j+1:]
+        if np.any(np.isfinite(later_close) & (later_close > peak + 1e-8)):
+            continue  # this resistance was already broken by a later close
+        levels.append((float(peak), "Đỉnh " + pd.Timestamp(history.iloc[j]["Ngày"]).strftime("%d/%m"), 0))
+    # Also cover recent rolling-window highs, which need not be local peaks.
+    # A high is invalidated if any later session CLOSED strictly above it.
+    for period in (20, 60, 120, 250):
+        start = max(0, len(h) - 1 - period)
+        prior = h[start:-1]
+        if len(prior) != period or not np.any(np.isfinite(prior)):
+            continue
+        j = start + int(np.nanargmax(prior))
+        high = float(h[j])
+        if not np.any(np.isfinite(c[j+1:]) & (c[j+1:] > high + 1e-8)):
+            levels.append((high, "Đỉnh " + str(period) + "P", 0))
+    # MA levels are secondary technical barriers (never fabricated targets).
+    for period in (20, 50, 100, 200):
+        if len(c) >= period and np.all(np.isfinite(c[-period:])):
+            levels.append((float(np.mean(c[-period:])), "MA" + str(period), 1))
+    levels = [(v, label, rank) for v, label, rank in levels
+              if np.isfinite(v) and v > price + 1e-8]
+    # Merge a 0.5% band to avoid reporting a single zone as two targets.
+    levels.sort(key=lambda z: z[0])
+    clusters = []
+    for candidate in levels:
+        if clusters and candidate[0] / clusters[-1][-1][0] - 1 < 0.005:
+            clusters[-1].append(candidate)
+        else:
+            clusters.append([candidate])
+    zones = []
+    for cluster in clusters:
+        # Prefer a confirmed price high to an MA if they sit in one zone.
+        winner = min(cluster, key=lambda x: (x[2], abs(x[0] - cluster[0][0])))
+        zones.append((winner[0], winner[1]))
+    threshold = float(min_gap_pct) / 100.0
+    near = [(v, lab) for v, lab in zones if v / price - 1 < threshold]
+    selected = []
+    for v, lab in zones:
+        if v / price - 1 + 1e-10 < threshold:
+            continue
+        if selected and v / selected[-1][0] - 1 + 1e-10 < threshold:
+            continue
+        selected.append((v, lab))
+        if len(selected) == 2:
+            break
+    caution = "Cản gần: " + ", ".join(f"{v:.2f} ({lab})" for v, lab in near[:3]) if near else ""
+    first = selected[0] if len(selected) > 0 else (float("nan"), "")
+    second = selected[1] if len(selected) > 1 else (float("nan"), "")
+    return first[0], first[1], second[0], second[1], caution
+
+
+def _add_dynamic_targets(viewed, daily, min_gap_pct):
+    """Refresh active T+0..T+15 rows only; never alter cached signal data.
+
+    Arm the entry-price stop only at a completed EOD T+2 or later when the
+    current close exceeds entry and a higher TP is available. Reconstruct
+    the arm date from completed prior candles, so the stop NEVER moves down
+    just because the latest close subsequently falls.
+    """
+    out = viewed.copy()
+    if out.empty:
+        return out
+    for new, old in (("TP1 gốc", "Mục tiêu 1"), ("TP2 gốc", "Mục tiêu 2"),
+                     ("Nguồn TP1 gốc", "Nguồn TP1"), ("Nguồn TP2 gốc", "Nguồn TP2"),
+                     ("Cắt lỗ gốc", "Cắt lỗ tham khảo")):
+        out[new] = out[old]
+    by_code = {code: g.sort_values("Ngày").reset_index(drop=True)
+               for code, g in daily[daily["Mã"].isin(set(out["Mã"]))].groupby("Mã", sort=False)}
+    latest_levels = {code: _dynamic_resistance_eod(g, min_gap_pct) for code, g in by_code.items()}
+    memo = {}
+    for idx, row in out.iterrows():
+        age = pd.to_numeric(row.get("Phiên từ tín hiệu"), errors="coerce")
+        if pd.isna(age) or not np.isfinite(float(age)) or not 0 <= age <= 15:
+            continue
+        code = row["Mã"]
+        g = by_code.get(code)
+        if g is None or g.empty:
+            continue
+        entry = pd.to_numeric(row["Giá tín hiệu"], errors="coerce")
+        stop0 = pd.to_numeric(row["Cắt lỗ gốc"], errors="coerce")
+        tp0 = pd.to_numeric(row["TP1 gốc"], errors="coerce")
+        event_day = pd.to_datetime(row["Ngày tín hiệu"], errors="coerce")
+        if pd.isna(event_day) or pd.isna(entry) or not np.isfinite(float(entry)):
+            continue
+        event_positions = g.index[g["Ngày"] == event_day].tolist()
+        if len(event_positions) != 1:
+            continue
+        event_pos = event_positions[0]
+        age_actual = len(g) - 1 - event_pos
+        if age_actual < 0 or age_actual != int(age):
+            continue
+
+        # State reconstructed per signal, without writes to disk or history.
+        cachekey = (code, event_pos, float(entry), float(stop0) if pd.notna(stop0) else None,
+                    float(tp0) if pd.notna(tp0) else None, float(min_gap_pct))
+        if cachekey not in memo:
+            armed = False
+            exited = False
+            for j in range(event_pos + 1, len(g)):
+                candle = g.iloc[j]
+                low = pd.to_numeric(candle["Giá thấp nhất"], errors="coerce")
+                if pd.notna(low) and np.isfinite(float(low)):
+                    # A stop raised at the previous EOD becomes effective only
+                    # on later sessions, not retrospectively within that candle.
+                    threshold = float(entry) if armed else float(stop0) if pd.notna(stop0) and np.isfinite(float(stop0)) else np.nan
+                    if np.isfinite(threshold) and float(low) <= threshold:
+                        exited = True
+                        break
+                if j - event_pos < 2 or armed:
+                    continue
+                close = pd.to_numeric(candle["Giá đóng cửa"], errors="coerce")
+                if pd.isna(close) or not np.isfinite(float(close)) or float(close) <= float(entry):
+                    continue
+                p1, _, _, _, _ = _dynamic_resistance_eod(g.iloc[:j+1], min_gap_pct)
+                increased = np.isfinite(p1) and (pd.isna(tp0) or float(p1) > float(tp0) + 1e-8)
+                if increased and (pd.isna(stop0) or float(entry) > float(stop0)):
+                    armed = True
+            memo[cachekey] = (armed, exited)
+        armed, exited = memo[cachekey]
+        if armed:
+            out.at[idx, "Cắt lỗ tham khảo"] = float(entry)
+        if exited:
+            # Previously armed stops remain at entry, never fall back to old stop.
+            continue
+        a, src_a, b, src_b, near = latest_levels[code]
+        out.at[idx, "Mục tiêu 1"] = a
+        out.at[idx, "Nguồn TP1"] = src_a
+        out.at[idx, "Mục tiêu 2"] = b
+        out.at[idx, "Nguồn TP2"] = src_b
+        if near:
+            out.at[idx, "Ghi chú"] = str(row["Ghi chú"]) + " | " + near
+    return out
+
+
 def summary(history: pd.DataFrame) -> pd.DataFrame:
     """Descriptive observed close-to-close returns; not realized/tradable P&L."""
     rows = []
@@ -282,7 +446,7 @@ def _table_html(data):
     import html
     headers = ["Mã", "Ngày tín hiệu", "Loại tín hiệu", "Tuổi", "Giá tín hiệu", "Giá EOD",
                "% từ tín hiệu", "RSI14", "Vol/TB20", "Cắt lỗ", "TP1", "TP2",
-               "R:R TP1", "R:R TP2", "Ghi chú"]
+               "R:R gốc 1", "R:R gốc 2", "Ghi chú"]
     def e(x):
         return html.escape(str(x), quote=True)
     def cell(x, cls=""):
@@ -338,8 +502,8 @@ def _table_html(data):
 def render(daily, asof, groups=None):
     import streamlit as st
     st.title("Trading T+2 · Dòng tiền vào sớm")
-    st.caption("EOD đã xác nhận, không phải giá realtime. Mỗi dòng là một tín hiệu theo ngày; mức mục tiêu tính tại ngày tín hiệu.")
-    st.info("Phát hiện vượt MA20 + Volume / dòng tiền vào sớm / breakout / tiếp diễn. TP1/TP2 là hai vùng cản hợp lệ gần nhất (đỉnh lịch sử hoặc MA); không bảo đảm đạt mục tiêu.")
+    st.caption("Dữ liệu EOD đã xác nhận, không phải realtime. Giá tín hiệu, hỗ trợ và R:R gốc cố định tại ngày phát tín hiệu; TP1/TP2 trên bảng được cập nhật theo giá EOD hiện tại.")
+    st.info("TP1/TP2 động chỉ áp dụng cho tín hiệu còn hiệu lực T+0–T+15. Khi TP được nâng từ T+2 và giá EOD cao hơn giá tín hiệu, cắt lỗ nâng về giá tín hiệu; không hạ xuống sau đó.")
     d = prepare(daily, asof)
     if d.empty:
         st.warning("Dữ liệu EOD chưa đầy đủ để chạy bộ lọc.")
@@ -382,6 +546,7 @@ def render(daily, asof, groups=None):
         hist = hist[hist["Phiên từ tín hiệu"] == 0]
     elif state == "Đang theo dõi":
         hist = hist[hist["Phiên từ tín hiệu"] > 0]
+    tp_gap = st.selectbox("Khoảng cách TP tối thiểu", ["2%", "3%", "5%"], index=1, key="t2_tp_min_gap", help="Bỏ qua cản cách giá EOD ít hơn mức này; TP2 cũng phải cách TP1 ít nhất tương ứng. Cản gần vẫn được ghi chú.")
     st.metric("Số tín hiệu phù hợp", len(hist))
     st.subheader("Bảng theo dõi Trading T+2")
     if hist.empty:
@@ -396,8 +561,9 @@ def render(daily, asof, groups=None):
                 "Vol/TB20 cao": "Vol/TB20", "R:R TP1 cao": "R:R TP1"}
     hist = hist.sort_values([sortkeys[order], "Mã"], ascending=[False, True], na_position="last")
     viewed = hist if limit == "Tất cả" else hist.head(int(limit))
+    viewed = _add_dynamic_targets(viewed, d, float(tp_gap.rstrip("%")))
     st.markdown(_table_html(viewed), unsafe_allow_html=True)
-    st.caption("Cắt lỗ tham khảo = hỗ trợ gần nhất dưới giá tín hiệu (MA9/20/50/100/200 hoặc đáy 3/5/10/20 phiên trước). % dưới Cắt lỗ, TP1, TP2 = (mức giá / Giá EOD − 1) × 100. Màu thể hiện khoảng cách thực tế; cắt lỗ màu đỏ. R:R TP1/TP2 tính cố định theo giá tín hiệu, không tính lại từ EOD hiện tại. '—' là thiếu mức hợp lệ.")
+    st.caption("TP1/TP2 trên bảng là KHÁNG CỰ ĐỘNG tính từ EOD mới nhất; cản quá gần có trong Ghi chú. R:R gốc 1/2 tính theo TP GỐC và giá/stop ngày tín hiệu, KHÔNG áp dụng cho TP động. % dưới các mức giá = (mức / Giá EOD − 1) × 100. Cắt lỗ vẫn là hỗ trợ tại ngày tín hiệu. '—' là không tìm được cản hợp lệ.")
     st.subheader("Thống kê quan sát · Chưa phải backtest giao dịch")
     st.dataframe(summary(hist), hide_index=True, use_container_width=True)
     st.caption("T+2/5/10/15/20/30 là biến động đóng cửa của cổ phiếu sau tín hiệu, không phải lợi nhuận đã giao dịch. Chưa tính phí, thuế, trượt giá, khớp lệnh, hoặc ngày có quyền bán. Tín hiệu lịch sử dựng lại theo quy tắc không nhìn trước.")
