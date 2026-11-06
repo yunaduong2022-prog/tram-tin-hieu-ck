@@ -271,8 +271,11 @@ def render(wb, screener, daily, index_daily, asof, groups):
     a,b = st.columns([2,2])
     with a:
         sector = st.selectbox("Nhóm ngành", sectors, key="state_map_sector")
+    # MIN_3TAB_SYMBOL_LINK_V1: share exact ticker only, preserve advanced filters.
+    import min_tab_symbol as _TABS
+    _TABS.before("state_map_search")
     with b:
-        query = st.text_input("Tìm mã", placeholder="VD: KDH, VIX", key="state_map_search").upper().strip()
+        query = st.text_input("Tìm mã", placeholder="VD: KDH, VIX", key="state_map_search", on_change=_TABS.remember, args=("state_map_search",)).upper().strip()
     table = build(wb,screener,daily,index_daily,asof,groups,sector)
     if query:
         table = table[table["Mã"].str.contains(query, regex=False)]

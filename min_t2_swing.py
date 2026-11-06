@@ -537,7 +537,10 @@ def render(daily, asof, groups=None):
     with c4:
         state = st.selectbox("Trạng thái", ["Tất cả", "Mới T+0", "Đang theo dõi"], key="t2_state")
     # MIN_T2_SYMBOL_SEARCH_V1: filter only the display; preserve full-market scan/cache.
-    symbol_query = st.text_input("Lọc theo mã cổ phiếu", placeholder="VD: CEO, DXG, HDG", key="t2_symbol_search")
+    # MIN_3TAB_SYMBOL_LINK_V1: only a single exact ticker is shared across EOD tabs.
+    import min_tab_symbol as _TABS
+    _TABS.before("t2_symbol_search")
+    symbol_query = st.text_input("Lọc theo mã cổ phiếu", placeholder="VD: CEO, DXG, HDG", key="t2_symbol_search", on_change=_TABS.remember, args=("t2_symbol_search",))
     search_codes = {part.strip().upper() for part in symbol_query.replace(";", ",").replace(" ", ",").split(",") if part.strip()}
     symbols = set(str(x).upper() for x in (groups or {}).get(sector, [])) if sector != "Toàn thị trường" else None
     # Versioned cache function: the previous release cached the old schema

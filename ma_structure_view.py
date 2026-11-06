@@ -166,8 +166,11 @@ def render(daily: pd.DataFrame, groups: dict[str, list[str]], eod_date=None, nam
         st.caption("Phân ngành tham khảo theo hoạt động chính, không phải phân ngành chính thức; "
                    "doanh nghiệp đa lĩnh vực có thể có hoạt động phụ ở nhóm khác.")
 
+    # MIN_3TAB_SYMBOL_LINK_V1: remember exact ticker when switching EOD tabs.
+    import min_tab_symbol as _TABS
+    _TABS.before("ma_structure_search")
     with c2:
-        query = st.text_input("Tìm mã hoặc tên công ty", key="ma_structure_search", placeholder="VD: VHM, Khang Điền, Đất Xanh")
+        query = st.text_input("Tìm mã hoặc tên công ty", key="ma_structure_search", placeholder="VD: VHM, Khang Điền, Đất Xanh", on_change=_TABS.remember, args=("ma_structure_search",))
     c3, c4 = st.columns(2)
     with c3:
         horizon = st.selectbox("Khung xu hướng", ["Tất cả", "Ngắn hạn", "Trung hạn", "Dài hạn"], key="ma_structure_horizon")
