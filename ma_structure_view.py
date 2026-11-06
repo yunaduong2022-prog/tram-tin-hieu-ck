@@ -5,6 +5,7 @@ import html
 import numpy as np
 import pandas as pd
 import streamlit as st
+import ma_bds_subsectors as _MA_BDS
 
 MAS = (10, 20, 50, 100, 200)
 TREND_UP = "TĂNG"
@@ -149,6 +150,22 @@ def render(daily: pd.DataFrame, groups: dict[str, list[str]], eod_date=None, nam
     c1, c2 = st.columns([2, 2])
     with c1:
         sector = st.selectbox("Nhóm ngành", sector_options, key="ma_structure_sector")
+    # MIN_MA_BDS_SUBSECTOR_V1: selector applies to ranking and cards, not global watchlist.
+    bds_segment = _MA_BDS.ALL
+    if sector == "Bất động sản":
+        try:
+            options = _MA_BDS.options(groups[sector])
+        except ValueError as exc:
+            st.error(f"Phân ngành BĐS chưa đồng bộ với danh sách mã: {exc}")
+            return
+        bds_segment = st.selectbox(
+            "Phân ngành bất động sản", options,
+            key="ma_bds_subsector",
+            format_func=lambda option: _MA_BDS.label(option, groups[sector]),
+        )
+        st.caption("Phân ngành tham khảo theo hoạt động chính, không phải phân ngành chính thức; "
+                   "doanh nghiệp đa lĩnh vực có thể có hoạt động phụ ở nhóm khác.")
+
     with c2:
         query = st.text_input("Tìm mã hoặc tên công ty", key="ma_structure_search", placeholder="VD: VHM, Khang Điền, Đất Xanh")
     c3, c4 = st.columns(2)
@@ -158,9 +175,17 @@ def render(daily: pd.DataFrame, groups: dict[str, list[str]], eod_date=None, nam
         status = st.selectbox("Trạng thái", ["Tất cả", TREND_UP, TREND_DOWN, TREND_OTHER, "Giá trên MA20", "Giá về gần MA20 (±2%)", "Giá về gần MA50 (±2%)", "MA10 cắt lên MA20"], key="ma_structure_status")
     # MIN_MA_TOP10_V1: rank verified same-session EOD before card-only filters.
     import ma_top10 as _ma_top10
-    _ma_top10.render_top10(d, daily, asof, sector, groups)
+    # Subsector ranking is scoped through a temporary group, without rewriting watchlist.py.
+    rank_sector, rank_groups = sector, groups
+    if sector == "Bất động sản" and bds_segment != _MA_BDS.ALL:
+        rank_sector = f"Bất động sản · {bds_segment}"
+        rank_groups = dict(groups)
+        rank_groups[rank_sector] = sorted(_MA_BDS.symbols_for(bds_segment, groups[sector]))
+    _ma_top10.render_top10(d, daily, asof, rank_sector, rank_groups)
     if sector != "Toàn thị trường":
-        d = d[d["Mã"].isin(groups[sector])]
+        allowed = (rank_groups[rank_sector] if sector == "Bất động sản" and bds_segment != _MA_BDS.ALL
+                   else groups[sector])
+        d = d[d["Mã"].isin(allowed)]
     if query.strip():
         q = query.strip().upper()
         d = d[d["Mã"].str.contains(q, regex=False) | d["Tên công ty"].str.upper().str.contains(q, regex=False)]
