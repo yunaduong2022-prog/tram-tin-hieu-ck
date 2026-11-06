@@ -104,9 +104,21 @@ def _eod_volume_context(daily, code, asof):
             float(prior.mean()) <= 0 or float(volumes.iloc[-1]) < 0 or
             float(c) <= 0 or float(previous_close) <= 0 or float(h) < float(l)):
         return None
-    pos = (float(c)-float(l))/(float(h)-float(l)) if float(h) > float(l) else 0.5
-    return {"vol_ratio": float(volumes.iloc[-1]/prior.mean()), "close": float(c),
-            "prev_close": float(previous_close), "open": float(o), "close_pos": pos}
+    # MIN_T2_EOD_CANDLE_EXPLAIN_V1: use the SAME close-location definition
+    # as engine.Position_% and T2.ClosePos; do not mutate signal logic.
+    high, low, opened, close = map(float, (h, l, o, c))
+    if low <= 0 or not (low <= min(opened, close) <= max(opened, close) <= high):
+        return None  # malformed OHLC: do not infer buying/selling pressure
+    candle_range = high - low
+    pos = (close - low) / candle_range if candle_range > 0 else 0.5
+    range_pct = (candle_range / low * 100.0) if candle_range > 0 else 0.0
+    upper_wick = (high - max(opened, close)) / candle_range * 100.0 if candle_range > 0 else 0.0
+    lower_wick = (min(opened, close) - low) / candle_range * 100.0 if candle_range > 0 else 0.0
+    return {"vol_ratio": float(volumes.iloc[-1] / prior.mean()), "close": close,
+            "prev_close": float(previous_close), "open": opened,
+            "close_pos": pos, "range_pct": range_pct,
+            "upper_wick_pct": upper_wick, "lower_wick_pct": lower_wick,
+            "flat_candle": candle_range == 0.0}
 
 
 def _t2_trade_assessment(context, latest, volume):
@@ -144,8 +156,38 @@ def _t2_trade_assessment(context, latest, volume):
     if worthy and broken and vr < 1.0:
         return "Vượt cản nhưng khối lượng chưa xác nhận"
     if worthy:
-        return "Có dư địa T+ · Chưa xác nhận dòng tiền"
+        # High volume ≠ buying pressure. Make the candle reason explicit.
+        if vr >= 1.5 and volume.get("flat_candle"):
+            return "Có dư địa T+ · Nến một giá, chưa xác nhận lực mua"
+        if vr >= 1.5 and volume["close_pos"] < 0.60:
+            return "Có dư địa T+ · Khối lượng cao nhưng đóng cửa chưa mạnh"
+        if vr >= 1.5 and price <= volume["prev_close"]:
+            return "Có dư địa T+ · Khối lượng cao nhưng giá chưa tăng"
+        if vr >= 1.5 and price < volume["open"]:
+            return "Có dư địa T+ · Khối lượng cao nhưng nến đỏ"
+        return "Có dư địa T+ · Chưa đủ xác nhận giá–khối lượng"
     return "Chưa đủ điều kiện T+ theo dư địa và R:R"
+
+
+def _t2_candle_explanation(volume):
+    """Read-only human explanation of the most recent finished EOD candle."""
+    if not volume:
+        return "Chưa đủ dữ liệu nến EOD."
+    if volume.get("flat_candle"):
+        return "Nến một giá: không thể suy ra ưu thế bên mua chỉ từ vị trí đóng cửa."
+    pos = float(volume["close_pos"]) * 100.0
+    wick = float(volume["upper_wick_pct"])
+    vr = float(volume["vol_ratio"])
+    if pos <= 35 and vr >= 1.5:
+        return f"Đóng cửa thấp trong biên độ ({pos:.0f}%) dù Vol/TB20 {vr:.2f}x: cần kiểm tra áp lực bán."
+    if pos < 60:
+        return f"Đóng cửa ở {pos:.0f}% biên độ: nến chưa đạt ngưỡng tích cực 60% của Trading T+2."
+    if wick >= 35:
+        return f"Đóng cửa {pos:.0f}% biên độ, nhưng bóng trên {wick:.0f}%: cần kiểm tra lực bán ở vùng giá cao."
+    if volume["close"] > volume["prev_close"] and volume["close"] >= volume["open"]:
+        return f"Đóng cửa {pos:.0f}% biên độ, giá tăng với nến không đỏ; tiếp tục kiểm tra cản gần."
+    return f"Đóng cửa {pos:.0f}% biên độ nhưng giá chưa xác nhận tăng so với phiên trước."
+
 
 def render_context(context, viewed, daily=None):
     """Small display panel only for explicit single-ticker filtering."""
@@ -209,6 +251,19 @@ def render_context(context, viewed, daily=None):
             st.metric("Dư địa đến TP1", fmt(upside, "%"))
         with k3:
             st.metric("R:R TP1", fmt(rr1))
+        # Explain close location and candle shape alongside volume EOD.
+        if vol is not None:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Vị trí đóng cửa (Position)", fmt(vol["close_pos"] * 100, "%"))
+            with c2:
+                st.metric("Biên độ nến High–Low", fmt(vol["range_pct"], "%"))
+            with c3:
+                st.metric("Bóng trên / biên độ", fmt(vol["upper_wick_pct"], "%"))
+            st.caption(_t2_candle_explanation(vol))
+        else:
+            st.caption("Nến EOD: Chưa đủ dữ liệu OHLC đồng nhất để phân tích.")
         st.write("Đánh giá T+:", _t2_trade_assessment(context, latest, vol))
+        st.caption("Position = (Đóng cửa − Thấp nhất) / (Cao nhất − Thấp nhất) × 100; biên độ nến = (Cao nhất − Thấp nhất) / Thấp nhất × 100. Nến một giá: Position quy ước 50%, không tự xác nhận lực mua.")
         st.caption("Vol/TB20 EOD lấy khối lượng phiên mới nhất chia trung bình 20 phiên trước. Không phải Vol/TB20 của ngày phát tín hiệu.")
         st.caption("Trạng thái và kháng cự gần lấy từ Bản đồ trạng thái; cấu trúc MA lấy từ tab Cấu trúc MA. TP1/TP2 lấy từ tín hiệu T+2 mới nhất đang hiển thị. Cản gần không phải TP.")
