@@ -16,7 +16,7 @@ MENU = {
                   "Đa khung D-W-M", "Ghi chú", "Tin tức"],
     "Bộ lọc & Backtest": ["Mua ngay", "Chờ mua", "Tăng mạnh", "Lọc tất cả CP", "Bộ lọc Realtime", "Giảm mạnh", "Cạn cung", "Đang phục hồi",
                           "Watchlist", "Cổ phiếu của tôi", "Khuyến nghị khách hàng", "Danh sách cảnh báo",
-                          "Bán / Chốt lời", "Bảng giá trong phiên", "Cấu trúc MA", "Backtest chiến lược"],
+                          "Bán / Chốt lời", "Bảng giá trong phiên", "Cấu trúc MA", "Bản đồ trạng thái cổ phiếu", "Backtest chiến lược"],
     "Livestream": [],
 }
 DEFAULT_MAIN = "Thị trường"   # trang mở đầu khi vào app (muốn như cũ thì đổi thành "Bộ lọc & Backtest")
