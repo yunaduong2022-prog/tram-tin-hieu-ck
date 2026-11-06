@@ -191,6 +191,78 @@ def build(wb, screener, daily, index_daily, asof, groups=None, sector="Toàn th�
     return pd.DataFrame(rows, columns=columns)
 
 
+
+# MIN_STATE_LEVEL_TWO_LINE_V1
+
+def _state_level_cell(level, price, *, support):
+    """Two lines: verified existing level, then EOD-relative percent; never fabricate."""
+    import html as _html
+    level, price = _point(level), _point(price)
+    if not np.isfinite(level) or not np.isfinite(price):
+        return '<span class="sm-missing">—</span>'
+    if support and level >= price:
+        return '<span class="sm-missing">—</span>'
+    if not support and level <= price:
+        return '<span class="sm-missing">—</span>'
+    change = (level / price - 1.0) * 100.0
+    color = 'sm-down' if support else 'sm-up'
+    return (f'<span class="sm-price">{level:.2f}</span>'
+            f'<span class="sm-small {color}">({change:+.2f}%)</span>')
+
+
+def _state_map_html(view):
+    """HTML output only; display does not mutate numeric source or filter values."""
+    import html as _html
+    headers = ['Mã', 'Giá EOD', 'Hỗ trợ', 'Kháng cự', 'RS20 (%)',
+               'Điểm MA /100', 'Điểm tín hiệu', 'R:R', 'Diễn giải', 'Hành động']
+    def esc(v):
+        return _html.escape(str(v), quote=True)
+    def fmt(v, digits=2, sign=False):
+        v = _number(v)
+        return '—' if not np.isfinite(v) else f'{v:+.{digits}f}' if sign else f'{v:.{digits}f}'
+    cells = []
+    for _, r in view.iterrows():
+        price = r.get('Giá EOD')
+        rs = _number(r.get('RS20 (%)'))
+        ma = _number(r.get('Điểm MA /100'))
+        rs_class = 'sm-up' if np.isfinite(rs) and rs >= 0 else 'sm-down' if np.isfinite(rs) else ''
+        ma_html = '<span class="sm-missing">—</span>'
+        if np.isfinite(ma) and 0 <= ma <= 100:
+            ma_html = (f'<span class="sm-score"><span class="sm-bar"><span style="width:{ma:.2f}%"></span></span>'
+                       f'<span>{ma:.0f}</span></span>')
+        rowcells = [
+            f'<td class="sm-ticker">{esc(r.get("Mã", ""))}</td>',
+            f'<td>{fmt(price)}</td>',
+            f'<td>{_state_level_cell(r.get("Hỗ trợ"), price, support=True)}</td>',
+            f'<td>{_state_level_cell(r.get("Kháng cự"), price, support=False)}</td>',
+            f'<td class="{rs_class}">{fmt(rs, sign=True)}</td>',
+            f'<td>{ma_html}</td>',
+            f'<td>{fmt(r.get("Điểm tín hiệu"), 1)}</td>',
+            f'<td>{fmt(r.get("R:R"))}</td>',
+            f'<td class="sm-note">{esc(r.get("Diễn giải", "") or "")}</td>',
+            f'<td>{esc(r.get("Hành động", "") or "")}</td>',
+        ]
+        cells.append('<tr>' + ''.join(rowcells) + '</tr>')
+    css = """<style>
+    .sm-scroll{max-width:100%;overflow-x:auto;border:1px solid rgba(128,145,145,.22);border-radius:10px}
+    .sm-grid{width:100%;min-width:1140px;border-collapse:collapse;font-size:13px;color:inherit}
+    .sm-grid th,.sm-grid td{padding:10px 9px;text-align:left;border-bottom:1px solid rgba(128,145,145,.17);vertical-align:middle;white-space:nowrap}
+    .sm-grid th{font-weight:650;color:inherit;opacity:.78;position:sticky;top:0;background:rgba(90,120,110,.10)}
+    .sm-grid tr:last-child td{border-bottom:0}
+    .sm-grid .sm-ticker{font-weight:700}
+    .sm-grid .sm-price,.sm-grid .sm-small{display:block;line-height:1.35}
+    .sm-grid .sm-small{font-size:11px;margin-top:2px;font-weight:500}
+    .sm-grid .sm-down{color:#ed697a}
+    .sm-grid .sm-up{color:#28c79a}
+    .sm-grid .sm-missing{opacity:.65}
+    .sm-grid .sm-note{white-space:normal;min-width:210px;max-width:370px}
+    .sm-grid .sm-score{display:flex;gap:7px;align-items:center}
+    .sm-grid .sm-bar{display:inline-block;height:7px;width:92px;background:rgba(128,145,145,.20);border-radius:5px;overflow:hidden}
+    .sm-grid .sm-bar>span{display:block;height:100%;background:#20c997;border-radius:5px}
+    </style>"""
+    thead = ''.join(f'<th>{esc(h)}</th>' for h in headers)
+    return css + '<div class="sm-scroll"><table class="sm-grid"><thead><tr>' + thead + '</tr></thead><tbody>' + ''.join(cells) + '</tbody></table></div>'
+
 def render(wb, screener, daily, index_daily, asof, groups):
     st.title("Bản đồ trạng thái cổ phiếu")
     st.caption(f"Dữ liệu EOD {pd.Timestamp(asof):%d/%m/%Y} · phân nhóm theo bộ lọc Mua ngay/Chờ mua hiện có. Không phải giá realtime hay khuyến nghị giao dịch.")
@@ -241,16 +313,6 @@ def render(wb, screener, daily, index_daily, asof, groups):
                 st.caption("Không có mã phù hợp.")
                 continue
             view = subset.drop(columns=["Trạng thái gốc","Nhóm gốc"])
-            view = view.sort_values(["Điểm MA /100", "RS20 (%)"], ascending=[False,False], na_position="last")
-            st.dataframe(view, hide_index=True, use_container_width=True,
-                column_config={
-                    "Giá EOD":st.column_config.NumberColumn(format="%.2f"),
-                    "Hỗ trợ":st.column_config.NumberColumn(format="%.2f"),
-                    "Kháng cự":st.column_config.NumberColumn(format="%.2f"),
-                    "RS20 (%)":st.column_config.NumberColumn(format="%+.2f"),
-                    "Điểm MA /100":st.column_config.ProgressColumn(min_value=0,max_value=100,format="%.0f"),
-                    "Điểm tín hiệu":st.column_config.NumberColumn(format="%.1f"),
-                    "R:R":st.column_config.NumberColumn(format="%.2f"),
-                    "Diễn giải":st.column_config.TextColumn(width="large"),
-                })
+            # Respect the advanced-filter selected sort; do not re-sort by MA here.
+            st.markdown(_state_map_html(view), unsafe_allow_html=True)
             st.caption("Hỗ trợ/kháng cự chỉ là mức kỹ thuật tham khảo; hành động phản ánh bộ lọc hiện có, không tự suy ra lệnh mua từ RS hoặc điểm MA.")
