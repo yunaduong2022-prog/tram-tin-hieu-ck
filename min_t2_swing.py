@@ -590,7 +590,7 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
         if active_code in set(viewed["Mã"]):
             try:
                 from min_three_tab_context import render_context
-                render_context(context_loader(active_code), viewed)
+                render_context(context_loader(active_code), viewed, d)
             except (ValueError, KeyError, TypeError, ImportError) as exc:
                 st.caption("Bối cảnh liên tab chưa khả dụng: " + str(exc))
     st.markdown(_table_html(viewed), unsafe_allow_html=True)
