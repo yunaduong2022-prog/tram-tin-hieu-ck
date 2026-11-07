@@ -56,7 +56,7 @@ def resample_ohlcv(g: pd.DataFrame, tf: str) -> pd.DataFrame:
     return r.reset_index(drop=True)
 
 
-ENGINE_VERSION = "swing-v16"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
+ENGINE_VERSION = "swing-v17-buy-gate"   # đổi khi sửa logic engine; app đưa vào khoá cache để không dùng kết quả cũ
 
 def mask_chg_gaps(d: pd.DataFrame, min_share: float = 0.3) -> pd.DataFrame:
     """Chg_% của nến Ngày chỉ hợp lệ khi dòng liền trước của mã chính là PHIÊN KỀ TRƯỚC của thị trường.
@@ -229,10 +229,16 @@ def analyze_signal(row, stop_buffer=0.03, target_r=2.0):
     res, sup = row["Resistance_20"], row["Support_20"]
     score, reasons = 0.0, []
 
-    if pd.notna(res) and pd.notna(pos) and c > res and pos >= 70:
+    # MIN_BUY_STRUCTURE_GATE_V1: label requires real price-structure event.
+    breakout_structure = bool(pd.notna(res) and pd.notna(pos) and c > res and pos >= 70)
+    spring_structure = bool(pd.notna(sup) and pd.notna(pos) and l < sup and c >= sup and pos >= 50)
+    # Match the confirmed Price-Volume engine thresholds; keep scoring unchanged.
+    is_breakout = breakout_structure and pd.notna(v_ratio) and v_ratio >= 1.5
+    is_spring = spring_structure and pd.notna(v_ratio) and v_ratio >= 1.2
+    if breakout_structure:
         score += 2.0
         reasons.append(("Wyckoff", 2.0, f"Phá kháng cự 20 phiên ({res:.2f}), đóng cửa sát đỉnh (Position {pos:.0f}%)"))
-    elif pd.notna(sup) and pd.notna(pos) and l < sup and c >= sup and pos >= 50:
+    elif spring_structure:
         score += 1.5
         reasons.append(("Wyckoff", 1.5, f"Quét thủng hỗ trợ ({sup:.2f}) rồi đóng cửa trên hỗ trợ (Spring/Test)"))
 
@@ -253,8 +259,10 @@ def analyze_signal(row, stop_buffer=0.03, target_r=2.0):
         score += 0.5
         reasons.append(("MA Trend", 0.5, "Giá trên MA9"))
 
-    if score >= 3.5:
-        signal = "MUA MỚI (BREAKOUT)" if (pd.notna(pos) and pos >= 70) else "MUA GOM (SPRING)"
+    if score >= 3.5 and is_breakout:
+        signal = "MUA MỚI (BREAKOUT)"
+    elif score >= 3.5 and is_spring:
+        signal = "MUA GOM (SPRING)"
     else:
         signal = "WAIT"
 
