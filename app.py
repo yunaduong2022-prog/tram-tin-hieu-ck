@@ -32,6 +32,7 @@ import stock_tabs as ST
 import ma_structure_view as MAV  # MIN_MA_STRUCTURE_V1
 import state_map_view as SMV  # MIN_STATE_MAP_V1
 import min_t2_swing as T2S  # MIN_T2_SWING_V1
+import min_t2_buy_now as T2BUY  # MIN_T2_BUYNOW_BRIDGE_V1
 import mtf_levels as ML
 import waiting_buy as WB
 import action_summary as AS
@@ -1770,6 +1771,12 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
     return WB.sort_group(d, WB.G1)
 
 
+@st.cache_data(show_spinner="Đang kiểm tra tín hiệu Trading T+2 theo EOD...", max_entries=3)
+def _t2_buy_now_cached(_daily: pd.DataFrame, _asof, key: str) -> pd.DataFrame:
+    # The versioned EOD cache key includes the last-bar digest; never mutate source frames.
+    return T2BUY.candidates(_daily, _asof)
+
+
 def page_buy_now():
     st.title("⚡ Mua ngay")
     header()
@@ -1779,24 +1786,57 @@ def page_buy_now():
                "Giá khớp phiên tiếp theo có thể khác EOD; phải đánh giá lại trước khi mua. Chỉ phục vụ nghiên cứu.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     d = _buy_now_table(_wb_table())
-    m = st.columns(3)
+    try:
+        t2 = _t2_buy_now_cached(frames["D"], latest_date, WY_KEY + "|" + E.ENGINE_VERSION + "|t2buynow1")
+    except Exception as _t2_error:
+        st.warning("Bộ lọc MUA NGAY Trading T+2 chưa khả dụng: " + type(_t2_error).__name__)
+        t2 = pd.DataFrame(columns=T2BUY.COLUMNS)
+    t2 = t2.copy()
+    t2["Nhóm"] = t2["Mã"].map(lambda c_: ", ".join(MEMBER.get(str(c_), [])) or "Khác")
+    m = st.columns(4)
     _eod = d["Vào theo EOD"].fillna(False).astype(bool) if "Vào theo EOD" in d else pd.Series(False, index=d.index)
-    m[0].metric("MÃ CÓ THỂ VÀO NGAY", f"{len(d)} mã")
+    m[0].metric("MÃ CÓ THỂ VÀO NGAY", f"{len(set(d['Mã']) | set(t2['Mã']))} mã")
     m[1].metric("MUA THEO VÙNG", f"{int((~_eod).sum())} mã")
     m[2].metric("MUA THEO GIÁ EOD", f"{int(_eod.sum())} mã")
-    if d.empty:
+    m[3].metric("CHỈ TRADING T+2", f"{len(t2)} mã")
+    if d.empty and t2.empty:
         st.info("Hiện chưa có mã nào ở trạng thái Mua ngay. Xem mục **Chờ mua** để theo dõi các mã sắp có điểm mua.")
         return
     f1, f2 = st.columns([1.2, 3])
     q = f1.text_input("Tìm mã", "", key="bn_q", placeholder="🔍 Tìm mã...").upper().strip()
-    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in d["Nhóm"] for x in str(t_).split(",") if x.strip()}),
+    inds = f2.multiselect("Nhóm ngành", sorted({x.strip() for t_ in list(d["Nhóm"]) + list(t2["Nhóm"]) for x in str(t_).split(",") if x.strip()}),
                           key="bn_ind", placeholder="Tất cả nhóm")
     if q:
         d = d[d["Mã"].astype(str).str.contains(q, regex=False)]
+        t2 = t2[t2["Mã"].astype(str).str.contains(q, regex=False)]
     if inds:
         d = d[d["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
-    if d.empty:
+        t2 = t2[t2["Nhóm"].apply(lambda t_: any(i in [x.strip() for x in str(t_).split(",")] for i in inds))]
+    if d.empty and t2.empty:
         st.info("Không có mã nào phù hợp bộ lọc.")
+        return
+    # MIN_T2_BUYNOW_BRIDGE_V1: independently verified T+2-only entries.
+    # Overbought status in the multi-week engine does not erase the T+2 setup.
+    if not t2.empty:
+        st.subheader(f"⚡ MUA NGAY · CHỈ TRADING T+2 ({len(t2)} mã)")
+        st.caption("Chỉ Trading T+2 – KHÔNG nắm giữ dài hạn. Tín hiệu được kiểm tra theo EOD, "
+                   "stoploss/TP/R:R riêng của bộ Trading T+2, không sử dụng stop của vùng mua T+15–T+30. "
+                   "Cần kiểm tra lại giá khớp, cản gần và điều kiện thoát lệnh ở phiên tiếp theo.")
+        _t2cols = st.columns(3)
+        for _ti, (_, _tr) in enumerate(t2.iterrows()):
+            with _t2cols[_ti % 3]:
+                with st.container(border=True):
+                    st.markdown(f"**{_tr['Mã']} · MUA NGAY (Trading T+2)**")
+                    st.caption(f"{_tr['Tín hiệu']} · {_tr['Tuổi']} · Chỉ trading, không nắm giữ dài hạn")
+                    st.metric("Giá EOD", f"{_tr['Giá EOD']:.2f}", f"TP1 +{_tr['Dư địa TP1 %']:.1f}%")
+                    _la, _lb = st.columns(2)
+                    _la.metric("Cắt lỗ T+2", f"{_tr['Cắt lỗ T+2']:.2f}", f"-{_tr['Rủi ro SL %']:.1f}%", delta_color="inverse")
+                    _lb.metric("TP1 T+2", f"{_tr['TP1 T+2']:.2f}", f"R:R {_tr['R:R EOD']:.2f}")
+                    _tp2val = _tr['TP2 T+2']
+                    if pd.notna(_tp2val):
+                        st.caption(f"TP2 động: {_tp2val:.2f} · Vol/TB20: {_tr['Vol/TB20 EOD']:.2f}x · Position: {_tr['Position EOD %']:.0f}%")
+                    st.caption(str(_tr['Ghi chú']))
+    if d.empty:
         return
     show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key="bn_all")
     cols = st.columns(3)
