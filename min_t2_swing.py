@@ -571,6 +571,7 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     from min_t2_top10 import render_top10
     with top10_slot:
         render_top10(hist, d, asof, groups=groups)
+    all_hist_for_research = hist  # Full-market cache, research only.
     if symbols is not None:
         hist = hist[hist["Mã"].isin(symbols)]
     if search_codes:
@@ -612,4 +613,7 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     st.caption("TP1/TP2 trên bảng là KHÁNG CỰ ĐỘNG tính từ EOD mới nhất; cản quá gần có trong Ghi chú. R:R TP1/TP2 đối với tín hiệu T+0–T+15 tính theo TP/Cắt lỗ hiển thị và Giá EOD; tín hiệu cũ giữ R:R gốc. % dưới các mức giá = (mức / Giá EOD − 1) × 100. Cắt lỗ vẫn là hỗ trợ tại ngày tín hiệu. '—' là không tìm được cản hợp lệ.")
     st.subheader("Thống kê quan sát · Chưa phải backtest giao dịch")
     st.dataframe(summary(hist), hide_index=True, use_container_width=True)
+    # MIN_T2_STATE_RESEARCH_V1: historical signal-day MA regimes, not current state.
+    from min_t2_state_research import render_state_research
+    render_state_research(all_hist_for_research, d, asof)
     st.caption("T+2/5/10/15/20/30 là biến động đóng cửa của cổ phiếu sau tín hiệu, không phải lợi nhuận đã giao dịch. Chưa tính phí, thuế, trượt giá, khớp lệnh, hoặc ngày có quyền bán. Tín hiệu lịch sử dựng lại theo quy tắc không nhìn trước.")
