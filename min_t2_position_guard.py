@@ -359,21 +359,46 @@ def render_guard(context, viewed, daily):
                     '<div style="font-size:11px;letter-spacing:.04em;opacity:.85">'+safe(name)+'</div>'
                     '<div style="font-size:21px;font-weight:700;color:'+accent+'">'+f'{price:.2f}'+'</div></div>'
                     for name, price in candidates) + '</div>'
+        # MIN_T2_HOLDING_HIERARCHY_V1: presentation only; retain calculation rules above.
+        # Concise badges let readers scan volume and candle dominance first.
+        # The decision headline is the visual focus, not the data labels.
+        decision = headline
+        if red:
+            decision = 'Ưu tiên quản trị rủi ro'
+        elif uncertain:
+            decision = 'Cần xác minh tín hiệu gốc'
+        elif amber:
+            decision = 'Theo dõi thận trọng'
+        elif bullish:
+            decision = 'Theo dõi mục tiêu tiếp theo' if goal_html else 'Theo dõi vị thế'
+        elif goal_html:
+            decision = 'Theo dõi mục tiêu tiếp theo'
+        else:
+            decision = 'Theo dõi vị thế'
+        # Reuse escaped strings and existing semantic color palette.
         html = (
-            '<section style="max-width:950px;background:'+bg+';border:1px solid '+outline+';'
-            'border-left:4px solid '+outline+';border-radius:11px;padding:18px 20px;'
-            'margin:10px 0 12px;color:#F0F4F1;font-size:14px;line-height:1.65">'
-            '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;'
-            'align-items:center;gap:8px;margin-bottom:12px">'
-            '<div style="font-size:14px;font-weight:700;color:'+accent+'">'
-            '03 / LƯU Ý NẾU VẪN ĐANG NẮM GIỮ</div>'
-            '<div style="font-size:11px;font-weight:700;color:'+accent+'">'+safe(headline)+'</div></div>'
-            '<div style="display:grid;grid-template-columns:1fr;gap:5px">'
-            '<div><span style="color:#BDCEC4">Cường độ khối lượng:</span> <b>'+safe(intensity)+'</b></div>'
-            '<div><span style="color:#BDCEC4">Ưu thế nến:</span> <b>'+safe(dominance)+'</b></div>'
-            '<div><span style="color:#BDCEC4">Xác nhận dòng tiền:</span> <b>'+safe(combined)+'</b></div>'
-            '</div>'+goal_html+
-            '<p style="margin:13px 0 0;font-size:14px;line-height:1.75">'+safe(commentary)+'</p>'
+            '<section style="box-sizing:border-box;width:100%;max-width:950px;background:'+bg+';'
+            'border:1px solid '+outline+';border-left:4px solid '+outline+';'
+            'border-radius:11px;padding:clamp(12px,2vw,20px);margin:10px 0 12px;'
+            'color:#F0F4F1;font-size:14px;line-height:1.6;overflow-wrap:anywhere">'
+            '<div style="color:'+accent+';font-size:12px;font-weight:700;'
+            'letter-spacing:.04em;margin-bottom:8px">03 / LƯU Ý NẾU VẪN ĐANG NẮM GIỮ</div>'
+            '<div style="font-size:clamp(18px,2.2vw,23px);line-height:1.3;'
+            'font-weight:750;letter-spacing:-.015em;margin-bottom:12px">'+safe(decision)+'</div>'
+            '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">'
+            '<span style="display:inline-block;max-width:100%;padding:4px 10px;'
+            'border:1px solid '+outline+';border-radius:8px;'
+            'background:rgba(255,255,255,.045);font-size:13px">'
+            '<b>Khối lượng:</b> '+safe(intensity)+'</span>'
+            '<span style="display:inline-block;max-width:100%;padding:4px 10px;'
+            'border:1px solid '+outline+';border-radius:8px;'
+            'background:rgba(255,255,255,.045);font-size:13px">'
+            '<b>Ưu thế nến:</b> '+safe(dominance)+'</span></div>'
+            '<div style="color:#D3DFD7;font-size:13px;line-height:1.55">'
+            '<b>Xác nhận giá–khối lượng:</b> '+safe(combined)+'</div>'
+            +goal_html+
+            '<p style="margin:12px 0 0;font-size:14px;line-height:1.7;'
+            'max-width:850px">'+safe(commentary)+'</p>'
             '</section>'
         )
         st.markdown(html, unsafe_allow_html=True)
