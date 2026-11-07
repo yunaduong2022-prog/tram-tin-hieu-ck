@@ -142,6 +142,66 @@ def rank_top10(history, daily, asof, max_results=10):
     return result[columns]
 
 
+# MIN_T2_TOP10_CONTRAST_UI_V1
+
+def _top10_table_html(show):
+    """Dark-theme legible, horizontally scrollable shortlist; presentation only."""
+    from html import escape as _esc
+    import pandas as pd
+
+    headers = list(show.columns)
+    def text(value):
+        if pd.isna(value):
+            return "—"
+        return _esc(str(value), quote=True)
+
+    rows = []
+    for _, row in show.iterrows():
+        rank = int(row["Hạng"])
+        cells = []
+        for name in headers:
+            val = text(row[name])
+            if name == "Hạng":
+                rank_style = {1: "t2top-gold", 2: "t2top-silver", 3: "t2top-bronze"}.get(rank, "t2top-normal")
+                val = '<span class="t2top-rank ' + rank_style + '">' + val + '</span>'
+            elif name == "Mã":
+                val = '<strong class="t2top-ticker">' + val + '</strong>'
+            elif name == "Điểm T+":
+                val = '<strong class="t2top-score">' + val + '</strong>'
+            cls = ' class="t2top-num"' if name in {"Hạng", "Điểm T+", "Giá EOD", "Vol/TB20 EOD", "RSI14 EOD", "Position", "TP1 động", "Dư địa TP1", "R:R EOD"} else ''
+            cells.append('<td' + cls + '>' + val + '</td>')
+        rows.append('<tr>' + ''.join(cells) + '</tr>')
+    style = """<style>
+    .t2top-wrap{width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;
+      border:1px solid #3d5b50;border-radius:10px;background:#0d211b;
+      scrollbar-color:#658b7a #142720}
+    .t2top-table{border-collapse:separate;border-spacing:0;min-width:1420px;width:100%;
+      font-size:13px;line-height:1.5;color:#e9f4ee;font-variant-numeric:tabular-nums}
+    .t2top-table th{background:#203b30;color:#f5fff9;font-weight:750;
+      font-size:12px;letter-spacing:.015em;border-bottom:1px solid #537668;
+      padding:12px 11px;text-align:left;white-space:nowrap}
+    .t2top-table td{color:#e6f0eb;padding:11px;border-bottom:1px solid #305044;
+      vertical-align:middle;white-space:nowrap;background:#10271f}
+    .t2top-table tbody tr:nth-child(even) td{background:#153027}
+    .t2top-table tbody tr:hover td{background:#244336}
+    .t2top-table tbody tr:last-child td{border-bottom:0}
+    .t2top-table .t2top-num{text-align:right}
+    .t2top-table .t2top-ticker{font-size:15px;color:#f7fff9;letter-spacing:.02em}
+    .t2top-table .t2top-score{color:#83e2b4;font-size:16px;font-weight:800}
+    .t2top-rank{display:inline-flex;align-items:center;justify-content:center;
+      min-width:29px;padding:2px 7px;border-radius:7px;font-size:13px;font-weight:800}
+    .t2top-gold{background:#554124;color:#ffdc88;border:1px solid #b28b47}
+    .t2top-silver{background:#344248;color:#dce8f0;border:1px solid #8295a1}
+    .t2top-bronze{background:#503c30;color:#f1c5a4;border:1px solid #aa7557}
+    .t2top-normal{color:#c9ddd2}
+    @media(max-width:720px){.t2top-table{font-size:12px;min-width:1250px}
+      .t2top-table th,.t2top-table td{padding:9px 8px}}
+    </style>"""
+    return (style + '<div class="t2top-wrap" role="region" aria-label="Top 10 cổ phiếu T+2" tabindex="0">'
+            + '<table class="t2top-table"><thead><tr>'
+            + ''.join('<th scope="col">' + _esc(str(h), quote=True) + '</th>' for h in headers)
+            + '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div>')
+
 def render_top10(history, daily, asof):
     import streamlit as st
     st.markdown("### TOP 10 CỔ PHIẾU MẠNH CÓ TÍN HIỆU MUA T+2")
@@ -155,7 +215,7 @@ def render_top10(history, daily, asof):
     show["Vol/TB20 EOD"] = show["Vol/TB20 EOD"].map(lambda x: f"{x:.2f}x")
     show["Dư địa TP1"] = show["Dư địa TP1"].map(lambda x: f"{x:.1f}%")
     show["Position"] = show["Position"].map(lambda x: f"{x:.0f}%")
-    st.dataframe(show, hide_index=True, use_container_width=True, height=min(430, 70 + 36 * len(show)))
+    st.markdown(_top10_table_html(show), unsafe_allow_html=True)
     with st.expander("Điều kiện Top 10 và cách tính điểm"):
         st.write("Chỉ lấy tín hiệu T+0–T+5, giá trên MA9/MA20, nến tăng và đóng cửa ở ≥60% biên độ, Vol/TB20 EOD ≥1.1x, RSI14 EOD 45–78, giá không quá 8% trên MA9, còn dư địa TP1 ≥5%, R:R EOD ≥2, chưa chạm cắt lỗ gốc theo dữ liệu có sẵn.")
         st.write("Điểm 100 = MA 25 + RSI14 20 + Volume 20 + chất lượng nến 20 + dư địa/R:R 15. Đây là điểm xếp hạng T+ riêng, không phải điểm MA hoặc RS20 của các tab khác. Không xác nhận lệnh mua đã khớp.")
