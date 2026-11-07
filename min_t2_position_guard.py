@@ -375,6 +375,7 @@ def render_guard(context, viewed, daily):
             decision = 'Theo dõi mục tiêu tiếp theo'
         else:
             decision = 'Theo dõi vị thế'
+        # MIN_T2_HOLDING_SYMBOL_V1: ticker title, escaped and current-filter aware.
         # Reuse escaped strings and existing semantic color palette.
         html = (
             '<section style="box-sizing:border-box;width:100%;max-width:950px;background:'+bg+';'
@@ -382,7 +383,9 @@ def render_guard(context, viewed, daily):
             'border-radius:11px;padding:clamp(12px,2vw,20px);margin:10px 0 12px;'
             'color:#F0F4F1;font-size:14px;line-height:1.6;overflow-wrap:anywhere">'
             '<div style="color:'+accent+';font-size:12px;font-weight:700;'
-            'letter-spacing:.04em;margin-bottom:8px">03 / LƯU Ý NẾU VẪN ĐANG NẮM GIỮ</div>'
+            'letter-spacing:.04em;margin-bottom:8px">03 / LƯU Ý NẾU VẪN ĐANG NẮM GIỮ' + (
+            ' ' + safe(code) if code else ''
+            ) + '</div>'
             '<div style="font-size:clamp(18px,2.2vw,23px);line-height:1.3;'
             'font-weight:750;letter-spacing:-.015em;margin-bottom:12px">'+safe(decision)+'</div>'
             '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">'
