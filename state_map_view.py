@@ -265,6 +265,10 @@ def _state_map_html(view):
 
 def render(wb, screener, daily, index_daily, asof, groups):
     st.title("Bản đồ trạng thái cổ phiếu")
+    # MIN_THREE_TAB_SYNC_AUDIT_V1: fail closed if this tab uses a different EOD date.
+    from min_three_tab_contract import render_eod_guard
+    if not render_eod_guard(daily, asof):
+        return
     st.caption(f"Dữ liệu EOD {pd.Timestamp(asof):%d/%m/%Y} · phân nhóm theo bộ lọc Mua ngay/Chờ mua hiện có. Không phải giá realtime hay khuyến nghị giao dịch.")
     symbols = set(screener["Mã"].astype(str)) if screener is not None and not screener.empty else set()
     sectors = ["Toàn thị trường"] + [g for g, codes in groups.items() if symbols.intersection(codes)]
