@@ -53,11 +53,29 @@ def build_context(code, daily, wb, screener, index_daily, asof, groups):
         state_label = "Chưa có dữ liệu đồng nhất"
         state = None
 
+    # MIN_T2_ALERT_COMPARE_V1: preserve existing waiting_buy classification only
+    # when its EOD price matches the same-day MA and Trading T+2 sources.
+    _wb_alert_context = None
+    if wb is not None and not wb.empty and {"Mã", "Giá"}.issubset(wb.columns):
+        _wb_rows = wb[wb["Mã"].astype(str).str.upper().str.strip() == symbol]
+        if len(_wb_rows) == 1:
+            _wb_row = _wb_rows.iloc[0]
+            _wb_price = pd.to_numeric(_wb_row.get("Giá"), errors="coerce")
+            if (pd.notna(_wb_price) and pd.notna(ma_price)
+                    and abs(float(_wb_price) - float(ma_price)) <= 0.011):
+                _wb_alert_context = {
+                    "state": _wb_row.get("Trạng thái"),
+                    "group": _wb_row.get("Danh sách"),
+                    "reason": _wb_row.get("Lý do"),
+                    "sell_action": _wb_row.get("Hành động bán"),
+                }
+
     # MIN_THREE_TAB_SYNC_AUDIT_V1: compare SMA9/10/20 read-only at this EOD.
     from min_three_tab_contract import ma_audit
     _ma_crosscheck = ma_audit(daily, ma, symbol, asof_day)
     return {
         "ma_audit": _ma_crosscheck,
+        "wb_alert_context": _wb_alert_context,
         "code": symbol,
         "asof": asof_day,
         "price": float(ma_price),
@@ -266,6 +284,9 @@ def render_context(context, viewed, daily=None):
         # MIN_THREE_TAB_SYNC_AUDIT_V1: visible comparison; never overwrites MA engines.
         from min_three_tab_contract import render_ma_audit
         render_ma_audit(context.get("ma_audit"))
+        # Same-EOD comparison of existing classifications; read-only.
+        from min_t2_alert_compare import render_comparison
+        render_comparison(context, latest, daily)
         # Separate Trading T+ view; never overwrite original State Map label.
         st.markdown("**ĐÁNH GIÁ GIAO DỊCH T+ (GIÁ & KHỐI LƯỢNG EOD)**")
         k1, k2, k3 = st.columns(3)
