@@ -542,6 +542,8 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
         return
     # # MIN_T2_TOP10_INDEPENDENT_EOD_V1: allocate position above the existing filters.
     top10_slot = st.container()
+    # MIN_T2_ALERT_CENTER_V1: place after Top 10, before filters/table.
+    alert_slot = st.container()
     c1,c2,c3,c4 = st.columns(4)
     with c1:
         kind = st.selectbox("Loại tín hiệu", ["Tất cả"] + list(LABELS.values()), key="t2_kind")
@@ -575,6 +577,10 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     from min_t2_top10 import render_top10
     with top10_slot:
         render_top10(hist, d, asof, groups=groups)
+    # Alert center receives the full EOD history before lower-table filters.
+    from min_t2_alert_center import render_alert_center
+    with alert_slot:
+        render_alert_center(hist, d, asof, groups=groups)
     all_hist_for_research = hist  # Full-market cache, research only.
     if symbols is not None:
         hist = hist[hist["Mã"].isin(symbols)]
