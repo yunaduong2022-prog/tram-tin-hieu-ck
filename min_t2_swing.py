@@ -536,6 +536,10 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     if d.empty:
         st.warning("Dữ liệu EOD chưa đầy đủ để chạy bộ lọc.")
         return
+    # MIN_THREE_TAB_SYNC_AUDIT_V1: shared EOD session contract; no scanner changes.
+    from min_three_tab_contract import render_eod_guard
+    if not render_eod_guard(d, asof):
+        return
     # # MIN_T2_TOP10_INDEPENDENT_EOD_V1: allocate position above the existing filters.
     top10_slot = st.container()
     c1,c2,c3,c4 = st.columns(4)

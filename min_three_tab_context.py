@@ -53,7 +53,11 @@ def build_context(code, daily, wb, screener, index_daily, asof, groups):
         state_label = "Chưa có dữ liệu đồng nhất"
         state = None
 
+    # MIN_THREE_TAB_SYNC_AUDIT_V1: compare SMA9/10/20 read-only at this EOD.
+    from min_three_tab_contract import ma_audit
+    _ma_crosscheck = ma_audit(daily, ma, symbol, asof_day)
     return {
+        "ma_audit": _ma_crosscheck,
         "code": symbol,
         "asof": asof_day,
         "price": float(ma_price),
@@ -259,6 +263,9 @@ def render_context(context, viewed, daily=None):
             st.write("Cản gần:", fmt(context["near_resistance"]))
             st.write("TP1:", fmt(latest.get("Mục tiêu 1")))
             st.write("TP2:", fmt(latest.get("Mục tiêu 2")))
+        # MIN_THREE_TAB_SYNC_AUDIT_V1: visible comparison; never overwrites MA engines.
+        from min_three_tab_contract import render_ma_audit
+        render_ma_audit(context.get("ma_audit"))
         # Separate Trading T+ view; never overwrite original State Map label.
         st.markdown("**ĐÁNH GIÁ GIAO DỊCH T+ (GIÁ & KHỐI LƯỢNG EOD)**")
         k1, k2, k3 = st.columns(3)

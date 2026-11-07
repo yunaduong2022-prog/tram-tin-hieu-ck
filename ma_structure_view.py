@@ -135,6 +135,10 @@ def render(daily: pd.DataFrame, groups: dict[str, list[str]], eod_date=None, nam
             return ""
     d["Tên công ty"] = d["Mã"].map(_name)
     asof = pd.Timestamp(eod_date) if eod_date is not None else d["Ngày"].max()
+    # MIN_THREE_TAB_SYNC_AUDIT_V1: read-only EOD contract, shared across 3 tabs.
+    from min_three_tab_contract import render_eod_guard
+    if not render_eod_guard(daily, asof):
+        return
     # Newest common EOD session is the only source for current headline statistics.
     today = d[d["Ngày"].dt.normalize() == asof.normalize()].copy()
     m = st.columns(4)
