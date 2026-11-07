@@ -22,6 +22,28 @@ MENU = {
 DEFAULT_MAIN = "Thị trường"   # trang mở đầu khi vào app (muốn như cũ thì đổi thành "Bộ lọc & Backtest")
 ICON = {"Vĩ mô": "🌐", "Thị trường": "🏛️", "Ngành": "🏭", "Cổ phiếu": "📊", "Bộ lọc & Backtest": "🔍", "Livestream": "🎥"}
 
+# MIN_NAV_FIVE_GROUPS_V1: UI-only groups, the existing route keys remain unchanged.
+FILTER_GROUPS = {
+    "Tìm cơ hội": ["Mua ngay", "Chờ mua", "Tăng mạnh", "Đang phục hồi", "Cạn cung", "Giảm mạnh"],
+    "Phân tích kỹ thuật": ["Cấu trúc MA", "Bản đồ trạng thái cổ phiếu", "Bảng giá trong phiên"],
+    "Tín hiệu & Giao dịch": ["Trading T+2", "Danh sách cảnh báo", "Bán / Chốt lời", "Khuyến nghị khách hàng"],
+    "Danh mục": ["Watchlist", "Cổ phiếu của tôi"],
+    "Nghiên cứu & Backtest": ["Lọc tất cả CP", "Bộ lọc Realtime", "Backtest chiến lược"],
+}
+FILTER_DEFAULT = "Tìm cơ hội"
+
+
+def _filter_group_for_sub(sub):
+    return next((group for group, pages in FILTER_GROUPS.items() if sub in pages), FILTER_DEFAULT)
+
+
+def _switch_filter_group():
+    """Callback runs before widgets are recreated on the next Streamlit rerun."""
+    group = st.session_state.get("nav_filter_group", FILTER_DEFAULT)
+    if group in FILTER_GROUPS:
+        st.session_state["nav_sub"] = FILTER_GROUPS[group][0]
+
+
 # Mô tả nội dung từng tab phụ của mục "Thị trường" (hiển thị ở trang chờ cho tới khi có nội dung thật)
 MARKET_DESC = {
     "Tổng quan": ["Xu hướng, độ rộng, dòng tiền, mức độ rủi ro", "Bản đồ sức mạnh ngành", "Số cổ phiếu phát tín hiệu MUA / CHỜ MUA"],
@@ -48,6 +70,9 @@ DARK_CSS = """
 .st-key-mega-nav button:hover{color:var(--txt)!important;background:var(--line2)!important}
 .st-key-mega-nav button[aria-checked="true"],.st-key-mega-nav button[aria-pressed="true"],
 .st-key-mega-nav button[data-testid*="Active"]{color:var(--accent)!important;border-bottom-color:var(--accent)!important;background:transparent!important}
+/* Group selector: distinct hierarchy from the page submenu. */
+.st-key-nav-filter-groups{background:var(--bg2);margin:0 -1rem;padding:4px 1rem 3px;border-top:1px solid var(--line)}
+.st-key-nav-filter-groups button{font-size:14px!important;font-weight:700!important;padding:10px 14px!important}
 /* hàng sub-menu: trượt xuống mượt */
 .st-key-nav-sub{background:var(--bg);margin:0 -1rem;padding:2px 1rem;border-top:1px solid var(--line);
   animation:subslide .22s ease-out}
@@ -74,9 +99,17 @@ _SCROLL_TOP_JS = """<script>
 
 def _reset_sub():
     main = st.session_state.get("nav_main")
-    if main not in MENU:     # bấm lại đúng mục đang chọn: segmented_control trả None (render_nav bên dưới khôi phục mục cũ), giữ nguyên tab phụ
+    if main not in MENU:
         return
-    st.session_state["nav_sub"] = (MENU[main] or [None])[0]
+    if main == "Bộ lọc & Backtest":
+        # Group first so nav_sub and nav_filter_group never disagree.
+        group = st.session_state.get("nav_filter_group", FILTER_DEFAULT)
+        if group not in FILTER_GROUPS:
+            group = FILTER_DEFAULT
+        st.session_state["nav_filter_group"] = group
+        st.session_state["nav_sub"] = FILTER_GROUPS[group][0]
+    else:
+        st.session_state["nav_sub"] = (MENU[main] or [None])[0]
 
 
 def goto(main: str, sub: str | None = None):
@@ -96,6 +129,8 @@ def render_nav():
     pending = st.session_state.pop("_nav_pending", None)  # áp dụng yêu cầu goto() trước khi tạo widget
     if pending:
         st.session_state["nav_main"], st.session_state["nav_sub"] = pending
+        if st.session_state["nav_main"] == "Bộ lọc & Backtest":
+            st.session_state["nav_filter_group"] = _filter_group_for_sub(st.session_state["nav_sub"])
         if "rt_focus" not in st.session_state:       # chuyển trang bằng nút (vd. "Xem biểu đồ"): trang mới mở ở đầu trang, không giữ vị trí cuộn cũ
             st.session_state["_scroll_top"] = True   # (có rt_focus thì trang đích tự cuộn tới đúng thẻ)
     st.session_state.setdefault("nav_main", DEFAULT_MAIN)
@@ -113,6 +148,24 @@ def render_nav():
         subs = MENU[main]
         sub = None
         if subs:
+            if main == "Bộ lọc & Backtest":
+                current_sub = st.session_state.get("nav_sub")
+                # Follow an existing nav_sub, including direct internal navigation
+                # from older pages, without changing the original page identity.
+                if current_sub in MENU[main]:
+                    inferred = _filter_group_for_sub(current_sub)
+                else:
+                    inferred = FILTER_DEFAULT
+                if st.session_state.get("nav_filter_group") not in FILTER_GROUPS or current_sub not in FILTER_GROUPS[st.session_state.get("nav_filter_group", "")]:
+                    st.session_state["nav_filter_group"] = inferred
+                with st.container(key="nav-filter-groups"):
+                    group = st.segmented_control("Nhóm chức năng", list(FILTER_GROUPS),
+                                                 key="nav_filter_group", label_visibility="collapsed",
+                                                 on_change=_switch_filter_group)
+                    group = group or st.session_state.get("nav_filter_group", FILTER_DEFAULT)
+                    if group not in FILTER_GROUPS:
+                        group = FILTER_DEFAULT
+                    subs = FILTER_GROUPS[group]
             with st.container(key="nav-sub"):
                 if st.session_state.get("nav_sub") not in subs:
                     st.session_state["nav_sub"] = subs[0]
