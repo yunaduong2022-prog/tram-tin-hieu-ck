@@ -2144,7 +2144,8 @@ def page_recovering():
 
 
 def page_alert_lists():
-    st.title("⚠️ Danh sách cảnh báo")
+    # MIN_ALERT_CLARITY_V2: title clarifies stock-level monitoring; classification unchanged.
+    st.title("⚠️ Cảnh báo xu hướng cổ phiếu")
     header()
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: xu hướng suy yếu, tăng quá đà. Mã đang phục hồi có mục riêng **Đang phục hồi**. "
                "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")

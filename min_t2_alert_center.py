@@ -114,11 +114,11 @@ def compute_alerts(history, daily, asof, scope=None, age_limit=ACTIVE_AGE):
         tp1 = _num(signal.get("TP1 gốc", signal.get("Mục tiêu 1")))
         age = int(signal["Phiên từ tín hiệu"])
         if life_status in RED:
-            level, alert, explanation = "Rủi ro", "Chạm cắt lỗ gốc", life["note"]
+            level, alert, explanation = "Cắt lỗ gốc", "Chạm cắt lỗ gốc", life["note"]  # MIN_ALERT_CLARITY_V2
         elif life_status == "CHƯA ĐỦ DỮ LIỆU" or risk_status == "CHƯA ĐỦ DỮ LIỆU":
             level, alert, explanation = "Thiếu dữ liệu", "Không đủ dữ liệu", life.get("note", "") + " " + risk.get("reason", "")
         elif risk_status in MA_RISK:
-            level, alert, explanation = "Rủi ro", risk_status, risk["reason"]
+            level, alert, explanation = "Cảnh báo MA20", risk_status, risk["reason"]
         elif life_status in {"ĐÃ CHẠM TP1 GỐC", "ĐÃ CHẠM TP2 GỐC"}:
             level, alert, explanation = "Mục tiêu", life_status, life["note"]
         elif np.isfinite(tp1) and tp1 > 0 and 0 <= (tp1 / current - 1) * 100 <= 3:
@@ -136,7 +136,7 @@ def compute_alerts(history, daily, asof, scope=None, age_limit=ACTIVE_AGE):
     if not records:
         return pd.DataFrame(columns=columns)
     result = pd.DataFrame(records)
-    rank = {"Rủi ro": 0, "Thiếu dữ liệu": 1, "Mục tiêu": 2, "Tín hiệu mới": 3, "Theo dõi": 4}
+    rank = {"Cắt lỗ gốc": 0, "Thiếu dữ liệu": 1, "Cảnh báo MA20": 2, "Mục tiêu": 3, "Tín hiệu mới": 4, "Theo dõi": 5}
     result["_rank"] = result["Mức độ"].map(rank)
     result = result.sort_values(["_rank", "Mã"], ascending=[True, True]).drop(columns="_rank")
     return result.reset_index(drop=True)[columns]
@@ -154,7 +154,7 @@ def _table_html(frame):
             if name == "Mã":
                 safe = '<strong class="a-ticker">' + safe + '</strong>'
             elif name == "Mức độ":
-                cls = {"Rủi ro": "a-risk", "Thiếu dữ liệu": "a-unknown", "Mục tiêu": "a-target", "Tín hiệu mới": "a-new", "Theo dõi": "a-watch"}.get(str(value), "a-watch")
+                cls = {"Cắt lỗ gốc": "a-risk", "Cảnh báo MA20": "a-ma-risk", "Thiếu dữ liệu": "a-unknown", "Mục tiêu": "a-target", "Tín hiệu mới": "a-new", "Theo dõi": "a-watch"}.get(str(value), "a-watch")
                 safe = '<span class="a-chip ' + cls + '">' + safe + '</span>'
             cells.append('<td>' + safe + '</td>')
         texts.append('<tr>' + ''.join(cells) + '</tr>')
@@ -167,6 +167,7 @@ def _table_html(frame):
       .t2-alert-table .a-ticker{color:#f7fff9;font-size:15px}
       .t2-alert-table .a-chip{border-radius:6px;padding:4px 8px;white-space:nowrap;font-weight:700}
       .t2-alert-table .a-risk{background:#532d37;color:#ffd3dc}
+      .t2-alert-table .a-ma-risk{background:#56432b;color:#ffe4a5}
       .t2-alert-table .a-unknown{background:#51452b;color:#ffe3a5}
       .t2-alert-table .a-target{background:#274661;color:#c9e8ff}
       .t2-alert-table .a-new{background:#24513d;color:#b7f6d3}
@@ -195,13 +196,16 @@ def render_alert_center(history, daily, asof, groups=None):
         if result.empty:
             st.info("Không có tín hiệu T+0–T+15 với dữ liệu EOD khớp phiên trong phạm vi này.")
             return
-        levels = ["Rủi ro", "Thiếu dữ liệu", "Mục tiêu", "Tín hiệu mới", "Theo dõi"]
+        levels = ["Cắt lỗ gốc", "Cảnh báo MA20", "Thiếu dữ liệu", "Mục tiêu", "Tín hiệu mới", "Theo dõi"]
         selected = st.selectbox("Lọc mức cảnh báo", ["Tất cả"] + levels, key="t2_alert_level")
         cols = st.columns(4)
-        counts = [("Tín hiệu mới", "Tín hiệu mới"), ("Theo dõi", "Theo dõi"),
-                  ("Rủi ro", "Rủi ro"), ("Cần xác minh", "Thiếu dữ liệu")]
+        counts = [("Chạm cắt lỗ gốc", "Cắt lỗ gốc"), ("Cảnh báo MA20", "Cảnh báo MA20"),
+                  ("Tín hiệu mới", "Tín hiệu mới"), ("Theo dõi", "Theo dõi")]
         for col, (label, name) in zip(cols, counts):
             col.metric(label, int((result["Mức độ"] == name).sum()))
+        st.caption("Mục tiêu: " + str(int((result["Mức độ"] == "Mục tiêu").sum())) +
+                   " mã · Thiếu dữ liệu cần kiểm tra: " +
+                   str(int((result["Mức độ"] == "Thiếu dữ liệu").sum())) + " mã.")
         if selected != "Tất cả":
             result = result[result["Mức độ"] == selected]
         st.caption(f"{len(result)} mã sau lọc · tối đa {LIMIT} dòng · cảnh báo từ tín hiệu gần nhất mỗi mã.")
