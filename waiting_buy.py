@@ -558,6 +558,51 @@ def _classify_upgrade(g: pd.DataFrame, w: pd.DataFrame | None, res: dict) -> dic
     return res
 
 
+# MIN_BUY_FINAL_ENTRY_GUARD_V1
+# Use the displayed entry/stop/target, not an earlier (overwritten) provisional plan.
+def _final_rr(entry, stop, target) -> float:
+    vals = [pd.to_numeric(x, errors="coerce") for x in (entry, stop, target)]
+    if not all(pd.notna(v) and np.isfinite(float(v)) for v in vals):
+        return np.nan
+    entry, stop, target = map(float, vals)
+    if not 0 < stop < entry < target:
+        return np.nan
+    return (target - entry) / (entry - stop)
+
+
+def _final_entry_check(plan: dict, price) -> tuple[bool, str]:
+    """Final go/no-go based only on displayed prices; changes no classification.
+
+    Buy labels remain research signals; 'Vào ngay' requires a real executable
+    zone and at least the configured reward/risk to first resistance/TP.
+    """
+    entry = pd.to_numeric(plan.get("Giá vào"), errors="coerce")
+    stop = pd.to_numeric(plan.get("Cắt lỗ"), errors="coerce")
+    tp1 = pd.to_numeric(plan.get("Mục tiêu 1"), errors="coerce")
+    lo = pd.to_numeric(plan.get("Vùng mua từ"), errors="coerce")
+    hi = pd.to_numeric(plan.get("Vùng mua đến"), errors="coerce")
+    now = pd.to_numeric(price, errors="coerce")
+    rr = _final_rr(entry, stop, tp1)
+    plan["R:R"] = round(rr, 3) if np.isfinite(rr) else np.nan
+    if not np.isfinite(rr):
+        return False, "Giá vào, cắt lỗ hoặc TP1 cuối cùng không hợp lệ: chờ xác nhận lại kế hoạch"
+    if not all(pd.notna(v) and np.isfinite(float(v)) for v in (lo, hi, now)):
+        return False, "Thiếu vùng mua/giá EOD xác nhận: chưa thể kết luận vào ngay"
+    if not float(lo) <= float(now) <= float(hi):
+        return False, "Đã có tín hiệu, nhưng giá EOD không nằm trong vùng mua cuối cùng: chờ đúng vùng"
+    if rr + 1e-8 < CFG["min_rr"]:
+        return False, f"R:R cuối cùng {rr:.2f} thấp hơn tối thiểu {CFG['min_rr']:.1f}: chưa vào ngay"
+    resistance = pd.to_numeric(plan.get("Cản gần"), errors="coerce")
+    if pd.notna(resistance) and np.isfinite(float(resistance)):
+        resistance = float(resistance)
+        if float(entry) < resistance < float(tp1):
+            rr_near = _final_rr(entry, stop, resistance)
+            if np.isfinite(rr_near) and rr_near + 1e-8 < CFG["min_rr"]:
+                return False, (f"Cản gần {resistance:.2f} chỉ cho R:R {rr_near:.2f}; "
+                               "chờ điều chỉnh hoặc xác nhận vượt cản")
+    return True, "Giá EOD trong vùng mua; R:R và cản gần đạt điều kiện cuối cùng"
+
+
 def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
     """Phân loại toàn bộ rổ. Trả về bảng mỗi mã một dòng, kèm cột Danh sách để lọc."""
     wg = {code: gg for code, gg in frames["W"].groupby("Mã")}
@@ -587,6 +632,15 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
             else:
                 note = "Giá đang cách vùng mua phù hợp; chờ nhịp điều chỉnh rồi đánh giá lại điểm vào."
             res["Ghi chú hành động"] = note
+        # Apply final price/stop/target check AFTER any MA20-zone substitution.
+        # Never silently promote a confirmed setup to an immediate buy.
+        if res.get("_ma20_zone") and res["Trạng thái"] in ACT_NOW:
+            res["Ghi chú hành động"] = ("Có tín hiệu mua nhưng giá EOD chưa phù hợp: "
+                                          + res["Ghi chú hành động"])
+        final_ok, final_note = _final_entry_check(res, r.get("Giá", np.nan))
+        if res["Hành động"] == "Vào ngay" and not final_ok:
+            res["Hành động"] = "Chờ mua"
+            res["Ghi chú hành động"] = "Có tín hiệu mua nhưng chưa đủ điều kiện giải ngân: " + final_note
         res["Hành động bán"] = sell_action_of(res.get("Lý do"))
         try:
             res["Tăng từ đáy %"] = _leg_structure(g.reset_index(drop=True))["leg_gain"]
@@ -787,6 +841,11 @@ def _sentence(t: str) -> str:
 BADGE_TEXT = {BUY_SIGNAL: "ĐIỂM MUA ĐẸP", "MUA": "✔ MUA"}     # chữ hiển thị trên thẻ (tên trạng thái dùng để lọc giữ nguyên)
 
 
+def _rr_label(row, target_col: str) -> str:
+    rr = _final_rr(row.get("Giá vào"), row.get("Cắt lỗ"), row.get(target_col))
+    return f"R:R 1:{rr:.1f}" if np.isfinite(rr) else "R:R —"
+
+
 def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
@@ -825,7 +884,8 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
         tag = lambda t: f'<small>{t}</small>'
         html += '<div style="margin-bottom:12px">' + ladder_html(
             r["Mã"], r.get("Giá vào"), r["Vùng mua từ"], r["Vùng mua đến"], go, r["Cắt lỗ"], r["Cắt lỗ %"],
-            r["Mục tiêu 1"], r["Lời 1 %"], tag("R:R 1:2"), r["Mục tiêu 2"], r["Lời 2 %"], tag("R:R 1:3"),
+            r["Mục tiêu 1"], r["Lời 1 %"], tag(_rr_label(r, "Mục tiêu 1")),
+            r["Mục tiêu 2"], r["Lời 2 %"], tag(_rr_label(r, "Mục tiêu 2")),
             _sentence(r["Ghi chú hành động"]), foot_text) + '</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
