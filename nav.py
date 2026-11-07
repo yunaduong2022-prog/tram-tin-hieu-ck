@@ -169,7 +169,11 @@ def render_nav():
             with st.container(key="nav-sub"):
                 if st.session_state.get("nav_sub") not in subs:
                     st.session_state["nav_sub"] = subs[0]
-                sub = st.segmented_control("Tab phụ", subs, key="nav_sub", label_visibility="collapsed")
+                # MIN_ALERT_CLARITY_V2: display-only alias; preserve old nav_sub routing identity.
+                sub = st.segmented_control("Tab phụ", subs, key="nav_sub", label_visibility="collapsed",
+                                            format_func=lambda label: "Cảnh báo xu hướng cổ phiếu"
+                                            if main == "Bộ lọc & Backtest" and label == "Danh sách cảnh báo"
+                                            else label)
                 sub = sub or subs[0]
     if st.session_state.pop("_scroll_top", False):
         components.html(_SCROLL_TOP_JS, height=0)
