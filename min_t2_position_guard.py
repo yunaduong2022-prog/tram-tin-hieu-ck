@@ -178,35 +178,98 @@ def signal_lifecycle(daily, signal, asof):
 
 # MIN_T2_GUARD_THREE_SECTION_UI_V1
 
-def _position_interpretation(risk, life):
-    """Conditional commentary, never a position or execution determination."""
+# MIN_T2_FLOW_LABELS_V2
+
+def _flow_classification(volume):
+    """Two independent EOD descriptions: volume intensity and candle dominance.
+
+    OHLC and volume cannot reveal aggressive buy/sell order-flow. Every
+    'mua/bán thắng' label is explicitly a price-candle proxy, not tape data.
+    """
+    if volume is None:
+        return ('Chưa đủ dữ liệu khối lượng', 'Chưa đủ dữ liệu nến', 'Không xác định')
+    vr = _num(volume.get('vol_ratio'))
+    close = _num(volume.get('close'))
+    opened = _num(volume.get('open'))
+    prior = _num(volume.get('prev_close'))
+    pos = _num(volume.get('close_pos'))
+    body = _num(volume.get('body_pct'))
+    if not np.isfinite(vr) or vr < 0:
+        intensity = 'Chưa đủ dữ liệu khối lượng'
+    elif vr >= 1.5:
+        intensity = 'Khối lượng mạnh'
+    elif vr >= 1.0:
+        intensity = 'Khối lượng bình thường/khá'
+    else:
+        intensity = 'Khối lượng thấp'
+    if volume.get('flat_candle'):
+        return intensity, 'Nến một giá · Chưa xác định thắng thế', 'Chưa xác nhận'
+    if not all(np.isfinite(x) for x in (close, opened, pos, body)) or not 0 <= pos <= 1 or not 0 <= body <= 100:
+        return intensity, 'Chưa đủ dữ liệu nến', 'Chưa xác nhận'
+    if body < 25 or (0.40 <= pos <= 0.60 and body < 50):
+        dominance = 'Hai bên giằng co'
+    elif close > opened and pos >= 0.70 and body >= 50:
+        dominance = 'Bên mua thắng theo nến'
+    elif close < opened and pos <= 0.30 and body >= 50:
+        dominance = 'Bên bán thắng theo nến'
+    elif close > opened and pos >= 0.60:
+        dominance = 'Bên mua chiếm ưu thế về giá'
+    elif close < opened and pos <= 0.40:
+        dominance = 'Bên bán chiếm ưu thế về giá'
+    else:
+        dominance = 'Chưa rõ bên thắng thế'
+    if (vr >= 1.5 and dominance == 'Bên mua thắng theo nến'
+            and np.isfinite(prior) and close > prior):
+        combined = 'Lực mua mạnh được xác nhận theo giá–khối lượng'
+    elif vr >= 1.5 and dominance == 'Bên bán thắng theo nến' and np.isfinite(prior) and close < prior:
+        combined = 'Lực bán mạnh được xác nhận theo giá–khối lượng'
+    elif vr >= 1.5:
+        combined = 'Giao dịch mạnh nhưng chưa xác nhận bên thắng thế'
+    else:
+        combined = 'Chưa xác nhận lực mua/bán mạnh theo khối lượng'
+    return intensity, dominance, combined
+
+
+def _position_interpretation(risk, life, latest=None, volume=None):
+    """Conditional holding commentary; never assert an actual order execution."""
     risk_status = str(risk.get('status', 'CHƯA ĐỦ DỮ LIỆU'))
     lifecycle = str(life.get('status', 'CHƯA ĐỦ DỮ LIỆU'))
     if lifecycle == 'CHƯA ĐỦ DỮ LIỆU':
-        return ('Không đủ lịch sử để xác nhận kết quả tín hiệu gốc. '
-                'Nếu đang có vị thế, đối chiếu lịch sử giá và lệnh thực tế trước khi quyết định.')
+        return ('Không đủ lịch sử để xác nhận kết quả tín hiệu gốc; đối chiếu dữ liệu trước khi quyết định.')
     if lifecycle.startswith('CHẠM CẢ CẮT LỖ VÀ TP'):
-        return ('Trong một phiên, giá đã chạm cả cắt lỗ và mục tiêu gốc; '
-                'không biết thứ tự khớp từ OHLC. Cần xem lại dữ liệu giao dịch thực tế.')
+        return ('Cùng phiên chạm cắt lỗ và TP gốc; OHLC không cho biết thứ tự. '
+                'Không suy ra kết quả khớp lệnh.')
     if lifecycle == 'ĐÃ CHẠM CẮT LỖ GỐC':
-        return ('Thiết lập mua gốc đã bị vi phạm mức cắt lỗ trên dữ liệu giá. '
-                'Nếu vẫn đang nắm giữ, cần đánh giá lại kế hoạch rủi ro; '
-                'không coi mục tiêu còn xa là tín hiệu mua mới.')
-    if lifecycle in ('ĐÃ CHẠM TP1 GỐC', 'ĐÃ CHẠM TP2 GỐC'):
-        return ('Mục tiêu GỐC từng được giá chạm; không suy ra đã chốt lời hoặc vị thế đã đóng. '
-                'Nếu vẫn đang nắm giữ, đối chiếu lệnh thực tế, mức dừng đang áp dụng '
-                'và xu hướng kỹ thuật hiện tại; mục tiêu ĐỘNG trên bảng có thể khác.')
+        return ('Đã vi phạm mức cắt lỗ gốc theo High–Low lịch sử. Nếu còn nắm giữ, '
+                'ưu tiên quản trị rủi ro, không coi TP phía trên là tín hiệu mua mới.')
     if risk_status in ('BÁN / HẠ TỶ TRỌNG', 'CẢNH BÁO BÁN'):
-        return ('Đang có cảnh báo rủi ro kỹ thuật EOD. Nếu còn nắm giữ, '
-                'ưu tiên đánh giá mức dừng và khả năng giảm rủi ro theo kế hoạch cá nhân.')
+        return ('Đang có cảnh báo bán EOD. Nếu còn nắm giữ, ưu tiên bảo vệ thành quả '
+                'và rà soát mức dừng, không mặc định chờ TP tiếp theo.')
     if risk_status == 'SUY YẾU':
-        return ('Xu hướng EOD suy yếu nhưng chưa có xác nhận bán mạnh theo quy tắc đang dùng. '
-                'Nếu còn nắm giữ, theo dõi MA20/EMA20 và mức cắt lỗ hiệu lực.')
-    if risk_status == 'THEO DÕI GIỮ':
-        return ('Chưa phát hiện cảnh báo bán theo MA20 hiện tại. Đây chỉ là nhận xét xu hướng, '
-                'không xác nhận đang nắm giữ, không thay thế mức dừng hoặc kế hoạch thoát lệnh.')
-    return ('Chưa đủ điều kiện đánh giá vị thế. Không suy ra tín hiệu giữ/bán từ dữ liệu thiếu.')
-
+        return ('Xu hướng EOD suy yếu. Nếu còn nắm giữ, theo dõi MA20/EMA20 và mức dừng '
+                'trước khi quyết định tiếp tục chờ TP.')
+    if risk_status != 'THEO DÕI GIỮ':
+        return 'Chưa có đủ bằng chứng về xu hướng kỹ thuật để đánh giá giữ/chốt lời.'
+    intensity, dominance, combined = _flow_classification(volume)
+    if lifecycle in ('ĐÃ CHẠM TP1 GỐC', 'ĐÃ CHẠM TP2 GỐC'):
+        tp1 = _num(latest.get('Mục tiêu 1')) if latest is not None else np.nan
+        tp2 = _num(latest.get('Mục tiêu 2')) if latest is not None else np.nan
+        price = _num(risk.get('price'))
+        future = []
+        if np.isfinite(price):
+            if np.isfinite(tp1) and tp1 > price:
+                future.append(f'TP1 động {tp1:.2f}')
+            if np.isfinite(tp2) and tp2 > price:
+                future.append(f'TP2 động {tp2:.2f}')
+        label = 'Đã đạt mục tiêu gốc theo High–Low. ' + combined + '. '
+        if not future:
+            return label + ('Chưa có TP động hợp lệ phía trên EOD; nếu còn nắm giữ, '
+                            'ưu tiên kế hoạch thoát và mức dừng hiệu lực.')
+        return (label + 'Nếu vẫn nắm giữ, có thể theo dõi mục tiêu tiếp theo: '
+                + ', '.join(future) + '. Luôn đối chiếu cản gần và mức dừng; '
+                'không khẳng định lực mua chủ động, không suy ra lệnh đã khớp.')
+    return ('Chưa có cảnh báo bán theo MA20 hiện tại. ' + combined
+            + '. Nếu còn nắm giữ, theo dõi xu hướng, hỗ trợ và mức dừng hiệu lực.')
 
 def render_guard(context, viewed, daily):
     import streamlit as st
@@ -247,7 +310,16 @@ def render_guard(context, viewed, daily):
                    + '. Kiểm tra lịch sử chỉ dùng mức gốc.')
 
         st.markdown('**3. LƯU Ý NẾU VẪN ĐANG NẮM GIỮ**')
-        st.write(_position_interpretation(risk, life))
+        # Read exactly the same completed EOD bars used by T+2's volume panel.
+        from min_three_tab_context import _eod_volume_context
+        eod_volume = _eod_volume_context(daily, code, context['asof'])
+        if eod_volume is not None and ('price' not in risk or
+                abs(float(eod_volume['close']) - float(risk['price'])) > 0.011):
+            eod_volume = None
+        st.write('Cường độ khối lượng:', _flow_classification(eod_volume)[0])
+        st.write('Ưu thế nến:', _flow_classification(eod_volume)[1])
+        st.write('Xác nhận dòng tiền:', _flow_classification(eod_volume)[2])
+        st.write(_position_interpretation(risk, life, latest, eod_volume))
         st.caption('Không có dữ liệu tài khoản, giá vốn, khối lượng nắm giữ hoặc lệnh đã khớp. '
                    'Chạm ngưỡng bằng High–Low EOD không có nghĩa lệnh đã được thực hiện; '
                    'cảnh báo kỹ thuật hiện tại độc lập với kết quả tín hiệu gốc. '
