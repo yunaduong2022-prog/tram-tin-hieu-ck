@@ -23,7 +23,7 @@ def _number(value):
         return np.nan
 
 
-def rank_top10(history, daily, asof, max_results=10):
+def rank_top10(history, daily, asof, max_results=10, allowed_codes=None):
     """Select one recent eligible buy setup per ticker and rank it (0..100).
 
     Conservative exclusions: missing/invalid daily bars, mismatched EOD,
@@ -48,6 +48,12 @@ def rank_top10(history, daily, asof, max_results=10):
         return pd.DataFrame(columns=columns)
     h["Ngày tín hiệu"] = pd.to_datetime(h["Ngày tín hiệu"], errors="coerce").dt.normalize()
     h = h.dropna(subset=["Ngày tín hiệu"])
+    # Sector + cap intersection applied BEFORE Top 10 selection and scoring.
+    if allowed_codes is not None:
+        allowed = {str(code).strip().upper() for code in allowed_codes}
+        h = h[h["Mã"].astype(str).str.strip().str.upper().isin(allowed)]
+        if h.empty:
+            return pd.DataFrame(columns=columns)
     asof_day = pd.Timestamp(asof).normalize()
     d = daily.copy()
     d["Ngày"] = pd.to_datetime(d["Ngày"], errors="coerce").dt.normalize()
@@ -202,14 +208,63 @@ def _top10_table_html(show):
             + ''.join('<th scope="col">' + _esc(str(h), quote=True) + '</th>' for h in headers)
             + '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div>')
 
-def render_top10(history, daily, asof):
+
+# MIN_T2_TOP10_SECTOR_CAP_V2
+def render_top10(history, daily, asof, groups=None):
+    """Rank only eligible stocks in the chosen sector and index-cap member group.
+
+    The upper and lower sector controls share user selection via callbacks.
+    Market-cap groups use existing index-membership rosters, not guessed cap.
+    """
     import streamlit as st
     st.markdown("### TOP 10 CỔ PHIẾU MẠNH CÓ TÍN HIỆU MUA T+2")
-    st.caption("Xếp hạng độc lập các bộ lọc bên dưới · EOD " + pd.Timestamp(asof).strftime("%d/%m/%Y") +
-               " · T+0–T+5 · Không phải khuyến nghị mua tự động")
-    leaders = rank_top10(history, daily, asof)
+    st.caption("EOD " + pd.Timestamp(asof).strftime("%d/%m/%Y") +
+               " · T+0–T+5 · Xếp hạng sau khi lọc ngành và nhóm vốn hóa · Không phải khuyến nghị mua tự động")
+    sector_groups = {str(name): {str(c).strip().upper() for c in members}
+                     for name, members in (groups or {}).items() if members}
+    options = ["Toàn thị trường"] + sorted(sector_groups)
+    if "t2_top10_sector" not in st.session_state:
+        lower = st.session_state.get("t2_sector", "Toàn thị trường")
+        st.session_state["t2_top10_sector"] = lower if lower in options else "Toàn thị trường"
+    elif st.session_state["t2_top10_sector"] not in options:
+        st.session_state["t2_top10_sector"] = "Toàn thị trường"
+
+    def sync_sector_to_lower():
+        st.session_state["t2_sector"] = st.session_state["t2_top10_sector"]
+
+    a, b = st.columns(2)
+    with a:
+        selected_sector = st.selectbox("Ngành xếp hạng Top 10", options,
+                                        key="t2_top10_sector", on_change=sync_sector_to_lower,
+                                        help="Đồng bộ hai chiều với ô Ngành ở bộ lọc Trading T+2 bên dưới.")
+    with b:
+        selected_cap = st.selectbox("Nhóm vốn hóa Top 10", [
+            "Tất cả nhóm vốn hóa", "Vốn hóa lớn · VN30",
+            "Vốn hóa vừa · VNMidcap", "Vốn hóa nhỏ · VNSmallcap"],
+            key="t2_top10_cap",
+            help="Dùng danh sách thành viên VN30, VNMidcap, VNSmallcap của website; không phải phân loại theo mức vốn hóa tức thời.")
+
+    allowed = None if selected_sector == "Toàn thị trường" else sector_groups.get(selected_sector, set())
+    if selected_cap != "Tất cả nhóm vốn hóa":
+        # Reuse exactly the membership source already used by Thị trường > Nhóm vốn hóa.
+        import cap_groups as CG
+        members = CG.group_lists(None)
+        group_code = {"Vốn hóa lớn · VN30":"VN30", "Vốn hóa vừa · VNMidcap":"VNMIDCAP",
+                      "Vốn hóa nhỏ · VNSmallcap":"VNSMALLCAP"}[selected_cap]
+        group_members = {str(code).strip().upper() for code in members.get(group_code, [])}
+        if not group_members:
+            st.warning("Chưa có danh sách thành viên " + group_code +
+                       " trong dữ liệu nhóm vốn hóa. Không tự suy đoán phân loại cho các mã.")
+            return
+        allowed = group_members if allowed is None else allowed & group_members
+    if allowed is not None and not allowed:
+        st.info("Không có mã nào thuộc đồng thời ngành và nhóm vốn hóa đã chọn.")
+        return
+    scope = selected_sector + " · " + selected_cap
+    st.caption("Phạm vi đang xếp hạng: " + scope + ".")
+    leaders = rank_top10(history, daily, asof, allowed_codes=allowed)
     if leaders.empty:
-        st.info("Hiện không có mã đáp ứng đồng thời tín hiệu mua mới, xu hướng, khối lượng, vùng mua và R:R. Không bổ sung mã chỉ để đủ Top 10.")
+        st.info("Không có mã đáp ứng điều kiện mua T+2 trong phạm vi này. Không thêm mã chỉ để đủ Top 10.")
         return
     show = leaders.copy()
     show["Vol/TB20 EOD"] = show["Vol/TB20 EOD"].map(lambda x: f"{x:.2f}x")
@@ -218,4 +273,4 @@ def render_top10(history, daily, asof):
     st.markdown(_top10_table_html(show), unsafe_allow_html=True)
     with st.expander("Điều kiện Top 10 và cách tính điểm"):
         st.write("Chỉ lấy tín hiệu T+0–T+5, giá trên MA9/MA20, nến tăng và đóng cửa ở ≥60% biên độ, Vol/TB20 EOD ≥1.1x, RSI14 EOD 45–78, giá không quá 8% trên MA9, còn dư địa TP1 ≥5%, R:R EOD ≥2, chưa chạm cắt lỗ gốc theo dữ liệu có sẵn.")
-        st.write("Điểm 100 = MA 25 + RSI14 20 + Volume 20 + chất lượng nến 20 + dư địa/R:R 15. Đây là điểm xếp hạng T+ riêng, không phải điểm MA hoặc RS20 của các tab khác. Không xác nhận lệnh mua đã khớp.")
+        st.write("Điểm 100 = MA 25 + RSI14 20 + Volume 20 + chất lượng nến 20 + dư địa/R:R 15. Phân loại vốn hóa theo danh sách rổ chỉ số có sẵn; mã chưa được phân loại không xuất hiện trong bộ lọc nhóm tương ứng.")
