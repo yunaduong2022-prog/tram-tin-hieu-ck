@@ -527,6 +527,8 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     if d.empty:
         st.warning("Dữ liệu EOD chưa đầy đủ để chạy bộ lọc.")
         return
+    # # MIN_T2_TOP10_INDEPENDENT_EOD_V1: allocate position above the existing filters.
+    top10_slot = st.container()
     c1,c2,c3,c4 = st.columns(4)
     with c1:
         kind = st.selectbox("Loại tín hiệu", ["Tất cả"] + list(LABELS.values()), key="t2_kind")
@@ -556,6 +558,10 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     if not required_schema.issubset(hist.columns):
         st.error("Dữ liệu bộ lọc T+2 chưa đúng phiên bản. Vui lòng kiểm tra bản triển khai.")
         return
+    # Top 10 uses the UNFILTERED market history, before search/sector filters.
+    from min_t2_top10 import render_top10
+    with top10_slot:
+        render_top10(hist, d, asof)
     if symbols is not None:
         hist = hist[hist["Mã"].isin(symbols)]
     if search_codes:
