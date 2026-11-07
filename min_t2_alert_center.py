@@ -180,33 +180,35 @@ def _table_html(frame):
 
 def render_alert_center(history, daily, asof, groups=None):
     import streamlit as st
-    st.markdown("### TRUNG TÂM CẢNH BÁO TRADING T+2 · EOD")
-    st.caption("Chỉ quan sát tín hiệu T+0–T+15 theo EOD; không phải lệnh mua/bán, không giả định đang nắm giữ.")
-    sector = st.session_state.get("t2_top10_sector", "Toàn thị trường")
-    cap = st.session_state.get("t2_top10_cap", "Tất cả nhóm vốn hóa")
-    allowed, problem = allowed_symbols(groups, sector, cap)
-    st.caption("Dùng chung phạm vi ngành/vốn hóa với Top 10 ở phía trên: " + sector + " · " + cap + ".")
-    if problem:
-        st.warning(problem)
-        return
-    result = compute_alerts(history, daily, asof, scope=allowed)
-    if result.empty:
-        st.info("Không có tín hiệu T+0–T+15 với dữ liệu EOD khớp phiên trong phạm vi này.")
-        return
-    levels = ["Rủi ro", "Thiếu dữ liệu", "Mục tiêu", "Tín hiệu mới", "Theo dõi"]
-    selected = st.selectbox("Lọc mức cảnh báo", ["Tất cả"] + levels, key="t2_alert_level")
-    cols = st.columns(4)
-    counts = [("Tín hiệu mới", "Tín hiệu mới"), ("Theo dõi", "Theo dõi"),
-              ("Rủi ro", "Rủi ro"), ("Cần xác minh", "Thiếu dữ liệu")]
-    for col, (label, name) in zip(cols, counts):
-        col.metric(label, int((result["Mức độ"] == name).sum()))
-    if selected != "Tất cả":
-        result = result[result["Mức độ"] == selected]
-    st.caption(f"{len(result)} mã sau lọc · tối đa {LIMIT} dòng · cảnh báo từ tín hiệu gần nhất mỗi mã.")
-    if result.empty:
-        st.info("Không có mã trong mức cảnh báo đang chọn.")
-        return
-    show = result.head(LIMIT).copy()
-    show["Vol/TB20"] = show["Vol/TB20"].map(lambda x: f"{x:.2f}x" if pd.notna(x) else "—")
-    st.markdown(_table_html(show), unsafe_allow_html=True)
-    st.caption("Chạm cắt lỗ/TP gốc dựa vào High–Low từ phiên sau tín hiệu; không suy ra khớp lệnh. Cảnh báo MA20 dùng trạng thái giá/khối lượng EOD. 'Gần TP1' dùng TP1 gốc, không thay thế TP động trong bảng chi tiết. Thiếu phiên hoặc giá không khớp thì không kết luận an toàn.")
+    # MIN_T2_ALERT_EXPANDER_V1
+    with st.expander("🚨 TRUNG TÂM CẢNH BÁO TRADING T+2 · EOD — Nhấn để xem danh sách", expanded=False):
+        st.markdown("### TRUNG TÂM CẢNH BÁO TRADING T+2 · EOD")
+        st.caption("Chỉ quan sát tín hiệu T+0–T+15 theo EOD; không phải lệnh mua/bán, không giả định đang nắm giữ.")
+        sector = st.session_state.get("t2_top10_sector", "Toàn thị trường")
+        cap = st.session_state.get("t2_top10_cap", "Tất cả nhóm vốn hóa")
+        allowed, problem = allowed_symbols(groups, sector, cap)
+        st.caption("Dùng chung phạm vi ngành/vốn hóa với Top 10 ở phía trên: " + sector + " · " + cap + ".")
+        if problem:
+            st.warning(problem)
+            return
+        result = compute_alerts(history, daily, asof, scope=allowed)
+        if result.empty:
+            st.info("Không có tín hiệu T+0–T+15 với dữ liệu EOD khớp phiên trong phạm vi này.")
+            return
+        levels = ["Rủi ro", "Thiếu dữ liệu", "Mục tiêu", "Tín hiệu mới", "Theo dõi"]
+        selected = st.selectbox("Lọc mức cảnh báo", ["Tất cả"] + levels, key="t2_alert_level")
+        cols = st.columns(4)
+        counts = [("Tín hiệu mới", "Tín hiệu mới"), ("Theo dõi", "Theo dõi"),
+                  ("Rủi ro", "Rủi ro"), ("Cần xác minh", "Thiếu dữ liệu")]
+        for col, (label, name) in zip(cols, counts):
+            col.metric(label, int((result["Mức độ"] == name).sum()))
+        if selected != "Tất cả":
+            result = result[result["Mức độ"] == selected]
+        st.caption(f"{len(result)} mã sau lọc · tối đa {LIMIT} dòng · cảnh báo từ tín hiệu gần nhất mỗi mã.")
+        if result.empty:
+            st.info("Không có mã trong mức cảnh báo đang chọn.")
+            return
+        show = result.head(LIMIT).copy()
+        show["Vol/TB20"] = show["Vol/TB20"].map(lambda x: f"{x:.2f}x" if pd.notna(x) else "—")
+        st.markdown(_table_html(show), unsafe_allow_html=True)
+        st.caption("Chạm cắt lỗ/TP gốc dựa vào High–Low từ phiên sau tín hiệu; không suy ra khớp lệnh. Cảnh báo MA20 dùng trạng thái giá/khối lượng EOD. 'Gần TP1' dùng TP1 gốc, không thay thế TP động trong bảng chi tiết. Thiếu phiên hoặc giá không khớp thì không kết luận an toàn.")
