@@ -627,7 +627,7 @@ def _action_ctx(code):
         if c.empty:
             return None
         ma = {n: (float(c.rolling(n).mean().iloc[-1]) if len(c) >= n else None) for n in (20, 50, 200)}
-        w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb12").get(code, {})
+        w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb13").get(code, {})
         state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
         a = analyze_cached(frames, code, "D", DATA_KEY)
         d = mtf_cached(frames, code, DATA_KEY)["D"]
@@ -1420,7 +1420,7 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb12")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb13")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 def _meta_files_sig() -> str:
@@ -1773,15 +1773,17 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
 def page_buy_now():
     st.title("⚡ Mua ngay")
     header()
-    st.caption("Các mã có thể vào lệnh ngay: đã có tín hiệu mua hoặc đang test hỗ trợ với khối lượng cạn, và giá đang nằm trong vùng mua. "
-               "Lọc từ mục **Chờ mua** (nhóm Điểm mua đã xác nhận), bỏ các mã đã có tín hiệu BÁN / CHỐT LỜI. "
-               "Nên chia lệnh và tuân thủ mức cắt lỗ trên thẻ. Chỉ phục vụ nghiên cứu, không phải khuyến nghị đầu tư.")
+    st.caption("Tín hiệu theo giá EOD cuối phiên, KHÔNG phải báo giá realtime. Gồm mã đã xác nhận mua trong vùng tối ưu, "
+               "hoặc mã ngoài vùng tối ưu nhưng TP1 còn ≥10%, R:R tại EOD ≥2,5, rủi ro ≤8%, có xác nhận kỹ thuật ngày/tuần "
+               "và đủ thanh khoản. Mã có tín hiệu BÁN / CHỐT LỜI, phân kỳ RSI xấu hoặc cản gần không đạt bị loại. "
+               "Giá khớp phiên tiếp theo có thể khác EOD; phải đánh giá lại trước khi mua. Chỉ phục vụ nghiên cứu.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     d = _buy_now_table(_wb_table())
     m = st.columns(3)
+    _eod = d["Vào theo EOD"].fillna(False).astype(bool) if "Vào theo EOD" in d else pd.Series(False, index=d.index)
     m[0].metric("MÃ CÓ THỂ VÀO NGAY", f"{len(d)} mã")
-    for col, stt in zip(m[1:], (WB.BUY_SIGNAL, WB.GOOD_ENTRY)):
-        col.metric("MUA" if stt == WB.GOOD_ENTRY else stt.upper(), int((d["Trạng thái"] == stt).sum()))
+    m[1].metric("MUA THEO VÙNG", f"{int((~_eod).sum())} mã")
+    m[2].metric("MUA THEO GIÁ EOD", f"{int(_eod.sum())} mã")
     if d.empty:
         st.info("Hiện chưa có mã nào ở trạng thái Mua ngay. Xem mục **Chờ mua** để theo dõi các mã sắp có điểm mua.")
         return
@@ -1800,7 +1802,7 @@ def page_buy_now():
     cols = st.columns(3)
     for i, (_, r) in enumerate(d.head(len(d) if show_all else WB_PER_GROUP).iterrows()):
         with cols[i % 3]:
-            if r["Trạng thái"] in (WB.BUY_SIGNAL, WB.GOOD_ENTRY):      # nhãn trên thẻ Mua ngay: "MUA" (tên trạng thái trong dữ liệu giữ nguyên)
+            if r["Trạng thái"] in (WB.BUY_SIGNAL, WB.GOOD_ENTRY) or bool(r.get("Vào theo EOD", False)):  # nhãn trên thẻ Mua ngay: "MUA"
                 r = r.copy()
                 r["Trạng thái"] = "MUA"
             _wb_card(r, str(r["Danh sách"]))
