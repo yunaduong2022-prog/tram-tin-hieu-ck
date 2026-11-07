@@ -309,17 +309,74 @@ def render_guard(context, viewed, daily):
                    + ' | Mục tiêu đang HIỂN THỊ: TP1 ' + fmt(dyn_tp1) + ' · TP2 ' + fmt(dyn_tp2)
                    + '. Kiểm tra lịch sử chỉ dùng mức gốc.')
 
-        st.markdown('**3. LƯU Ý NẾU VẪN ĐANG NẮM GIỮ**')
-        # Read exactly the same completed EOD bars used by T+2's volume panel.
+        # MIN_T2_COLORED_HOLDING_V1
+        # Preserve the existing risk/lifecycle/volume rules; change presentation only.
+        from html import escape as _escape_html
         from min_three_tab_context import _eod_volume_context
         eod_volume = _eod_volume_context(daily, code, context['asof'])
         if eod_volume is not None and ('price' not in risk or
                 abs(float(eod_volume['close']) - float(risk['price'])) > 0.011):
             eod_volume = None
-        st.write('Cường độ khối lượng:', _flow_classification(eod_volume)[0])
-        st.write('Ưu thế nến:', _flow_classification(eod_volume)[1])
-        st.write('Xác nhận dòng tiền:', _flow_classification(eod_volume)[2])
-        st.write(_position_interpretation(risk, life, latest, eod_volume))
+        intensity, dominance, combined = _flow_classification(eod_volume)
+        commentary = _position_interpretation(risk, life, latest, eod_volume)
+        # Priority: missing/ambiguous and stop/bearish are never promoted as "hold for TP".
+        lifecycle_status = str(life.get('status', 'CHƯA ĐỦ DỮ LIỆU'))
+        risk_status = str(risk.get('status', 'CHƯA ĐỦ DỮ LIỆU'))
+        red = (lifecycle_status == 'ĐÃ CHẠM CẮT LỖ GỐC' or
+               risk_status in ('BÁN / HẠ TỶ TRỌNG', 'CẢNH BÁO BÁN'))
+        uncertain = (lifecycle_status == 'CHƯA ĐỦ DỮ LIỆU' or
+                     lifecycle_status.startswith('CHẠM CẢ CẮT LỖ VÀ TP'))
+        amber = (risk_status == 'SUY YẾU' or dominance == 'Hai bên giằng co' or
+                 combined == 'Giao dịch mạnh nhưng chưa xác nhận bên thắng thế')
+        bullish = (combined == 'Lực mua mạnh được xác nhận theo giá–khối lượng' and
+                   risk_status == 'THEO DÕI GIỮ')
+        if red:
+            palette = ('#3A2025', '#B85A68', '#FFACB5', 'ƯU TIÊN QUẢN TRỊ RỦI RO')
+        elif uncertain:
+            palette = ('#252C31', '#748995', '#D1DCE2', 'CẦN XÁC MINH DỮ LIỆU')
+        elif amber:
+            palette = ('#372B1A', '#B58A43', '#FFD18A', 'THEO DÕI THẬN TRỌNG')
+        elif bullish:
+            palette = ('#17352B', '#438D69', '#A0EAC0', 'THEO DÕI MỤC TIÊU')
+        else:
+            palette = ('#24312C', '#587769', '#D0E7DB', 'THEO DÕI VỊ THẾ')
+        bg, outline, accent, headline = palette
+        safe = lambda value: _escape_html(str(value), quote=True)
+        # Goal chips are informational and only shown if genuinely above latest EOD.
+        goal_html = ''
+        if (not red and not uncertain and risk_status == 'THEO DÕI GIỮ' and
+                lifecycle_status in ('ĐÃ CHẠM TP1 GỐC', 'ĐÃ CHẠM TP2 GỐC')):
+            current_price = _num(risk.get('price'))
+            candidates = []
+            for name, field in (('TP1 ĐỘNG', 'Mục tiêu 1'), ('TP2 ĐỘNG', 'Mục tiêu 2')):
+                target = _num(latest.get(field))
+                if np.isfinite(current_price) and np.isfinite(target) and target > current_price:
+                    candidates.append((name, target))
+            if candidates:
+                goal_html = '<div style="display:flex;flex-wrap:wrap;gap:12px;margin:12px 0 2px">' + ''.join(
+                    '<div style="min-width:124px;padding:9px 13px;border:1px solid '+outline+';'
+                    'border-radius:8px;background:rgba(255,255,255,.035)">'
+                    '<div style="font-size:11px;letter-spacing:.04em;opacity:.85">'+safe(name)+'</div>'
+                    '<div style="font-size:21px;font-weight:700;color:'+accent+'">'+f'{price:.2f}'+'</div></div>'
+                    for name, price in candidates) + '</div>'
+        html = (
+            '<section style="max-width:950px;background:'+bg+';border:1px solid '+outline+';'
+            'border-left:4px solid '+outline+';border-radius:11px;padding:18px 20px;'
+            'margin:10px 0 12px;color:#F0F4F1;font-size:14px;line-height:1.65">'
+            '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;'
+            'align-items:center;gap:8px;margin-bottom:12px">'
+            '<div style="font-size:14px;font-weight:700;color:'+accent+'">'
+            '03 / LƯU Ý NẾU VẪN ĐANG NẮM GIỮ</div>'
+            '<div style="font-size:11px;font-weight:700;color:'+accent+'">'+safe(headline)+'</div></div>'
+            '<div style="display:grid;grid-template-columns:1fr;gap:5px">'
+            '<div><span style="color:#BDCEC4">Cường độ khối lượng:</span> <b>'+safe(intensity)+'</b></div>'
+            '<div><span style="color:#BDCEC4">Ưu thế nến:</span> <b>'+safe(dominance)+'</b></div>'
+            '<div><span style="color:#BDCEC4">Xác nhận dòng tiền:</span> <b>'+safe(combined)+'</b></div>'
+            '</div>'+goal_html+
+            '<p style="margin:13px 0 0;font-size:14px;line-height:1.75">'+safe(commentary)+'</p>'
+            '</section>'
+        )
+        st.markdown(html, unsafe_allow_html=True)
         st.caption('Không có dữ liệu tài khoản, giá vốn, khối lượng nắm giữ hoặc lệnh đã khớp. '
                    'Chạm ngưỡng bằng High–Low EOD không có nghĩa lệnh đã được thực hiện; '
                    'cảnh báo kỹ thuật hiện tại độc lập với kết quả tín hiệu gốc. '
