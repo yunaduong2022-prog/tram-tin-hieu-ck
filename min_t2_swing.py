@@ -518,6 +518,15 @@ def _table_html(data):
     return style + '<div class="t2outer"><table class="t2table"><thead><tr>' + "".join('<th class="t2eod-head">'+e(h)+'</th>' if h == 'Giá EOD' else '<th>'+e(h)+'</th>' for h in headers) + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table></div>'
 
 
+
+
+# MIN_T2_TOP10_SECTOR_CAP_V2: keep both industry selectors in sync in callbacks.
+def _top10_from_lower():
+    import streamlit as st
+    selected = st.session_state.get("t2_sector", "Toàn thị trường")
+    st.session_state["t2_top10_sector"] = selected
+
+
 def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V1
     import streamlit as st
     st.title("Trading T+2 · Dòng tiền vào sớm")
@@ -535,7 +544,7 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     with c2:
         min_vol = st.selectbox("Vol/TB20 tối thiểu", ["Tất cả", "1.1x", "1.5x", "2.0x", "3.0x"], key="t2_vol")
     with c3:
-        sector = st.selectbox("Ngành", ["Toàn thị trường"] + list((groups or {}).keys()), key="t2_sector")
+        sector = st.selectbox("Ngành", ["Toàn thị trường"] + list((groups or {}).keys()), key="t2_sector", on_change=_top10_from_lower)
     with c4:
         state = st.selectbox("Trạng thái", ["Tất cả", "Mới T+0", "Đang theo dõi"], key="t2_state")
     # MIN_T2_SYMBOL_SEARCH_V1: filter only the display; preserve full-market scan/cache.
@@ -561,7 +570,7 @@ def render(daily, asof, groups=None, context_loader=None):  # MIN_3TAB_CONTEXT_V
     # Top 10 uses the UNFILTERED market history, before search/sector filters.
     from min_t2_top10 import render_top10
     with top10_slot:
-        render_top10(hist, d, asof)
+        render_top10(hist, d, asof, groups=groups)
     if symbols is not None:
         hist = hist[hist["Mã"].isin(symbols)]
     if search_codes:
