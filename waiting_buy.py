@@ -29,6 +29,10 @@ CFG = {
     "buy_lookback": 5,          # tìm tín hiệu mua trong N phiên gần nhất
     "buy_max_chase": 5.0,       # % giá hiện tại được cao hơn giá lúc phát tín hiệu (>3% chỉ mua thận trọng)
     "buy_caution_chase": 3.0,
+    "eod_min_upside": 10.0,    # ngoài vùng mua: TP1 so với giá EOD >= 10%
+    "eod_min_rr": 2.5,         # ngoài vùng mua: R:R tính tại giá EOD >= 2.5
+    "eod_max_risk": 8.0,      # rủi ro từ EOD đến stop không vượt 8%
+    "eod_min_vol20": 100000,  # bình quân >= 100 nghìn CP/phiên
     "support_touch": 3.0,       # % giá được cao hơn hỗ trợ để coi là "đang ở vùng hỗ trợ"
     "dry_vol": 0.8,             # Vol(5 phiên) / MA20 Vol <= ngưỡng => cạn kiệt
     "min_rr": 2.0,              # R:R tối thiểu cho "Điểm mua đẹp"
@@ -603,6 +607,148 @@ def _final_entry_check(plan: dict, price) -> tuple[bool, str]:
     return True, "Giá EOD trong vùng mua; R:R và cản gần đạt điều kiện cuối cùng"
 
 
+# MIN_EOD_BUY_NOW_RR_V1
+# A separate, conservative EOD path: an obsolete optimal zone must not be
+# mistaken for today's executable entry. The original zone-based gate stays intact.
+def _eod_entry_check(plan: dict, price) -> tuple[bool, str]:
+    """Check price/TP1/stop at the CURRENT EOD, never the old planned entry.
+
+    Only price ABOVE an existing valid buy zone may use this exception. No
+    fabricated 2R target: a real, forward technical resistance is required.
+    """
+    now, lo, hi = (_f(price), _f(plan.get("Vùng mua từ")), _f(plan.get("Vùng mua đến")))
+    stop, tp1, resistance = (_f(plan.get("Cắt lỗ")), _f(plan.get("Mục tiêu 1")),
+                             _f(plan.get("Cản gần")))
+    if not (np.isfinite(now) and np.isfinite(lo) and np.isfinite(hi)
+            and 0 < lo <= hi < now):
+        return False, "Giá EOD phải nằm trên vùng mua tối ưu hợp lệ; không bắt đáy dưới vùng"
+    if not (np.isfinite(stop) and np.isfinite(tp1) and 0 < stop < now < tp1):
+        return False, "TP1 hoặc cắt lỗ không hợp lệ theo giá EOD hiện tại"
+    upside = (tp1 / now - 1) * 100
+    rr = _final_rr(now, stop, tp1)
+    risk_pct = (1 - stop / now) * 100
+    if upside + 1e-8 < CFG["eod_min_upside"]:
+        return False, f"TP1 còn {upside:.1f}%, dưới {CFG['eod_min_upside']:.0f}% tại EOD"
+    if not np.isfinite(rr) or rr + 1e-8 < CFG["eod_min_rr"]:
+        return False, f"R:R theo giá EOD chỉ {rr:.2f}, dưới {CFG['eod_min_rr']:.1f}"
+    if risk_pct > CFG["eod_max_risk"] + 1e-8:
+        return False, f"Khoảng cách tới cắt lỗ {risk_pct:.1f}% quá lớn"
+    if not np.isfinite(resistance) or resistance <= now:
+        return False, "Thiếu kháng cự kỹ thuật thực tế phía trên giá EOD; TP 2R giả định không đủ xác nhận"
+    if resistance < tp1:
+        near_gain = (resistance / now - 1) * 100
+        near_rr = _final_rr(now, stop, resistance)
+        if near_gain + 1e-8 < CFG["eod_min_upside"] or (not np.isfinite(near_rr) or near_rr + 1e-8 < CFG["eod_min_rr"]):
+            return False, (f"Cản gần {resistance:.2f} chỉ còn {near_gain:.1f}%, "
+                           f"R:R {near_rr:.2f}: chưa đủ khoảng trống đến cản")
+    return True, f"TP1 còn {upside:.1f}%; R:R EOD {rr:.2f}; rủi ro {risk_pct:.1f}%"
+
+
+def _eod_technical_check(g: pd.DataFrame, w: pd.DataFrame | None,
+                         row: pd.Series, plan: dict) -> tuple[bool, str]:
+    """No buy from upside alone: require trend, liquidity, non-bearish RSI and a confirmed setup.
+
+    An already confirmed G1 setup qualifies; G2 only with a fresh real signal
+    and sufficient screening strength. G3/recovery/overbought/risk never qualify.
+    """
+    state = plan.get("Trạng thái")
+    if state not in ACT_NOW and state not in (WATCH, NEAR_ZONE, EARLY_UP, ACCUM):
+        return False, "Trạng thái chưa xác nhận điểm mua"
+    if sell_action_of(plan.get("Lý do")):
+        return False, "Có tín hiệu BÁN / CHỐT LỜI"
+    if _rsi_bearish(g, w) is not None:
+        return False, "Có cảnh báo phân kỳ RSI giảm còn hiệu lực"
+    f = _features(g, w, row)
+    now = _f(row.get("Giá"))
+    if not np.isfinite(now) or not np.isfinite(f["c"]) or abs(now / f["c"] - 1) > .005:
+        return False, "Giá sàng lọc lệch giá EOD lịch sử: không dùng dữ liệu không đồng bộ"
+    if not (f["has_week"] and f["up"] and f["up_d"] and f["up_w"]
+            and f["c"] > f["ema10"] and f["c"] > f["ema20"]
+            and np.isfinite(f["ema20_5"]) and f["ema20"] >= f["ema20_5"] * .995):
+        return False, "Chưa đủ xác nhận xu hướng tăng đồng thuận ngày/tuần"
+    if (not np.isfinite(f["vol20"]) or f["vol20"] < CFG["eod_min_vol20"]
+            or not np.isfinite(f["vol_now"]) or f["vol_now"] <= 0):
+        return False, "Thanh khoản chưa đạt yêu cầu tại EOD"
+    if _f(f.get("chg"), 0.0) < -1.0 or _f(f.get("drop5"), 0.0) < -2.5:
+        return False, "Giá đang giảm ngắn hạn, không mua theo đà giảm"
+    if f["pv_recent"] & BEARISH_PV:
+        return False, "Gần đây có tín hiệu giá/khối lượng suy yếu"
+    if state in ACT_NOW:
+        return True, "Điểm mua đã xác nhận + xu hướng ngày/tuần đồng thuận"
+    recent = _recent_buy_signal(g, CFG["buy_lookback"])
+    if (not recent or not np.isfinite(_f(recent.get("close")))
+            or f["c"] < _f(recent.get("close"))
+            or f["score"] < 6.0 or not np.isfinite(f["rs20"]) or f["rs20"] < 1.0):
+        return False, "Nhóm chờ mua cần tín hiệu mua thật còn hiệu lực + Score >= 6 và RS20 >= 1"
+    return True, "Tín hiệu mua mới + xu hướng ngày/tuần đồng thuận + Score/RS đạt chuẩn"
+
+
+# MIN_EOD_MARKET_LEVELS_FIX_V2
+# Independent executable EOD plan: derive REAL resistance target and protective
+# stop from recent price structure; never inherit the MA20-zone stop or 2R chart TP.
+def _eod_market_plan(g: pd.DataFrame, row: pd.Series, original: dict) -> tuple[dict | None, str]:
+    now = _f(row.get("Giá"))
+    lo, hi = _f(original.get("Vùng mua từ")), _f(original.get("Vùng mua đến"))
+    if not (np.isfinite(now) and np.isfinite(lo) and np.isfinite(hi)
+            and 0 < lo <= hi < now):
+        return None, "Giá hiện tại chưa vượt vùng mua tối ưu"
+    if len(g) < 20 or "ATR" not in g or "Giá thấp nhất" not in g:
+        return None, "Thiếu dữ liệu đáy 10 phiên hoặc ATR cho điểm dừng kỹ thuật"
+    close = _f(g["Giá đóng cửa"].iat[-1])
+    atr = _f(g["ATR"].iat[-1])
+    low10 = _f(pd.to_numeric(g["Giá thấp nhất"].tail(10), errors="coerce").min())
+    if not (np.isfinite(close) and abs(close / now - 1) <= .005
+            and np.isfinite(atr) and atr > 0 and np.isfinite(low10)
+            and 0 < low10 < now):
+        return None, "Giá EOD không đồng bộ hoặc thiếu ATR/đáy kỹ thuật hợp lệ"
+
+    # Technical invalidation: below the actual 10-session swing low, padded by
+    # 0.35 ATR; demand at least 1.2 ATR of room to avoid a fragile noise stop.
+    stop = min(low10 - .35 * atr, now - 1.2 * atr)
+    if stop <= 0 or stop >= now:
+        return None, "Không xác định được điểm cắt lỗ theo đáy 10 phiên"
+
+    # Price resistance must be a measured structure, not the chart's synthetic
+    # 2R forecast target. Reject when none remains above today's market price.
+    try:
+        f = _features(g, None, row)
+        sources = (("kháng cự 20 phiên", f.get("res")),
+                   ("đỉnh 60 phiên", f.get("hi60")),
+                   ("đỉnh 52 tuần", f.get("hi52")))
+    except Exception:
+        return None, "Không tính được kháng cự từ dữ liệu giá"
+    levels = sorted({round(_f(v), 4) for _, v in sources
+                     if np.isfinite(_f(v)) and _f(v) > now * 1.01})
+    if not levels:
+        return None, "Không có kháng cự thực tế phía trên EOD: không dùng TP 2R giả định"
+    tp1 = levels[0]
+    tp2 = next((v for v in levels[1:] if v > tp1 * 1.01), np.nan)
+    label = next((name for name, v in sources if np.isfinite(_f(v))
+                  and abs(_f(v) - tp1) < .00011), "kháng cự cấu trúc")
+    candidate = dict(original)
+    candidate.update({"Giá vào": now, "Cắt lỗ": stop,
+                      "Mục tiêu 1": tp1, "Mục tiêu 2": tp2,
+                      "Cản gần": tp1})
+    return candidate, f"TP1 là {label} {tp1:.2f}; stop dưới đáy 10 phiên {low10:.2f} (ATR {atr:.2f})"
+
+
+def _apply_eod_entry(plan: dict, price, levels_note: str, tech_note: str) -> None:
+    """Promote on a copy of this row; preserve original optimal buy zone and stop/TP."""
+    now = float(price)
+    stop, tp1, tp2 = (_f(plan.get("Cắt lỗ")), _f(plan.get("Mục tiêu 1")),
+                       _f(plan.get("Mục tiêu 2")))
+    plan["Hành động"] = "Vào ngay"
+    plan["Vào theo EOD"] = True
+    plan["Giá vào"] = now
+    plan["Cắt lỗ %"] = (stop / now - 1) * 100
+    plan["Lời 1 %"] = (tp1 / now - 1) * 100
+    plan["Lời 2 %"] = (tp2 / now - 1) * 100 if np.isfinite(tp2) else np.nan
+    plan["R:R"] = round(_final_rr(now, stop, tp1), 3)
+    plan["Ghi chú hành động"] = ("MUA THEO GIÁ EOD (ngoài vùng mua tối ưu): " + levels_note
+                                 + "; " + tech_note
+                                 + ". Giá EOD không phải giá khớp lệnh; kiểm tra lại R:R và tín hiệu trước khi đặt lệnh.")
+
+
 def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
     """Phân loại toàn bộ rổ. Trả về bảng mỗi mã một dòng, kèm cột Danh sách để lọc."""
     wg = {code: gg for code, gg in frames["W"].groupby("Mã")}
@@ -641,6 +787,36 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         if res["Hành động"] == "Vào ngay" and not final_ok:
             res["Hành động"] = "Chờ mua"
             res["Ghi chú hành động"] = "Có tín hiệu mua nhưng chưa đủ điều kiện giải ngân: " + final_note
+        # Separate EOD override: do not reuse the MA20-zone stop or 2R chart TP.
+        # Build a separate, technically anchored plan BEFORE applying RR/8% gates.
+        res["Vào theo EOD"] = False
+        res["Dư địa TP1 EOD %"] = np.nan
+        res["R:R EOD"] = np.nan
+        if res["Hành động"] != "Vào ngay" and res["Danh sách"] in BUY_GROUPS:
+            _now = _f(r.get("Giá"))
+            candidate, source_note = _eod_market_plan(g.reset_index(drop=True), r, res)
+            if candidate is not None:
+                res["Dư địa TP1 EOD %"] = (candidate["Mục tiêu 1"] / _now - 1) * 100
+                res["R:R EOD"] = _final_rr(_now, candidate["Cắt lỗ"], candidate["Mục tiêu 1"])
+                eod_ok, eod_note = _eod_entry_check(candidate, _now)
+                if eod_ok:
+                    try:
+                        technical_ok, technical_note = _eod_technical_check(
+                            g.reset_index(drop=True), wg.get(code), r, res)
+                    except Exception:
+                        technical_ok, technical_note = False, "Không kiểm chứng được tín hiệu kỹ thuật"
+                    if technical_ok:
+                        # Rewrite displayed EOD stop/TP *only after* all checks.
+                        # Keep the original optimal buy zone unchanged.
+                        for k in ("Cắt lỗ", "Mục tiêu 1", "Mục tiêu 2", "Cản gần"):
+                            res[k] = candidate[k]
+                        _apply_eod_entry(res, _now, eod_note + "; " + source_note, technical_note)
+                    else:
+                        res["Ghi chú hành động"] += "; EOD chưa mua: " + technical_note
+                else:
+                    res["Ghi chú hành động"] += "; EOD chưa mua: " + eod_note
+            elif np.isfinite(_now) and np.isfinite(_f(res.get("Vùng mua đến"))) and _now > _f(res["Vùng mua đến"]):
+                res["Ghi chú hành động"] += "; EOD chưa mua: " + source_note
         res["Hành động bán"] = sell_action_of(res.get("Lý do"))
         try:
             res["Tăng từ đáy %"] = _leg_structure(g.reset_index(drop=True))["leg_gain"]
@@ -660,7 +836,7 @@ def build_waiting_buy(frames: dict, screener: pd.DataFrame) -> pd.DataFrame:
         rows.append({"Mã": code, "Giá": r["Giá"], "Chg %": r.get("Chg_%", np.nan), "Score": r["Score"], "RS20": r["RS20"], "Nhóm": r.get("Nhóm", ""), **res})
     cols = ["Mã", "Giá", "Chg %", "Score", "RS20", "Nhóm", "Trạng thái", "Danh sách", "Lý do", "Hành động", "Hành động bán", "Tăng từ đáy %", "Tăng từ đáy hiện tại %", "Giảm từ đỉnh %", "Ghi chú hành động",
             "Vùng mua từ", "Vùng mua đến", "Giá vào", "Cắt lỗ", "Cắt lỗ %", "Mục tiêu 1", "Lời 1 %", "Mục tiêu 2", "Lời 2 %",
-            "R:R", "Cản gần", "Cách vùng mua %"]
+            "R:R", "Cản gần", "Cách vùng mua %", "Vào theo EOD", "Dư địa TP1 EOD %", "R:R EOD"]
     out = pd.DataFrame(rows)
     for col in cols:
         if col not in out:
@@ -675,7 +851,7 @@ def sort_group(d: pd.DataFrame, group: str) -> pd.DataFrame:
             .drop(columns="_o"))
 
 
-def ladder_html(code, price, zone_lo, zone_hi, go, sl, sl_pct, tp1, tp1_pct, tp1_tag, tp2, tp2_pct, tp2_tag, note, foot, extra="") -> str:
+def ladder_html(code, price, zone_lo, zone_hi, go, sl, sl_pct, tp1, tp1_pct, tp1_tag, tp2, tp2_pct, tp2_tag, note, foot, extra="", eod_entry=False) -> str:
     """Khung Vùng mua dạng THANG GIÁ: Mục tiêu 2 > Mục tiêu 1 > Vùng mua (nổi bật) > Cắt lỗ, đúng thứ tự giá từ cao xuống thấp.
     Dùng chung cho thẻ Chờ mua / Mua ngay / Watchlist và khối đa khung ở mục Lọc tất cả CP. Các % tính so với `price`.
     tp1_tag / tp2_tag: HTML nhỏ cạnh nhãn mục tiêu (vd. R:R); tp2 = None thì bỏ dòng Mục tiêu 2. Viết liền một dòng cho Markdown."""
@@ -687,11 +863,13 @@ def ladder_html(code, price, zone_lo, zone_hi, go, sl, sl_pct, tp1, tp1_pct, tp1
     if tp2 is not None and not pd.isna(tp2):
         rows += f'<div class="wb-lr"><span class="wb-lab">Mục tiêu 2{tp2_tag}</span><b class="wb-grn">{px(tp2)}{sg(tp2_pct)}</b></div>'
     rows += f'<div class="wb-lr"><span class="wb-lab">Mục tiêu 1{tp1_tag}</span><b class="wb-grn">{px(tp1)}{sg(tp1_pct)}</b></div>'
+    if eod_entry:
+        rows += f'<div class="wb-lr"><span class="wb-lab">Điểm vào tham chiếu EOD</span><b>{px(price)}</b></div>'
     return ('<div class="wb-box wb-ladder">'
             f'<div class="wb-lh"><span class="wb-codebig">{esc(str(code))}</span>'
             f'<span class="wb-lhr"><span class="wb-lpx">Giá<b>{px(price)}</b></span>{badge}</span></div>'
             + rows +
-            f'<div class="wb-lr wb-lz{"" if go else " wait"}"><span class="wb-lab">Vùng mua</span><span class="wb-zv">{px(zone_lo)} – {px(zone_hi)}</span></div>'
+            f'<div class="wb-lr wb-lz{"" if go else " wait"}"><span class="wb-lab">{"Vùng mua tối ưu" if eod_entry else "Vùng mua"}</span><span class="wb-zv">{px(zone_lo)} – {px(zone_hi)}</span></div>'
             f'<div class="wb-lr"><span class="wb-lab">Cắt lỗ nếu sai</span><b class="wb-red">{px(sl)}{sg(sl_pct)}</b></div>'
             f'<div class="wb-lnote">{esc(note)}</div>{extra}'
             f'<div class="wb-foot" style="margin-top:12px;text-align:right">{esc(foot)}</div></div>')
@@ -803,6 +981,8 @@ def table_html(d: pd.DataFrame, group: str, sector_of=None, ma_of=None) -> str:
         zone = "—" if pd.isna(r.get("Vùng mua từ")) else f'{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}'
         act = r.get("Hành động")
         act_html = f'<span class="go">{"✔ Vào được ngay" if act == "Vào ngay" else "⏳ Chờ mua"}</span>' if pd.notna(r.get("Vùng mua từ")) else ""
+        if bool(r.get("Vào theo EOD", False)):
+            act_html += f'<small>Điểm vào theo giá EOD: {px(r["Giá vào"])} (vùng trên là vùng mua tối ưu)</small>'
         mas = (ma_of(str(r["Mã"])) if ma_of else None) or {}
 
         def ma_cell(n):
@@ -886,7 +1066,7 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             r["Mã"], r.get("Giá vào"), r["Vùng mua từ"], r["Vùng mua đến"], go, r["Cắt lỗ"], r["Cắt lỗ %"],
             r["Mục tiêu 1"], r["Lời 1 %"], tag(_rr_label(r, "Mục tiêu 1")),
             r["Mục tiêu 2"], r["Lời 2 %"], tag(_rr_label(r, "Mục tiêu 2")),
-            _sentence(r["Ghi chú hành động"]), foot_text) + '</div>'
+            _sentence(r["Ghi chú hành động"]), foot_text, eod_entry=bool(r.get("Vào theo EOD", False))) + '</div>'
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
     html += action_html   # "Tóm tắt nhanh · Kết luận hành động" (action_summary.html)
