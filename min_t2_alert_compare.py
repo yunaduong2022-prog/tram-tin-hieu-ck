@@ -67,7 +67,7 @@ def _lifecycle_display(data):
     """T+0 has no post-signal daily bar; keep the raw lifecycle unchanged."""
     status, reason = data["life_status"], data["life_reason"]
     if data["age"] == 0 and status == "CHƯA CHẠM CẮT LỖ/TP GỐC":
-        return ("T+0 · Chưa có phiên kiểm chứng",
+        return ("Chưa chạm cắt lỗ/TP gốc",
                 "Ngày phát tín hiệu; chưa có phiên EOD sau tín hiệu để kiểm tra "
                 "High–Low với cắt lỗ/TP gốc. Không kết luận mức gốc an toàn.")
     return status, reason
