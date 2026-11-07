@@ -176,6 +176,38 @@ def signal_lifecycle(daily, signal, asof):
             'date': None}
 
 
+# MIN_T2_GUARD_THREE_SECTION_UI_V1
+
+def _position_interpretation(risk, life):
+    """Conditional commentary, never a position or execution determination."""
+    risk_status = str(risk.get('status', 'CHƯA ĐỦ DỮ LIỆU'))
+    lifecycle = str(life.get('status', 'CHƯA ĐỦ DỮ LIỆU'))
+    if lifecycle == 'CHƯA ĐỦ DỮ LIỆU':
+        return ('Không đủ lịch sử để xác nhận kết quả tín hiệu gốc. '
+                'Nếu đang có vị thế, đối chiếu lịch sử giá và lệnh thực tế trước khi quyết định.')
+    if lifecycle.startswith('CHẠM CẢ CẮT LỖ VÀ TP'):
+        return ('Trong một phiên, giá đã chạm cả cắt lỗ và mục tiêu gốc; '
+                'không biết thứ tự khớp từ OHLC. Cần xem lại dữ liệu giao dịch thực tế.')
+    if lifecycle == 'ĐÃ CHẠM CẮT LỖ GỐC':
+        return ('Thiết lập mua gốc đã bị vi phạm mức cắt lỗ trên dữ liệu giá. '
+                'Nếu vẫn đang nắm giữ, cần đánh giá lại kế hoạch rủi ro; '
+                'không coi mục tiêu còn xa là tín hiệu mua mới.')
+    if lifecycle in ('ĐÃ CHẠM TP1 GỐC', 'ĐÃ CHẠM TP2 GỐC'):
+        return ('Mục tiêu GỐC từng được giá chạm; không suy ra đã chốt lời hoặc vị thế đã đóng. '
+                'Nếu vẫn đang nắm giữ, đối chiếu lệnh thực tế, mức dừng đang áp dụng '
+                'và xu hướng kỹ thuật hiện tại; mục tiêu ĐỘNG trên bảng có thể khác.')
+    if risk_status in ('BÁN / HẠ TỶ TRỌNG', 'CẢNH BÁO BÁN'):
+        return ('Đang có cảnh báo rủi ro kỹ thuật EOD. Nếu còn nắm giữ, '
+                'ưu tiên đánh giá mức dừng và khả năng giảm rủi ro theo kế hoạch cá nhân.')
+    if risk_status == 'SUY YẾU':
+        return ('Xu hướng EOD suy yếu nhưng chưa có xác nhận bán mạnh theo quy tắc đang dùng. '
+                'Nếu còn nắm giữ, theo dõi MA20/EMA20 và mức cắt lỗ hiệu lực.')
+    if risk_status == 'THEO DÕI GIỮ':
+        return ('Chưa phát hiện cảnh báo bán theo MA20 hiện tại. Đây chỉ là nhận xét xu hướng, '
+                'không xác nhận đang nắm giữ, không thay thế mức dừng hoặc kế hoạch thoát lệnh.')
+    return ('Chưa đủ điều kiện đánh giá vị thế. Không suy ra tín hiệu giữ/bán từ dữ liệu thiếu.')
+
+
 def render_guard(context, viewed, daily):
     import streamlit as st
     code = str(context.get('code', '')).upper()
@@ -183,23 +215,40 @@ def render_guard(context, viewed, daily):
     if selected.empty:
         return
     risk = exit_condition(daily, code, context['asof'])
+    latest = selected.iloc[0]
+    life = signal_lifecycle(daily, latest, context['asof'])
     with st.container(border=True):
         st.markdown('**QUẢN TRỊ VỊ THẾ T+ · CẢNH BÁO BÁN / CHỐT LỜI (EOD)**')
+        st.markdown('**1. XU HƯỚNG KỸ THUẬT HIỆN TẠI**')
         if 'price' in risk:
-            a,b,c = st.columns(3)
+            a, b, c = st.columns(3)
             a.metric('Giá EOD', f"{risk['price']:.2f}")
             b.metric('MA20 ngày', f"{risk['ma20']:.2f}")
             c.metric('EMA20 ngày', f"{risk['ema20']:.2f}" if np.isfinite(risk['ema20']) else '—')
-        st.write('Cảnh báo kỹ thuật hiện tại:', risk['status'])
+        st.write('Trạng thái kỹ thuật EOD:', risk['status'])
         st.caption(risk['reason'])
-        latest = selected.iloc[0]
-        life = signal_lifecycle(daily, latest, context['asof'])
-        st.write('Tín hiệu mua gần nhất:', f"{pd.Timestamp(latest['Ngày tín hiệu']):%d/%m/%Y}", '·', life['status'])
+        st.caption('Chỉ nhận xét xu hướng giá hiện tại; không khẳng định có vị thế và không tự phát lệnh bán.')
+
+        st.markdown('**2. KẾT QUẢ TÍN HIỆU MUA GỐC**')
+        st.write('Ngày tín hiệu:', f"{pd.Timestamp(latest['Ngày tín hiệu']):%d/%m/%Y}")
+        st.write('Kết quả kiểm tra High–Low:', life['status'])
         if life['date'] is not None:
             st.caption(f"Ngày ghi nhận: {pd.Timestamp(life['date']):%d/%m/%Y} · {life['note']}")
         else:
             st.caption(life['note'])
-        # For past events, historical RR is NOT actionable from today's EOD.
-        st.caption('Kiểm tra chạm cắt lỗ/TP dùng High–Low EOD từng phiên sau tín hiệu và các mức GỐC. '
-                   'Không suy ra lệnh đã khớp, không dùng R:R lịch sử làm R:R mua mới. '
-                   'Cảnh báo MA20 và EMA20 là tín hiệu kỹ thuật quan sát, không phải lệnh bán tự động.')
+        # Explicitly distinguish original targets from the displayed, dynamic targets.
+        orig_tp1 = _num(latest.get('TP1 gốc', latest.get('Mục tiêu 1')))
+        orig_tp2 = _num(latest.get('TP2 gốc', latest.get('Mục tiêu 2')))
+        dyn_tp1 = _num(latest.get('Mục tiêu 1'))
+        dyn_tp2 = _num(latest.get('Mục tiêu 2'))
+        fmt = lambda n: f'{n:.2f}' if np.isfinite(n) else '—'
+        st.caption('Mục tiêu GỐC: TP1 ' + fmt(orig_tp1) + ' · TP2 ' + fmt(orig_tp2)
+                   + ' | Mục tiêu đang HIỂN THỊ: TP1 ' + fmt(dyn_tp1) + ' · TP2 ' + fmt(dyn_tp2)
+                   + '. Kiểm tra lịch sử chỉ dùng mức gốc.')
+
+        st.markdown('**3. LƯU Ý NẾU VẪN ĐANG NẮM GIỮ**')
+        st.write(_position_interpretation(risk, life))
+        st.caption('Không có dữ liệu tài khoản, giá vốn, khối lượng nắm giữ hoặc lệnh đã khớp. '
+                   'Chạm ngưỡng bằng High–Low EOD không có nghĩa lệnh đã được thực hiện; '
+                   'cảnh báo kỹ thuật hiện tại độc lập với kết quả tín hiệu gốc. '
+                   'Chưa mô phỏng đầy đủ cắt lỗ dời động theo từng phiên.')
