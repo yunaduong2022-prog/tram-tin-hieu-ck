@@ -318,6 +318,26 @@ def _item_html(it: dict, compact: bool = False) -> str:
     return f'<div style="{style}">{main}{subs}</div>'
 
 
+def _flow_card_without_intro(sec: dict | None) -> dict | None:
+    """Hide the three circled summary bullets; preserve all group rankings.
+
+    Display-only transformation. Never mutate the computed/cached report.
+    """
+    if sec is None or sec.get("name") != "DÒNG TIỀN":
+        return sec
+    kept = []
+    for item in sec.get("items", []):
+        label = str(item.get("text", "")).lstrip("• ").strip()
+        hide = (
+            (label.startswith("VN-Index ") and "lực mua" in label and "lực bán" in label)
+            or label.startswith("GTGD rổ theo dõi")
+            or label.startswith("Độ rộng ")
+        )
+        if not hide:
+            kept.append(item)
+    return {**sec, "items": kept}
+
+
 def _vnindex_card(sec: dict, *, compact: bool = False):
     """Render one existing report section without modifying its contents."""
     with st.container(border=True):
@@ -396,7 +416,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     sections = list(sections) + [net_flow_sections(d_all["Ngày"], tf, __import__("pathlib").Path(_HERE) / "data")]
     # VNINDEX_LANDSCAPE_LAYOUT_V1: chart + cashflow side-by-side; other cards below.
     report_by_name = {section.get("name"): section for section in sections}
-    flow_card = report_by_name.get("DÒNG TIỀN")
+    flow_card = _flow_card_without_intro(report_by_name.get("DÒNG TIỀN"))
     chart_col, flow_col = st.columns([2, 1], gap="medium")
     with chart_col:
         P = prep_chart(d_all, tf, int(n_show))
