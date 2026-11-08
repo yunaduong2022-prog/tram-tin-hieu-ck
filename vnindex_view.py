@@ -365,5 +365,15 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     A, _ = _auto_mods()
     sections = (A.refresh_fomo_sections(view["sections"], _panel(raw, key), s["date"])
                 if A is not None else view["sections"])
+    # Sync ranking with Ngành > Dòng dẫn sóng (same sector data and period_stats).
+    from vnindex_leading_sync import leading_from_eod, replace_strong_sector_block
+    try:
+        source_raw = raw if raw is not None else (_csv_all(EOD_CSV, os.path.getmtime(EOD_CSV)) if os.path.exists(EOD_CSV) else None)
+        _A, _WL = _auto_mods()
+        leading = leading_from_eod(source_raw, d_all, tf, _WL.GROUPS)
+        sections = replace_strong_sector_block(sections, leading, tf)
+    except Exception as exc:
+        # Preserve the original report if the sector dataset cannot be loaded.
+        st.warning(f"Chưa đồng bộ được Dòng dẫn sóng: {type(exc).__name__}. Đang hiển thị nhóm theo cách tính cũ.")
     _sections(sections)
     st.caption("Nhận định tự động tính theo luật cố định trên dữ liệu, mang tính tham khảo, không phải khuyến nghị đầu tư.")
