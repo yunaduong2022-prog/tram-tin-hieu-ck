@@ -319,6 +319,20 @@ def _sector_flow_details(panel: dict, groups: dict, i: int, k: int, m: int, ret:
     return ranked_up[:3], ranked_down[:3]
 
 
+def sector_flow_reason(rows: list[tuple], rising: bool, tf: str) -> str:
+    """One concise, purely technical explanation; never infer macro causes."""
+    sector_names = ", ".join(str(row[0]) for row in rows)
+    if rising:
+        return (f"Nhận định {TF_NOUN[tf]}: {sector_names} nổi bật nhờ giá cổ phiếu tăng đồng thuận "
+                "và giá trị giao dịch nhóm cải thiện so với mức tham chiếu; "
+                "đây là tín hiệu giao dịch, không phải số liệu mua ròng.")
+    expanding = any(float(row[1]) > 0.10 for row in rows)
+    activity = ("Một số nhóm còn tăng giá trị giao dịch trong lúc giá giảm, "
+                "cần thận trọng với áp lực bán." if expanding else
+                "Giá các cổ phiếu đại diện suy yếu, chưa thấy xác nhận phục hồi từ biến động giá.")
+    return f"Nhận định {TF_NOUN[tf]}: {sector_names} có đa số mã giảm và giá trung vị đi xuống. {activity}"
+
+
 def flow_lines(panel: dict, groups: dict, end: pd.Timestamp, tf: str, foreign: pd.Series | None = None) -> list[tuple[str, str]]:
     close, value = panel["close"], panel["value"]
     pos = close.index[close.index <= pd.Timestamp(end)]
@@ -343,15 +357,15 @@ def flow_lines(panel: dict, groups: dict, end: pd.Timestamp, tf: str, foreign: p
         out.append(("", f"Độ rộng {TF_NOUN[tf]}: {up} mã tăng / {dn} mã giảm ({up / (up + dn) * 100:.0f}% mã tăng) trong rổ {len(ret)} mã"))
     inflow, outflow = _sector_flow_details(panel, groups, i, k, m, ret, cur)
     if inflow:
-        out.append(("xanh", "TOP NHÓM HÚT TIỀN (giá tăng, GTGD tăng):"))
-        for sector, value_change, price_change, tickers in inflow:
-            out.append(("xanh", f"{sector} (GTGD {value_change * 100:+.0f}%, giá {price_change:+.1f}%): "
-                        + ", ".join(tickers)))
+        out.append(("xanh", "TOP 3 NHÓM HÚT TIỀN:"))
+        out.append(("", sector_flow_reason(inflow, True, tf)))
+        for sector, _value_change, _price_change, tickers in inflow:
+            out.append(("xanh", f"{sector}: " + ", ".join(tickers)))
     if outflow:
-        out.append(("do", "TOP NHÓM YẾU (giá giảm):"))
-        for sector, value_change, price_change, tickers in outflow:
-            out.append(("do", f"{sector} (GTGD {value_change * 100:+.0f}%, giá {price_change:+.1f}%): "
-                        + ", ".join(tickers)))
+        out.append(("do", "TOP 3 NHÓM YẾU:"))
+        out.append(("", sector_flow_reason(outflow, False, tf)))
+        for sector, _value_change, _price_change, tickers in outflow:
+            out.append(("do", f"{sector}: " + ", ".join(tickers)))
     if foreign is not None and len(foreign):
         a, b = close.index[i - k + 1], close.index[i]
         f = foreign[(foreign.index >= a) & (foreign.index <= b)]

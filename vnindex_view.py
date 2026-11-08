@@ -271,7 +271,7 @@ def _entries():
 
 
 @st.cache_data(show_spinner="Đang tự soạn nhận định...")
-def _auto_view(_raw, data_key: str, tf: str, use_news: bool, bucket: int, entries_stamp: float):
+def _auto_view(_raw, data_key: str, tf: str, use_news: bool, bucket: int, entries_stamp: float, sector_format_rev: str):
     """-> ({"title", "sections", "session"}, thông tin phụ) hoặc (None, lý do). Cache theo dữ liệu + khung + 30 phút."""
     A, WL = _auto_mods()
     if A is None:
@@ -351,7 +351,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
                f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
 
     entries, _ = _entries()
-    view, info = _auto_view(raw, key, tf, use_news, int(time.time() // 1800), len(entries))
+    view, info = _auto_view(raw, key, tf, use_news, int(time.time() // 1800), len(entries), "sector-reasons-v1")
     if view is None:
         st.warning(info)
         return
