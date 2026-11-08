@@ -167,7 +167,10 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
         _stv = g[[c for c in g.columns if c.startswith("ST_")]]
         for _tr in SPT.traces(x, _stv):
             fig.add_trace(_tr, row=1, col=1)
-        for _an in SPT.annotations(x, _stv):
+        # Supertrend formats annotation dates via pd.Timestamp; chart x is a text category.
+        # First use actual bar dates, then return the annotation to the exact x-axis label.
+        for _an in SPT.annotations(list(g["Ngày"]), _stv):
+            _an["x"] = _label(pd.Timestamp(_an["x"]), tf)
             fig.add_annotation(**_an, row=1, col=1)
     fig.add_trace(go.Bar(x=x, y=g[V], marker=dict(color=np.where(up, "rgba(8,153,129,.5)", "rgba(242,54,69,.5)"), line=dict(width=0)), showlegend=False,
                          hovertext=hover, hoverinfo="text"), row=2, col=1)
