@@ -264,6 +264,61 @@ def _window_sum(s: pd.Series, i: int, k: int, j: int) -> float | None:
     return float(s.iloc[a:b].sum()) if a >= 0 else None
 
 
+
+def _sector_flow_details(panel: dict, groups: dict, i: int, k: int, m: int, ret: pd.Series,
+                         market_value: float | None) -> tuple[list[tuple], list[tuple]]:
+    """Rank up to 3 gaining and 3 declining sectors on each selected timeframe.
+
+    Percent changes describe executed trading value, NOT verified net inflow.
+    Only use EOD rows no later than index i. Symbol memberships come from GROUPS.
+    """
+    close, value = panel["close"], panel["value"]
+    ranked_up, ranked_down = [], []
+    for sector, members in groups.items():
+        symbols = list(dict.fromkeys(code for code in members if code in close.columns))
+        active = [code for code in symbols if code in ret.index and pd.notna(ret[code])]
+        if len(active) < 3:
+            continue
+        group_value = value[active].sum(axis=1)
+        current = _window_sum(group_value, i, k, 0)
+        history = [_window_sum(group_value, i, k, offset)
+                   for offset in range(1, m + 1)]
+        history = [x for x in history if x is not None and x > 0]
+        if current is None or not history or market_value is None or market_value <= 0:
+            continue
+        if current / market_value < 0.02:
+            continue
+        value_change = current / (sum(history) / len(history)) - 1.0
+        sector_ret = ret.reindex(active).dropna()
+        median_ret = float(sector_ret.median())
+        breadth_up = float((sector_ret > 0).mean())
+        breadth_down = float((sector_ret < 0).mean())
+        # Average per-symbol traded value within current and previous full periods.
+        per_symbol_value = value[active].iloc[i-k+1:i+1].sum(axis=0)
+        previous_value = value[active].iloc[i-2*k+1:i-k+1].sum(axis=0)
+        per_symbol_change = per_symbol_value / previous_value.replace(0, np.nan) - 1.0
+        if median_ret > 0 and breadth_up >= 0.5 and value_change > 0.1:
+            eligible = [code for code in active if sector_ret[code] > 0 and per_symbol_value[code] > 0]
+            # First prefer rising stocks with growing traded value; use price and
+            # current value for ordering, then fill with other rising members.
+            eligible.sort(key=lambda code: (per_symbol_change.get(code, np.nan) > 0,
+                                             float(sector_ret[code]),
+                                             float(per_symbol_value[code])), reverse=True)
+            if len(eligible) >= 3:
+                ranked_up.append((sector, value_change, median_ret * 100, eligible[:5]))
+        if median_ret < 0 and breadth_down >= 0.5:
+            eligible = [code for code in active if sector_ret[code] < 0 and per_symbol_value[code] > 0]
+            eligible.sort(key=lambda code: (float(sector_ret[code]),
+                                             -float(per_symbol_value[code])))
+            if len(eligible) >= 3:
+                ranked_down.append((sector, value_change, median_ret * 100, eligible[:5]))
+    # Rank positive sectors by traded-value expansion; negative sectors by
+    # weakest median return (a high-volume sell-off must not look like inflow).
+    ranked_up.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    ranked_down.sort(key=lambda x: (x[2], x[1]))
+    return ranked_up[:3], ranked_down[:3]
+
+
 def flow_lines(panel: dict, groups: dict, end: pd.Timestamp, tf: str, foreign: pd.Series | None = None) -> list[tuple[str, str]]:
     close, value = panel["close"], panel["value"]
     pos = close.index[close.index <= pd.Timestamp(end)]
@@ -286,24 +341,17 @@ def flow_lines(panel: dict, groups: dict, end: pd.Timestamp, tf: str, foreign: p
     up, dn = int((ret > flat).sum()), int((ret < -flat).sum())
     if up + dn:
         out.append(("", f"Độ rộng {TF_NOUN[tf]}: {up} mã tăng / {dn} mã giảm ({up / (up + dn) * 100:.0f}% mã tăng) trong rổ {len(ret)} mã"))
-    rows = []
-    for g, codes in groups.items():
-        cs = [c for c in codes if c in close.columns]
-        if len(cs) < 3:
-            continue
-        gv = value[cs].sum(axis=1)
-        gc = _window_sum(gv, i, k, 0)
-        gp = [x for x in (_window_sum(gv, i, k, j) for j in range(1, m + 1)) if x is not None and x > 0]
-        gr = ret.reindex(cs).dropna()
-        if gc is None or not gp or gr.empty or not cur or gc / cur < 0.02:
-            continue
-        rows.append((g, gc / (sum(gp) / len(gp)) - 1, float(gr.median()) * 100))
-    inflow = sorted([r for r in rows if r[1] > 0.1 and r[2] > 0], key=lambda r: r[1], reverse=True)[:3]
-    outflow = sorted([r for r in rows if r[2] < 0 and r[1] < 0], key=lambda r: r[2])[:2]
+    inflow, outflow = _sector_flow_details(panel, groups, i, k, m, ret, cur)
     if inflow:
-        out.append(("xanh", "Tiền vào: " + ", ".join(f"{g} (GTGD +{a * 100:.0f}%, giá {b:+.1f}%)" for g, a, b in inflow)))
+        out.append(("xanh", "TOP NHÓM HÚT TIỀN (giá tăng, GTGD tăng):"))
+        for sector, value_change, price_change, tickers in inflow:
+            out.append(("xanh", f"{sector} (GTGD {value_change * 100:+.0f}%, giá {price_change:+.1f}%): "
+                        + ", ".join(tickers)))
     if outflow:
-        out.append(("do", "Nhóm yếu: " + ", ".join(f"{g} (giá {b:+.1f}%, GTGD {a * 100:+.0f}%)" for g, a, b in outflow)))
+        out.append(("do", "TOP NHÓM YẾU (giá giảm):"))
+        for sector, value_change, price_change, tickers in outflow:
+            out.append(("do", f"{sector} (GTGD {value_change * 100:+.0f}%, giá {price_change:+.1f}%): "
+                        + ", ".join(tickers)))
     if foreign is not None and len(foreign):
         a, b = close.index[i - k + 1], close.index[i]
         f = foreign[(foreign.index >= a) & (foreign.index <= b)]
