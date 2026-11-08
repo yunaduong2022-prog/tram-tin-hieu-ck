@@ -1,4 +1,4 @@
-﻿"""Thị trường > Nhận định VNINDEX: biểu đồ nến VNINDEX + khối lượng + đường MA, kèm nhận định tự động bên dưới.
+"""Thị trường > Nhận định VNINDEX: biểu đồ nến VNINDEX + khối lượng + đường MA, kèm nhận định tự động bên dưới.
 
 Dữ liệu lấy từ mã VNINDEX trong data/eod_prices.csv (dữ liệu cuối phiên), nên mỗi lần cập nhật dữ liệu (update_eod.bat rồi push)
 biểu đồ tự có nến phiên mới nhất, không phải sửa gì thêm. Chọn khung Phiên / Tuần / Tháng / Quý và số nến hiển thị ngay trên trang.
@@ -303,6 +303,13 @@ def _item_html(it: dict) -> str:
     return f'<div style="margin:0 0 7px;line-height:1.55;font-size:14.5px">{main}{subs}</div>'
 
 
+def _vnindex_card(sec: dict):
+    """Render one existing report section without modifying its contents."""
+    with st.container(border=True):
+        st.markdown(f"**{html.escape(sec['name'])}**")
+        st.markdown("".join(_item_html(it) for it in sec['items']), unsafe_allow_html=True)
+
+
 def _sections(sections: list[dict]):
     if not sections:
         return
@@ -349,12 +356,6 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
 
     show_st = c4.checkbox("Supertrend", value=True, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
     show_hull = c5.checkbox("Hull Suite", value=True, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH}): dải xanh = Hull đang hướng lên, đỏ = hướng xuống")
-    P = prep_chart(d_all, tf, int(n_show))
-    _plot(build_chart(P, show_st, show_hull), f"vnv_chart_{tf}")
-    CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
-    st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
-               f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
-
     entries, _ = _entries()
     view, info = _auto_view(raw, key, tf, use_news, int(time.time() // 1800), len(entries), "sector-reasons-v1")
     if view is None:
@@ -383,5 +384,40 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     # Separate read-only institution net-flow card: never mutate upstream report/cache.
     from vnindex_institutional_flow import net_flow_sections
     sections = list(sections) + [net_flow_sections(d_all["Ngày"], tf, __import__("pathlib").Path(_HERE) / "data")]
-    _sections(sections)
+    # VNINDEX_LANDSCAPE_LAYOUT_V1: chart + cashflow side-by-side; other cards below.
+    report_by_name = {section.get("name"): section for section in sections}
+    flow_card = report_by_name.get("DÒNG TIỀN")
+    chart_col, flow_col = st.columns([1.65, 1.35], gap="medium")
+    with chart_col:
+        P = prep_chart(d_all, tf, int(n_show))
+        fig = build_chart(P, show_st, show_hull)
+        fig.update_layout(height=485)
+        _plot(fig, f"vnv_chart_{tf}")
+        CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+        st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
+                   f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
+
+    with flow_col:
+        if flow_card is not None:
+            _vnindex_card(flow_card)
+        else:
+            st.info("Chưa có nhận định DÒNG TIỀN cho khung đang chọn.")
+    # Action + note first, full-width institutional flow next, then news.
+    action_note = [report_by_name[n] for n in ("HÀNH ĐỘNG", "LƯU Ý") if n in report_by_name]
+    if len(action_note) == 2:
+        act_col, note_col = st.columns([1.35, 1.0], gap="medium")
+        with act_col:
+            _vnindex_card(action_note[0])
+        with note_col:
+            _vnindex_card(action_note[1])
+    else:
+        for sec in action_note:
+            _vnindex_card(sec)
+    for name in ("KHỐI NGOẠI – TỰ DOANH", "TIN TỨC"):
+        if name in report_by_name:
+            _vnindex_card(report_by_name[name])
+    known = {"DÒNG TIỀN", "HÀNH ĐỘNG", "LƯU Ý", "KHỐI NGOẠI – TỰ DOANH", "TIN TỨC"}
+    for sec in sections:
+        if sec.get("name") not in known:
+            _vnindex_card(sec)
     st.caption("Nhận định tự động tính theo luật cố định trên dữ liệu, mang tính tham khảo, không phải khuyến nghị đầu tư.")
