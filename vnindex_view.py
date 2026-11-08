@@ -294,6 +294,18 @@ def _auto_view(_raw, data_key: str, tf: str, use_news: bool, bucket: int, entrie
             dict(feeds=(ok, total), news=use_news, state=A.STATE_TXT[res["view"]["state"]]))
 
 
+def _bulletin_heading(source_title: str) -> str:
+    """Convert automatic period title into a client-facing bulletin heading."""
+    title = str(source_title).strip()
+    if title.startswith("VNINDEX · "):
+        title = title[len("VNINDEX · "):]
+    for period in ("PHIÊN", "TUẦN", "THÁNG", "QUÝ"):
+        prefix = f"NHẬN ĐỊNH {period}"
+        if title.startswith(prefix):
+            return f"VNINDEX - BẢN TIN {period} MỚI" + title[len(prefix):]
+    return "VNINDEX - " + title
+
+
 def _item_html(it: dict, compact: bool = False) -> str:
     txt = html.escape(it["text"])
     glyph = "" if it["text"].lstrip().startswith("*") else (TONE_ICON.get(it["tone"], "•") + " ")
@@ -364,12 +376,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     if view is None:
         st.warning(info)
         return
-    st.subheader(view["title"].replace("VNINDEX · ", "").capitalize())
-    note = f"🤖 Tự động từ giá VNINDEX, khối lượng, độ rộng, nhóm ngành · trạng thái {TF_NOUN[tf]}: {info['state']}."
-    if use_news:
-        ok, total = info["feeds"]
-        note += f" Tin RSS: {ok}/{total} nguồn tải được." if total else " Tin RSS: không tải được nguồn nào, dùng bản tin gần nhất và bối cảnh kỹ thuật."
-    st.caption(note)
+    st.subheader(_bulletin_heading(view["title"]))
     # Refresh warning for all timeframes even when their report is cached.
     A, _ = _auto_mods()
     sections = (A.refresh_fomo_sections(view["sections"], _panel(raw, key), s["date"])
