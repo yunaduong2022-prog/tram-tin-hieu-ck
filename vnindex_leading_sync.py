@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-PERIOD_FOR_TF = {"D": ("1 tuần", 5), "W": ("1 tuần", 5),
+PERIOD_FOR_TF = {"D": ("1 phiên", 1), "W": ("1 tuần", 5),
                  "M": ("1 tháng", 21), "Q": ("3 tháng", 63)}
 TF_VI = {"D": "phiên", "W": "tuần", "M": "tháng", "Q": "quý"}
 

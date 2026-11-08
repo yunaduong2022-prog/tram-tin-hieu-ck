@@ -7,7 +7,7 @@ from vnindex_leading_sync import PERIOD_FOR_TF, leading_items, replace_strong_se
 
 class SyncTests(unittest.TestCase):
     def test_period_mapping(self):
-        self.assertEqual([PERIOD_FOR_TF[x][1] for x in 'DWMQ'], [5,5,21,63])
+        self.assertEqual([PERIOD_FOR_TF[x][1] for x in 'DWMQ'], [1,5,21,63])
     def test_week_ranks_with_real_estate_third(self):
         data = [{'group':'Chứng khoán','return':5.6,'codes':['VND','VIX'],'rank':1},
                 {'group':'Đầu tư công','return':4.4,'codes':['VCG','CTD'],'rank':2},
