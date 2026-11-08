@@ -306,13 +306,18 @@ def _item_html(it: dict) -> str:
 def _sections(sections: list[dict]):
     if not sections:
         return
-    columns_per_row = 2 if len(sections) == 4 else 3
+    columns_per_row = 2 if len(sections) in (4, 5) else 3
     for row in range(0, len(sections), columns_per_row):
         chunk = sections[row:row + columns_per_row]
-        for col, sec in zip(st.columns(len(chunk), gap="medium"), chunk):
-            with col, st.container(border=True):
-                st.markdown(f"**{html.escape(sec['name'])}**")
-                st.markdown("".join(_item_html(it) for it in sec["items"]), unsafe_allow_html=True)
+        if len(chunk) == 1:
+            with st.container(border=True):
+                st.markdown(f"**{html.escape(chunk[0]['name'])}**")
+                st.markdown("".join(_item_html(it) for it in chunk[0]["items"]), unsafe_allow_html=True)
+        else:
+            for col, sec in zip(st.columns(len(chunk), gap="medium"), chunk):
+                with col, st.container(border=True):
+                    st.markdown(f"**{html.escape(sec['name'])}**")
+                    st.markdown("".join(_item_html(it) for it in sec["items"]), unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ TRANG
@@ -375,5 +380,8 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     except Exception as exc:
         # Preserve the original report if the sector dataset cannot be loaded.
         st.warning(f"Chưa đồng bộ được Dòng dẫn sóng: {type(exc).__name__}. Đang hiển thị nhóm theo cách tính cũ.")
+    # Separate read-only institution net-flow card: never mutate upstream report/cache.
+    from vnindex_institutional_flow import net_flow_sections
+    sections = list(sections) + [net_flow_sections(d_all["Ngày"], tf, __import__("pathlib").Path(_HERE) / "data")]
     _sections(sections)
     st.caption("Nhận định tự động tính theo luật cố định trên dữ liệu, mang tính tham khảo, không phải khuyến nghị đầu tư.")
