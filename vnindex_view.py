@@ -306,8 +306,9 @@ def _item_html(it: dict) -> str:
 def _sections(sections: list[dict]):
     if not sections:
         return
-    for row in range(0, len(sections), 3):
-        chunk = sections[row:row + 3]
+    columns_per_row = 2 if len(sections) == 4 else 3
+    for row in range(0, len(sections), columns_per_row):
+        chunk = sections[row:row + columns_per_row]
         for col, sec in zip(st.columns(len(chunk), gap="medium"), chunk):
             with col, st.container(border=True):
                 st.markdown(f"**{html.escape(sec['name'])}**")
@@ -362,4 +363,3 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     st.caption(note)
     _sections(view["sections"])
     st.caption("Nhận định tự động tính theo luật cố định trên dữ liệu, mang tính tham khảo, không phải khuyến nghị đầu tư.")
-
