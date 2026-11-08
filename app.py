@@ -1704,6 +1704,37 @@ def page_wait_buy():
     st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với mục Lọc tất cả CP và Backtest. "
                "Chỉ gồm mã có xu hướng đủ khỏe; mã đang phục hồi nằm ở mục **Đang phục hồi**; mã tăng quá đà, suy yếu hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
+    # MIN_T2_WAIT_CONFIRM_V1: a separate T+2 watchlist, not a long-horizon buy state.
+    try:
+        _, t2_wait = _t2_opportunities_cached(
+            frames["D"], latest_date, WY_KEY + "|" + E.ENGINE_VERSION + "|t2opportunities2")
+    except Exception as exc:
+        st.warning("CHỜ MUA Trading T+2 chưa khả dụng: " + type(exc).__name__)
+        t2_wait = pd.DataFrame(columns=T2BUY.WAIT_COLUMNS)
+    t2_wait = t2_wait.copy()
+    t2_wait["Nhóm"] = t2_wait["Mã"].map(lambda code: ", ".join(MEMBER.get(str(code), [])) or "Khác")
+    st.subheader(f"⏳ CHỜ MUA · CHỈ TRADING T+2 ({len(t2_wait)} mã)")
+    st.caption("Chỉ Trading T+2, KHÔNG nắm giữ dài hạn. Các tín hiệu còn hiệu lực nhưng "
+               "vướng kháng cự gần hoặc thiếu xác nhận nến/khối lượng. Không tự động mua; "
+               "chỉ nâng lên MUA NGAY sau khi vượt điều kiện và tính lại R:R tại EOD mới.")
+    if t2_wait.empty:
+        st.caption("Hiện chưa có tín hiệu T+2 hợp lệ đang chờ xác nhận.")
+    else:
+        filt1, filt2 = st.columns([1.2, 3])
+        q_t2 = filt1.text_input("Tìm mã Trading T+2", "", key="t2wait_q").upper().strip()
+        sectors = filt2.multiselect("Nhóm ngành Trading T+2",
+            sorted({name.strip() for text in t2_wait["Nhóm"] for name in str(text).split(",") if name.strip()}),
+            key="t2wait_ind")
+        if q_t2:
+            t2_wait = t2_wait[t2_wait["Mã"].astype(str).str.contains(q_t2, regex=False)]
+        if sectors:
+            t2_wait = t2_wait[t2_wait["Nhóm"].apply(
+                lambda text: any(name in [p.strip() for p in str(text).split(",")] for name in sectors))]
+        if not t2_wait.empty:
+            _t2_opportunity_cards(t2_wait, waiting=True)
+        else:
+            st.caption("Không có mã T+2 phù hợp bộ lọc.")
+    st.divider()
     t = _wb_table()
     _now = set(_buy_now_table(t)["Mã"])      # mã "Vào được ngay" đã nằm ở mục Mua ngay, không lặp lại ở Chờ mua
     buy = t[t["Danh sách"].isin(WB.BUY_GROUPS) & ~t["Mã"].isin(_now)]
@@ -1771,10 +1802,44 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
     return WB.sort_group(d, WB.G1)
 
 
-@st.cache_data(show_spinner="Đang kiểm tra tín hiệu Trading T+2 theo EOD...", max_entries=3)
-def _t2_buy_now_cached(_daily: pd.DataFrame, _asof, key: str) -> pd.DataFrame:
-    # The versioned EOD cache key includes the last-bar digest; never mutate source frames.
-    return T2BUY.candidates(_daily, _asof)
+# MIN_T2_WAIT_CONFIRM_V1: shared data cache for TWO pages (one T+2 full market scan).
+@st.cache_data(show_spinner="Đang phân loại MUA NGAY / CHỜ MUA T+2 theo EOD...", max_entries=3)
+def _t2_opportunities_cached(_daily: pd.DataFrame, _asof, key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Key includes actual latest-bar digest; _daily not hashed to avoid rehashing all OHLCV.
+    return T2BUY.candidates_both(_daily, _asof)
+
+
+def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
+    """Keep T+2 stop, target, horizon and gating distinct from T+15–T+30 cards."""
+    if data.empty:
+        return
+    key = "t2_wait_show_all" if waiting else "t2_buy_show_all"
+    limit = 18
+    show_all = len(data) <= limit or st.checkbox(f"Hiện tất cả {len(data)} mã T+2", key=key)
+    shown = data if show_all else data.head(limit)
+    cols = st.columns(3)
+    for i, (_, row) in enumerate(shown.iterrows()):
+        with cols[i % 3]:
+            with st.container(border=True):
+                st.markdown(f"**{row['Mã']} · {'CHỜ MUA' if waiting else 'MUA NGAY'} (Trading T+2)**")
+                st.caption(f"{row['Tín hiệu']} · {row['Tuổi']} · CHỈ TRADING T+2, không nắm giữ dài hạn")
+                st.metric("Giá EOD", f"{row['Giá EOD']:.2f}", f"TP1 +{row['Dư địa TP1 %']:.1f}%")
+                left, right = st.columns(2)
+                left.metric("Cắt lỗ T+2", f"{row['Cắt lỗ T+2']:.2f}",
+                            f"-{row['Rủi ro SL %']:.1f}%", delta_color="inverse")
+                right.metric("TP1 T+2", f"{row['TP1 T+2']:.2f}", f"R:R {row['R:R EOD']:.2f}")
+                tp2 = row['TP2 T+2']
+                if pd.notna(tp2):
+                    st.caption(f"TP2 động: {tp2:.2f} · Vol/TB20: {row['Vol/TB20 EOD']:.2f}x · Position: {row['Position EOD %']:.0f}%")
+                if waiting:
+                    near = row.get('Cản cần vượt', float('nan'))
+                    near_rr = row.get('R:R đến cản', float('nan'))
+                    if pd.notna(near):
+                        st.caption(f"**Cản cần vượt: {near:.2f}** · R:R đến cản: {near_rr:.2f}")
+                    st.caption("**Điều kiện kích hoạt:** " + str(row.get('Điều kiện kích hoạt', 'Chờ xác nhận')))
+                st.caption(str(row['Ghi chú']))
+    if len(data) > len(shown):
+        st.caption(f"Đang hiển thị {len(shown)}/{len(data)} mã Trading T+2.")
 
 
 def page_buy_now():
@@ -1787,7 +1852,8 @@ def page_buy_now():
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
     d = _buy_now_table(_wb_table())
     try:
-        t2 = _t2_buy_now_cached(frames["D"], latest_date, WY_KEY + "|" + E.ENGINE_VERSION + "|t2buynow1")
+        t2, _t2_pending = _t2_opportunities_cached(frames["D"], latest_date,
+                WY_KEY + "|" + E.ENGINE_VERSION + "|t2opportunities2")
     except Exception as _t2_error:
         st.warning("Bộ lọc MUA NGAY Trading T+2 chưa khả dụng: " + type(_t2_error).__name__)
         t2 = pd.DataFrame(columns=T2BUY.COLUMNS)
@@ -1815,27 +1881,13 @@ def page_buy_now():
     if d.empty and t2.empty:
         st.info("Không có mã nào phù hợp bộ lọc.")
         return
-    # MIN_T2_BUYNOW_BRIDGE_V1: independently verified T+2-only entries.
-    # Overbought status in the multi-week engine does not erase the T+2 setup.
+    # Only EOD-confirmed T+2 buys remain here; blocked nearby resistance moves to CHỜ MUA.
     if not t2.empty:
         st.subheader(f"⚡ MUA NGAY · CHỈ TRADING T+2 ({len(t2)} mã)")
-        st.caption("Chỉ Trading T+2 – KHÔNG nắm giữ dài hạn. Tín hiệu được kiểm tra theo EOD, "
-                   "stoploss/TP/R:R riêng của bộ Trading T+2, không sử dụng stop của vùng mua T+15–T+30. "
-                   "Cần kiểm tra lại giá khớp, cản gần và điều kiện thoát lệnh ở phiên tiếp theo.")
-        _t2cols = st.columns(3)
-        for _ti, (_, _tr) in enumerate(t2.iterrows()):
-            with _t2cols[_ti % 3]:
-                with st.container(border=True):
-                    st.markdown(f"**{_tr['Mã']} · MUA NGAY (Trading T+2)**")
-                    st.caption(f"{_tr['Tín hiệu']} · {_tr['Tuổi']} · Chỉ trading, không nắm giữ dài hạn")
-                    st.metric("Giá EOD", f"{_tr['Giá EOD']:.2f}", f"TP1 +{_tr['Dư địa TP1 %']:.1f}%")
-                    _la, _lb = st.columns(2)
-                    _la.metric("Cắt lỗ T+2", f"{_tr['Cắt lỗ T+2']:.2f}", f"-{_tr['Rủi ro SL %']:.1f}%", delta_color="inverse")
-                    _lb.metric("TP1 T+2", f"{_tr['TP1 T+2']:.2f}", f"R:R {_tr['R:R EOD']:.2f}")
-                    _tp2val = _tr['TP2 T+2']
-                    if pd.notna(_tp2val):
-                        st.caption(f"TP2 động: {_tp2val:.2f} · Vol/TB20: {_tr['Vol/TB20 EOD']:.2f}x · Position: {_tr['Position EOD %']:.0f}%")
-                    st.caption(str(_tr['Ghi chú']))
+        st.caption("KHÔNG nắm giữ dài hạn. Dùng stoploss/TP động/R:R riêng của Trading T+2. "
+                   "Không có kháng cự kỹ thuật chưa vượt trong vùng 3% tại EOD. "
+                   "Giá khớp phiên tiếp theo có thể khác EOD.")
+        _t2_opportunity_cards(t2, waiting=False)
     if d.empty:
         return
     show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key="bn_all")
