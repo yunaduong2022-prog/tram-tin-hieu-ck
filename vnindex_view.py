@@ -294,16 +294,19 @@ def _auto_view(_raw, data_key: str, tf: str, use_news: bool, bucket: int, entrie
             dict(feeds=(ok, total), news=use_news, state=A.STATE_TXT[res["view"]["state"]]))
 
 
-def _item_html(it: dict) -> str:
+def _item_html(it: dict, compact: bool = False) -> str:
     txt = html.escape(it["text"])
     glyph = "" if it["text"].lstrip().startswith("*") else (TONE_ICON.get(it["tone"], "•") + " ")
     col = TONE_COL.get(it["tone"])
     main = f'<span style="color:{col};font-weight:600">{glyph}{txt}</span>' if col else f"{glyph}{txt}"
-    subs = "".join(f'<div style="padding-left:22px;opacity:.85">{html.escape(s)}</div>' for s in it["subs"])
-    return f'<div style="margin:0 0 7px;line-height:1.55;font-size:14.5px">{main}{subs}</div>'
+    left_pad = 14 if compact else 22
+    subs = "".join(f'<div style="padding-left:{left_pad}px;opacity:.85">{html.escape(s)}</div>' for s in it["subs"])
+    style = ("margin:0 0 4px;line-height:1.42;font-size:12.5px" if compact
+             else "margin:0 0 7px;line-height:1.55;font-size:14.5px")
+    return f'<div style="{style}">{main}{subs}</div>'
 
 
-def _vnindex_card(sec: dict):
+def _vnindex_card(sec: dict, *, compact: bool = False):
     """Render one existing report section without modifying its contents."""
     with st.container(border=True):
         st.markdown(f"**{html.escape(sec['name'])}**")
@@ -324,7 +327,7 @@ def _sections(sections: list[dict]):
             for col, sec in zip(st.columns(len(chunk), gap="medium"), chunk):
                 with col, st.container(border=True):
                     st.markdown(f"**{html.escape(sec['name'])}**")
-                    st.markdown("".join(_item_html(it) for it in sec["items"]), unsafe_allow_html=True)
+                    st.markdown("".join(_item_html(it, compact=compact) for it in sec["items"]), unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ TRANG
@@ -387,7 +390,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     # VNINDEX_LANDSCAPE_LAYOUT_V1: chart + cashflow side-by-side; other cards below.
     report_by_name = {section.get("name"): section for section in sections}
     flow_card = report_by_name.get("DÒNG TIỀN")
-    chart_col, flow_col = st.columns([1.65, 1.35], gap="medium")
+    chart_col, flow_col = st.columns([2, 1], gap="medium")
     with chart_col:
         P = prep_chart(d_all, tf, int(n_show))
         fig = build_chart(P, show_st, show_hull)
@@ -399,7 +402,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
 
     with flow_col:
         if flow_card is not None:
-            _vnindex_card(flow_card)
+            _vnindex_card(flow_card, compact=True)
         else:
             st.info("Chưa có nhận định DÒNG TIỀN cho khung đang chọn.")
     # Action + note first, full-width institutional flow next, then news.
