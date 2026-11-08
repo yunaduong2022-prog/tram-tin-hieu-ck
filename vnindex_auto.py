@@ -228,6 +228,19 @@ def fomo_warning_items(panel: dict | None, end: pd.Timestamp) -> list[dict]:
     return [dict(tone="do", text="Tránh FOMO mua cổ phiếu đã tăng trên 30% từ đáy 60 phiên: " + ", ".join(codes) + ".", subs=[])]
 
 
+def refresh_fomo_sections(sections: list[dict], panel: dict | None, end: pd.Timestamp) -> list[dict]:
+    """Keep FOMO note current even if the cached VNINDEX report is older.
+
+    Called at render-time for D/W/M/Q with the same daily EOD data, so all
+    timeframes show the same warning. Never mutate the cached report object.
+    """
+    updated = [section for section in sections if section.get("name") != "LƯU Ý"]
+    warnings = fomo_warning_items(panel, end)
+    if warnings:
+        updated.append(dict(name="LƯU Ý", items=warnings))
+    return updated
+
+
 def context_line(v: dict, tf: str) -> str:
     k1 = MA_SET[tf][0]
     m1 = v["ma"][0]

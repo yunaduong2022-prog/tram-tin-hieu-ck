@@ -361,5 +361,9 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         ok, total = info["feeds"]
         note += f" Tin RSS: {ok}/{total} nguồn tải được." if total else " Tin RSS: không tải được nguồn nào, dùng bản tin gần nhất và bối cảnh kỹ thuật."
     st.caption(note)
-    _sections(view["sections"])
+    # Refresh warning for all timeframes even when their report is cached.
+    A, _ = _auto_mods()
+    sections = (A.refresh_fomo_sections(view["sections"], _panel(raw, key), s["date"])
+                if A is not None else view["sections"])
+    _sections(sections)
     st.caption("Nhận định tự động tính theo luật cố định trên dữ liệu, mang tính tham khảo, không phải khuyến nghị đầu tư.")
