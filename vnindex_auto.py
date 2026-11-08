@@ -202,6 +202,32 @@ def action_items(v: dict, sc: dict, tf: str) -> list[dict]:
     return items
 
 
+def fomo_warning_items(panel: dict | None, end: pd.Timestamp) -> list[dict]:
+    """Show only ticker codes that rose >30% from the 60-session lowest close.
+
+    Computed using EOD data as of end; not a claim about a confirmed cycle bottom.
+    """
+    if not panel or "close" not in panel:
+        return []
+    close = panel["close"]
+    if close is None or close.empty:
+        return []
+    # Index consists of trading sessions; do not use prices after the current report.
+    prices = close.loc[close.index <= pd.Timestamp(end)].tail(60)
+    if len(prices) < 45:
+        return []
+    latest = prices.iloc[-1]
+    lowest = prices.min(axis=0)
+    valid = (prices.notna().sum(axis=0) >= 45) & (latest > 0) & (lowest > 0)
+    pct = (latest / lowest - 1.0) * 100.0
+    flagged = pct[valid & (pct > 30.0 + 1e-8)].replace([np.inf, -np.inf], np.nan).dropna()
+    if flagged.empty:
+        return []
+    # Alphabetical order makes the list stable and easy to scan.
+    codes = sorted(str(code).upper() for code in flagged.index)
+    return [dict(tone="do", text="Tránh FOMO mua cổ phiếu đã tăng trên 30% từ đáy 60 phiên: " + ", ".join(codes) + ".", subs=[])]
+
+
 def context_line(v: dict, tf: str) -> str:
     k1 = MA_SET[tf][0]
     m1 = v["ma"][0]
@@ -356,6 +382,9 @@ def compose(d_daily: pd.DataFrame, panel: dict | None, groups: dict, tf: str, ne
 
     # --- HÀNH ĐỘNG
     sections.append(dict(name="HÀNH ĐỘNG", items=action_items(v, sc, tf)))
+    warnings = fomo_warning_items(panel, last)
+    if warnings:
+        sections.append(dict(name="LƯU Ý", items=warnings))
     return {"title": title, "meta": meta, "sections": sections, "session": session, "view": v, "scenario": sc}
 
 
