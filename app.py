@@ -1810,7 +1810,12 @@ def _t2_opportunities_cached(_daily: pd.DataFrame, _asof, key: str) -> tuple[pd.
 
 
 def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
-    """Keep T+2 stop, target, horizon and gating distinct from T+15–T+30 cards."""
+    """MIN_T2_COMPACT_CARDS_V1: compact presentation only; EOD signals unchanged.
+
+    WAIT prioritizes the nearest unbroken resistance and its R:R; distant TP1
+    is only a secondary reference. Detailed notes remain available collapsed.
+    BUY uses the same data but emphasizes the actionable stop and target.
+    """
     if data.empty:
         return
     key = "t2_wait_show_all" if waiting else "t2_buy_show_all"
@@ -1818,29 +1823,60 @@ def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
     show_all = len(data) <= limit or st.checkbox(f"Hiện tất cả {len(data)} mã T+2", key=key)
     shown = data if show_all else data.head(limit)
     cols = st.columns(3)
-    for i, (_, row) in enumerate(shown.iterrows()):
+    for i, (_, item) in enumerate(shown.iterrows()):
         with cols[i % 3]:
             with st.container(border=True):
-                st.markdown(f"**{row['Mã']} · {'CHỜ MUA' if waiting else 'MUA NGAY'} (Trading T+2)**")
-                st.caption(f"{row['Tín hiệu']} · {row['Tuổi']} · CHỈ TRADING T+2, không nắm giữ dài hạn")
-                st.metric("Giá EOD", f"{row['Giá EOD']:.2f}", f"TP1 +{row['Dư địa TP1 %']:.1f}%")
-                left, right = st.columns(2)
-                left.metric("Cắt lỗ T+2", f"{row['Cắt lỗ T+2']:.2f}",
-                            f"-{row['Rủi ro SL %']:.1f}%", delta_color="inverse")
-                right.metric("TP1 T+2", f"{row['TP1 T+2']:.2f}", f"R:R {row['R:R EOD']:.2f}")
-                tp2 = row['TP2 T+2']
-                if pd.notna(tp2):
-                    st.caption(f"TP2 động: {tp2:.2f} · Vol/TB20: {row['Vol/TB20 EOD']:.2f}x · Position: {row['Position EOD %']:.0f}%")
+                code = str(item["Mã"])
                 if waiting:
-                    near = row.get('Cản cần vượt', float('nan'))
-                    near_rr = row.get('R:R đến cản', float('nan'))
+                    st.markdown(f"**{code} · ⏳ CHỜ XÁC NHẬN T+2**")
+                else:
+                    st.markdown(f"**{code} · ⚡ MUA NGAY T+2**")
+                st.caption(f"{item['Tín hiệu']} · {item['Tuổi']} · Chỉ Trading T+2, KHÔNG nắm giữ dài hạn")
+                price = float(item["Giá EOD"])
+                stop = float(item["Cắt lỗ T+2"])
+                tp1 = float(item["TP1 T+2"])
+                upside = float(item["Dư địa TP1 %"])
+                risk = float(item["Rủi ro SL %"])
+                rr_tp = float(item["R:R EOD"])
+                left, right = st.columns(2)
+                left.metric("Giá EOD", f"{price:.2f}")
+                if waiting:
+                    near = item.get("Cản cần vượt", float("nan"))
+                    rr_near = item.get("R:R đến cản", float("nan"))
                     if pd.notna(near):
-                        st.caption(f"**Cản cần vượt: {near:.2f}** · R:R đến cản: {near_rr:.2f}")
-                    st.caption("**Điều kiện kích hoạt:** " + str(row.get('Điều kiện kích hoạt', 'Chờ xác nhận')))
-                st.caption(str(row['Ghi chú']))
+                        right.metric("Cản cần vượt", f"{float(near):.2f}")
+                        if pd.notna(rr_near):
+                            gap = (float(near) / price - 1) * 100 if price > 0 else float("nan")
+                            st.caption(f"**R:R đến cản: {float(rr_near):.2f}** · Dư địa đến cản: +{gap:.2f}%")
+                    else:
+                        right.metric("Trạng thái", "Chờ xác nhận")
+                    st.markdown("**Điều kiện kích hoạt**")
+                    st.caption(str(item.get("Điều kiện kích hoạt", "Chờ tín hiệu xác nhận từ EOD")))
+                    st.caption(f"Stoploss T+2 **{stop:.2f}** (−{risk:.1f}%) · TP1 **{tp1:.2f}** (+{upside:.1f}%)")
+                    st.caption(f"R:R đến TP1 **{rr_tp:.2f}** (chỉ tham khảo khi chưa vượt cản)")
+                else:
+                    right.metric("TP1 T+2", f"{tp1:.2f}", f"R:R {rr_tp:.2f}")
+                    st.caption(f"Stoploss T+2 **{stop:.2f}** (−{risk:.1f}%) · Dư địa TP1 +{upside:.1f}%")
+                tp2 = item.get("TP2 T+2", float("nan"))
+                parts = []
+                if pd.notna(tp2):
+                    parts.append(f"TP2 {float(tp2):.2f}")
+                vr = item.get("Vol/TB20 EOD", float("nan"))
+                if pd.notna(vr):
+                    parts.append(f"Vol/TB20 {float(vr):.2f}x")
+                pos = item.get("Position EOD %", float("nan"))
+                if pd.notna(pos):
+                    parts.append(f"Position {float(pos):.0f}%")
+                if parts:
+                    st.caption(" · ".join(parts))
+                # No repeated lengthy 'Cản gần' warning on the card itself;
+                # every original note is preserved, available on demand.
+                memo = str(item.get("Ghi chú", "") or "").strip()
+                if memo:
+                    with st.expander("Chi tiết tín hiệu T+2", expanded=False):
+                        st.caption(memo)
     if len(data) > len(shown):
         st.caption(f"Đang hiển thị {len(shown)}/{len(data)} mã Trading T+2.")
-
 
 def page_buy_now():
     st.title("⚡ Mua ngay")
