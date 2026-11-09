@@ -194,7 +194,7 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
                      zeroline=False, showline=True, linecolor="rgba(128,128,128,.35)", row=1, col=1)
     fig.update_yaxes(range=[0, float(g[V].max()) * 1.08], showticklabels=False, showgrid=False, zeroline=False,
                      showline=True, linecolor="rgba(128,128,128,.35)", row=2, col=1)
-    fig.update_layout(height=620, margin=dict(l=8, r=72, t=8, b=34), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    fig.update_layout(height=620, margin=dict(l=8, r=96, t=8, b=34), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       dragmode=False, hovermode="closest", bargap=0.25,
                       legend=dict(orientation="h", x=0.01, y=0.995, xanchor="left", yanchor="top", bgcolor="rgba(0,0,0,0)"),
                       showlegend=True, hoverlabel=dict(bgcolor="#14203F", font=dict(color="#EAF0FF", size=12)))
@@ -466,7 +466,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     # VNINDEX_LANDSCAPE_LAYOUT_V1: chart + cashflow side-by-side; other cards below.
     report_by_name = {section.get("name"): section for section in sections}
     flow_card = _flow_card_without_intro(report_by_name.get("DÒNG TIỀN"))
-    chart_col, flow_col = st.columns([2, 1], gap="medium")
+    chart_col, flow_col = st.columns([2, 1], gap="large")
     with chart_col:
         # Indicators use full EOD history; presets only crop the rendered bars.
         P = prep_chart(d_all, tf, len(d_all))
