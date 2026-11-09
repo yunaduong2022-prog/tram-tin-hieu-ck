@@ -33,25 +33,73 @@ def range_start(daily_dates, selected: str) -> pd.Timestamp | None:
     return pd.Timestamp(dates[-1]) - _OFFSETS[selected]
 
 
+MAX_TIME_TICKS = 8  # Avoid overlapping month labels on 2Y/3Y/All charts.
+
+
 def _ticks(frame: pd.DataFrame, tf: str) -> list[tuple[int, str]]:
-    """Rebuild valid monthly/year tick positions on the visible bar window."""
+    """Return readable, calendar-aligned time labels for the visible window.
+
+    Tick *density* is display-only: every real candle, volume bar, hover date,
+    indicator and shared x-axis range remains unchanged. For dense D/W ranges,
+    prefer Jan/Jul, or other evenly spaced calendar months; never show every
+    month of a 3-year weekly chart on a single narrow row.
+    """
     if frame.empty:
         return []
     dates = pd.to_datetime(frame["Ngày"], errors="coerce")
-    ticks: list[tuple[int, str]] = []
-    prev_month = None
-    prev_year = None
+    candidates: list[tuple[int, pd.Timestamp]] = []
+    previous_month = None
+    previous_year = None
     for i, day in enumerate(dates):
         if pd.isna(day):
             continue
         year, month = int(day.year), int(day.month)
         if tf in ("D", "W"):
-            if i == 0 or month != prev_month:
-                ticks.append((i, f"Th{month}/{year}" if month == 1 or i == 0 else f"Th{month}"))
+            if previous_month != (year, month):
+                candidates.append((i, day))
+            previous_month = (year, month)
         else:
-            if i == 0 or year != prev_year:
-                ticks.append((i, str(year)))
-        prev_month, prev_year = month, year
+            if previous_year != year:
+                candidates.append((i, day))
+            previous_year = year
+
+    if len(candidates) > MAX_TIME_TICKS:
+        if tf in ("D", "W"):
+            # Calendar-aligned cadence: every 2/3/4/6/12 months, then years.
+            # This preserves meaningful Jan/year markers instead of arbitrarily
+            # choosing every Nth trading bar.
+            for stride in (2, 3, 4, 6, 12, 24, 36, 60, 120, 240):
+                chosen = [(i, d) for i, d in candidates
+                          if (int(d.year) * 12 + int(d.month) - 1) % stride == 0]
+                if 1 <= len(chosen) <= MAX_TIME_TICKS:
+                    candidates = chosen
+                    break
+            else:  # Sparse, irregular dates may miss every calendar anchor.
+                step = (len(candidates) + MAX_TIME_TICKS - 1) // MAX_TIME_TICKS
+                candidates = candidates[::step]
+        else:
+            # Very long monthly/quarterly history: label fewer years too.
+            for stride in (2, 3, 4, 5, 10, 20, 50):
+                chosen = [(i, d) for i, d in candidates if int(d.year) % stride == 0]
+                if 1 <= len(chosen) <= MAX_TIME_TICKS:
+                    candidates = chosen
+                    break
+            else:
+                step = (len(candidates) + MAX_TIME_TICKS - 1) // MAX_TIME_TICKS
+                candidates = candidates[::step]
+
+    ticks: list[tuple[int, str]] = []
+    last_labeled_year = None
+    for pos, day in candidates:
+        year, month = int(day.year), int(day.month)
+        if tf in ("D", "W"):
+            # Show year at the first selected label of each year, not only Jan.
+            with_year = last_labeled_year != year or month == 1
+            text = f"Th{month}/{year}" if with_year else f"Th{month}"
+        else:
+            text = str(year)
+        ticks.append((pos, text))
+        last_labeled_year = year
     if len(ticks) > 1 and ticks[1][0] - ticks[0][0] < 3:
         ticks = ticks[1:]
     return ticks
