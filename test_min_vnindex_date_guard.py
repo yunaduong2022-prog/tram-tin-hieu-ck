@@ -110,6 +110,13 @@ class TestDateGuard(unittest.TestCase):
         source = (Path(__file__).parent / "r2_bridge.py").read_text(encoding="utf-8")
         self.assertIn("if name in ('data/eod_prices.csv', 'data/index_prices.csv') and local.is_file():", source)
 
+    def test_fail_closed_on_sector_sync_error(self):
+        source = (Path(__file__).parent / "vnindex_view.py").read_text(encoding="utf-8")
+        self.assertNotIn("Đang hiển thị nhóm theo cách tính cũ", source)
+        self.assertIn("tạm ẩn DÒNG TIỀN", source)
+        self.assertIn("Chưa xác minh được dữ liệu nhóm ngành/vốn hóa; tạm ẩn xếp hạng.", source)
+        self.assertIn("Bộ lọc vốn hóa: CÓ", source)
+
     def test_freshness_is_used_in_render(self):
         text = (Path(__file__).parent / "vnindex_view.py").read_text(encoding="utf-8")
         self.assertIn("merge_index_candidates", text)

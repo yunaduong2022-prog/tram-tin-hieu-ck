@@ -410,8 +410,8 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     from pathlib import Path as _Path
     from vnindex_market_cap import load_shares as _load_shares
     share_rows = _load_shares(_Path(_HERE) / "data" / "shares_outstanding.csv", as_of=index_day.date())
-    cap_label = ("Bộ lọc vốn hóa mã đại diện: BẬT · Chứng khoán ≥5.000 tỷ"
-                 if share_rows else "Bộ lọc vốn hóa: THIẾU dữ liệu cổ phiếu lưu hành")
+    cap_label = ("Bộ lọc vốn hóa: CÓ dữ liệu cổ phiếu lưu hành · Chứng khoán ≥5.000 tỷ"
+                 if share_rows else "Bộ lọc vốn hóa: THIẾU dữ liệu cổ phiếu lưu hành · Không chọn mã thiếu vốn hóa")
     eod_label = f" · EOD cổ phiếu: {stock_day:%d/%m/%Y}" if stock_day is not None else ""
     st.caption(f"VNINDEX: {index_day:%d/%m/%Y} ({index_source}){eod_label} · {cap_label}")
     sector_data_behind = stock_day is not None and stock_day < index_day
@@ -437,8 +437,14 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
             leading = leading_from_eod(source_raw, d_all, tf, _WL.GROUPS)
             sections = replace_strong_sector_block(sections, leading, tf)
     except Exception as exc:
-        # Preserve the original report if the sector dataset cannot be loaded.
-        st.warning(f"Chưa đồng bộ được Dòng dẫn sóng: {type(exc).__name__}. Đang hiển thị nhóm theo cách tính cũ.")
+        # Fail closed: never show unfiltered representative tickers if cap sync fails.
+        st.error(f"Không thể xác minh xếp hạng ngành và vốn hóa ({type(exc).__name__}); tạm ẩn DÒNG TIỀN.")
+        sections = [
+            {**section, "items": [{"tone": "vang", "text":
+                         "Chưa xác minh được dữ liệu nhóm ngành/vốn hóa; tạm ẩn xếp hạng.", "subs": []}]}
+            if section.get("name") == "DÒNG TIỀN" else section
+            for section in sections
+        ]
     # Separate read-only institution net-flow card: never mutate upstream report/cache.
     from vnindex_institutional_flow import net_flow_sections
     sections = list(sections) + [net_flow_sections(d_all["Ngày"], tf, __import__("pathlib").Path(_HERE) / "data")]
