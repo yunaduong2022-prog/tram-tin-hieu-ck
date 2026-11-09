@@ -78,87 +78,68 @@ def heat_check(close_panel: pd.DataFrame | None, code: str, end: pd.Timestamp) -
 
 
 def unavailable_action(reason: str = "") -> list[dict]:
-    extra = (" " + reason) if reason else ""
-    return [{"tone": "vang", "text": "Chưa xác minh được nhóm dẫn sóng và nhóm yếu theo cùng kỳ dữ liệu."
-             + extra + " Tạm thời không đưa danh sách canh mua.", "subs": []}]
+    """No unverified suggestions, and no noisy missing-data rows in HÀNH ĐỘNG."""
+    return []
 
 
 def flow_action_items(sections: list[dict], strong_rows: list[dict] | None,
                       close_panel: pd.DataFrame | None, end: pd.Timestamp,
                       tf: str) -> list[dict]:
-    """Compose a compact action card from the SAME ranking as DÒNG TIỀN."""
+    """Action advice based on the verified strong/weak groups already on screen.
+
+    Warning uses the existing >=25%/60-session AND current pullback <8% rule.
+    Only the capitalisation-eligible representative codes of strong groups
+    are checked. Do not infer a buy signal from being absent from the warning.
+    """
     if tf not in TF_TEXT or not strong_rows:
         return unavailable_action()
     strong = [row for row in strong_rows if str(row.get("group", "")).strip()]
     if not strong:
         return unavailable_action()
     strong_names = list(dict.fromkeys(str(row["group"]).strip() for row in strong))
-    weak = [x for x in weak_groups_from_flow(sections) if x not in strong_names]
+    weak = [name for name in weak_groups_from_flow(sections) if name not in strong_names]
     end = pd.Timestamp(end).normalize()
 
-    hot: dict[str, dict] = {}
-    unknown: list[str] = []
-    watch: list[tuple[str, list[str]]] = []
+    # Read-only heat classification of the EXACT representative tickers shown in
+    # DÒNG TIỀN: never scan every market symbol or the unrelated LƯU Ý list.
+    hot_codes: list[str] = []
     seen: set[str] = set()
     for row in strong:
-        candidates: list[str] = []
         for value in row.get("codes", []):
             code = str(value).strip().upper()
             if not code or code in seen:
                 continue
             seen.add(code)
             check = heat_check(close_panel, code, end)
-            if check is None:
-                unknown.append(code)
-            elif check["hot"]:
-                hot[code] = check
-            else:
-                candidates.append(code)
-        watch.append((str(row["group"]), candidates))
+            if check is not None and check["hot"]:
+                hot_codes.append(code)
 
     items = [{"tone": "xanh", "text":
               f"ƯU TIÊN NHÓM DẪN SÓNG ({TF_TEXT[tf]}): " + ", ".join(strong_names) + ".",
-              "subs": []}]
-    qualified = [f"{group}: {', '.join(codes[:3])}" for group, codes in watch if codes]
-    if qualified:
-        items.append({"tone": "xanh", "text":
-                      "CANH CHỈNH, KHÔNG MUA ĐUỔI: " + "; ".join(qualified) + ".",
-                      "subs": ["Chỉ xem xét khi giá điều chỉnh/tích lũy về hỗ trợ, khối lượng co lại "
-                               "và có tín hiệu hồi phục xác nhận; chưa phải điểm mua tự động."]})
-    else:
-        items.append({"tone": "vang", "text":
-                      "Chưa có mã đại diện được xác minh là không tăng nóng để đưa vào danh sách canh chỉnh.",
-                      "subs": []})
-    if hot:
-        sample = list(hot.items())[:6]
-        msg = ", ".join(f"{code} (+{check['rise_pct']:.0f}%)" for code, check in sample)
-        more = f" và {len(hot) - 6} mã khác" if len(hot) > 6 else ""
+              "subs": []},
+             {"tone": "xanh", "text":
+              "NHÓM MẠNH: canh mua khi rung lắc, giá đỏ; ưu tiên giải ngân từng phần "
+              "nếu giữ được hỗ trợ và có tín hiệu hồi phục.", "subs": []}]
+    if hot_codes:
         items.append({"tone": "do", "text":
-                      f"TẠM TRÁNH MUA ĐUỔI (≥25%/60 phiên, chưa chỉnh ≥8%): {msg}{more}.",
-                      "subs": []})
-    if unknown:
-        preview = ", ".join(unknown[:7])
-        more = f" và {len(unknown)-7} mã khác" if len(unknown) > 7 else ""
-        items.append({"tone": "vang", "text":
-                      "CHƯA ĐỦ DỮ LIỆU 60 PHIÊN ĐỂ ĐÁNH GIÁ FOMO: " + preview + more + ".",
+                      "HẠN CHẾ MUA ĐUỔI NHỮNG MÃ ĐÃ TĂNG NÓNG: " + ", ".join(hot_codes) + ".",
                       "subs": []})
     if weak:
         items.append({"tone": "do", "text":
-                      "HẠN CHẾ MUA MỚI NHÓM YẾU: " + ", ".join(weak) +
-                      "; tránh bắt đáy khi chưa có tín hiệu phục hồi.", "subs": []})
-    else:
-        items.append({"tone": "vang", "text":
-                      "Chưa xác minh được nhóm yếu trong DÒNG TIỀN; không tự suy đoán nhóm cần tránh.",
+                      "HẠN CHẾ MUA MỚI VÀ TRUNG BÌNH GIÁ NHÓM YẾU: " + ", ".join(weak) + ".",
                       "subs": []})
     items.append({"tone": "vang", "text":
-                  "KỶ LUẬT: Tăng ≥25% từ đáy đóng cửa 60 phiên và cách đỉnh sau đáy <8% "
-                  "là cảnh báo không mua đuổi; chỉ đánh giá lại sau nhịp chỉnh và tín hiệu xác nhận.",
+                  "KỶ LUẬT: không mua đuổi; ưu tiên chờ nhịp điều chỉnh và tín hiệu xác nhận.",
                   "subs": []})
     return items
 
 
 def replace_action_section(sections: list[dict], items: list[dict]) -> list[dict]:
-    """Replace HÀNH ĐỘNG only; preserve other sections and cached inputs."""
+    """Replace only HÀNH ĐỘNG; hide it entirely when no verified leaders exist."""
+    updated = [s for s in sections if s.get("name") != "HÀNH ĐỘNG"]
+    if not items:
+        return updated
+    # Preserve the original HÀNH ĐỘNG position when possible. Others untouched.
     updated = [{**s, "items": items} if s.get("name") == "HÀNH ĐỘNG" else s
                for s in sections]
     if not any(s.get("name") == "HÀNH ĐỘNG" for s in sections):
