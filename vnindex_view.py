@@ -424,6 +424,10 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
                 if A is not None else view["sections"])
     # Sync ranking with Ngành > Dòng dẫn sóng (same sector data and period_stats).
     from vnindex_leading_sync import leading_from_eod, replace_strong_sector_block
+    # Render-time action shares the EXACT leading groups of the visible flow card.
+    from vnindex_flow_actions import flow_action_items, replace_action_section, unavailable_action
+    leading = None
+    action_panel = None
     try:
         source_raw = raw if raw is not None else (_csv_all(EOD_CSV, os.path.getmtime(EOD_CSV)) if os.path.exists(EOD_CSV) else None)
         _A, _WL = _auto_mods()
@@ -436,6 +440,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         else:
             leading = leading_from_eod(source_raw, d_all, tf, _WL.GROUPS)
             sections = replace_strong_sector_block(sections, leading, tf)
+            action_panel = _panel(raw, key)
     except Exception as exc:
         # Fail closed: never show unfiltered representative tickers if cap sync fails.
         st.error(f"Không thể xác minh xếp hạng ngành và vốn hóa ({type(exc).__name__}); tạm ẩn DÒNG TIỀN.")
@@ -445,6 +450,14 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
             if section.get("name") == "DÒNG TIỀN" else section
             for section in sections
         ]
+        leading = None  # Never fall back to cached VNINDEX-only actions.
+    # Rebuild only HÀNH ĐỘNG from the verified visible DÒNG TIỀN sectors.
+    # No stale group => no buy candidates. Preserve all other sections unchanged.
+    try:
+        action_lines = flow_action_items(sections, leading, action_panel, index_day, tf)
+    except Exception:
+        action_lines = unavailable_action()
+    sections = replace_action_section(sections, action_lines)
     # Separate read-only institution net-flow card: never mutate upstream report/cache.
     from vnindex_institutional_flow import net_flow_sections
     sections = list(sections) + [net_flow_sections(d_all["Ngày"], tf, __import__("pathlib").Path(_HERE) / "data")]
