@@ -44,7 +44,7 @@ class TestVNIndexNoMetadataCaption(unittest.TestCase):
     def test_indicators_and_layout_unchanged(self):
         self.assertIn('g = g.join(SPT.compute(g)).join(HUL.compute(g))', VIEW)
         self.assertIn('fig = build_chart(P, show_st, show_hull)', VIEW)
-        self.assertIn('chart_col, flow_col = st.columns([2, 1], gap="large")', VIEW)
+        self.assertIn('chart_col, flow_col = st.columns([2, 1], gap="medium")', VIEW)
 
     def test_no_unwanted_replacement_of_report(self):
         self.assertIn('A.refresh_fomo_sections(view["sections"]', VIEW)
