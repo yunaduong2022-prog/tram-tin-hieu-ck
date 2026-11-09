@@ -258,7 +258,7 @@ def _atomic_json(path, item):
 # TRAM_CK_R2_NEWER_EOD_GUARD_V1
 
 def _preserve_newer_local_eod(local, downloaded, temp_dir):
-    """Merge only real local EOD rows newer than R2's latest row per symbol.
+    """Merge only real local EOD/index rows newer than R2's latest per symbol.
 
     GitHub EOD may be ahead for an individual ticker even if the overall R2
     snapshot has the same latest market date. R2 wins for all dates it already
@@ -355,7 +355,7 @@ def mirror(*, s3, conf, root=ROOT):
         try:
             for name, staged in incoming:
                 local = root / name
-                if name == 'data/eod_prices.csv' and local.is_file():
+                if name in ('data/eod_prices.csv', 'data/index_prices.csv') and local.is_file():
                     staged = _preserve_newer_local_eod(local, staged, temp)
                 local.parent.mkdir(parents=True, exist_ok=True)
                 previous = backup_dir / Path(name).name

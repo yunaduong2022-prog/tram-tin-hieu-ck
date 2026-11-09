@@ -30,7 +30,8 @@ def leading_from_eod(raw: pd.DataFrame, index_daily: pd.DataFrame, tf: str,
     stock = raw.copy()
     stock["Ngày"] = pd.to_datetime(stock["Ngày"], errors="coerce", format="mixed", dayfirst=True).dt.normalize()
     stock = stock[stock["Ngày"].notna() & (stock["Ngày"] <= end)]
-    if stock.empty:
+    if stock.empty or stock["Ngày"].max() < end:
+        # Do not compute a stale sector ranking for a newer VNINDEX report.
         return []
     P = SRT._prep(stock)  # same pivot implementation used by ND.pivots
     if P.get("c") is None or P["c"].empty or len(P["c"]) < n + 2:

@@ -48,32 +48,31 @@ def _csv_index(path: str, mtime: float) -> pd.DataFrame:
 
 
 def index_daily(raw: pd.DataFrame | None) -> pd.DataFrame:
-    """Lay VNINDEX tu index_prices.csv, du phong bang raw va eod_prices.csv."""
-    d = pd.DataFrame()
+    """Latest real VNINDEX session, never silently truncated by an old index CSV.
 
+    Prefer index_prices on overlapping dates; include newer raw/EOD sessions.
+    Original date-validated candles only; no fabrication or interpolation.
+    """
+    from vnindex_freshness_guard import merge_index_candidates
+
+    # Candidate order is low -> high priority on the same trading session.
+    sources = []
+    raw_has_index = False
+    if raw is not None and not raw.empty and "Mã" in raw.columns:
+        raw_has_index = bool(raw["Mã"].astype(str).str.upper().str.strip().isin(INDEX_CODES).any())
+    if not raw_has_index and os.path.exists(EOD_CSV):
+        try:
+            sources.append(("eod_prices.csv", _csv_index(EOD_CSV, os.path.getmtime(EOD_CSV))))
+        except (OSError, ValueError, KeyError, pd.errors.ParserError):
+            pass
+    if raw is not None and not raw.empty:
+        sources.append(("raw EOD", raw))
     if os.path.exists(INDEX_CSV):
         try:
-            d = _csv_index(INDEX_CSV, os.path.getmtime(INDEX_CSV))
+            sources.append(("index_prices.csv", _csv_index(INDEX_CSV, os.path.getmtime(INDEX_CSV))))
         except (OSError, ValueError, KeyError, pd.errors.ParserError):
-            d = pd.DataFrame()
-
-    if d.empty and raw is not None and not raw.empty:
-        m = raw["Mã"].astype(str).str.upper().str.strip().isin(INDEX_CODES)
-        d = raw[m]
-
-    if d.empty and os.path.exists(EOD_CSV):
-        d = _csv_index(EOD_CSV, os.path.getmtime(EOD_CSV))
-
-    if d.empty:
-        return d
-
-    d = d.copy()
-    d["Ngày"] = pd.to_datetime(d["Ngày"], errors="coerce", format="mixed", dayfirst=True).dt.normalize()
-    for c in OHLC + [V]:
-        d[c] = pd.to_numeric(d[c], errors="coerce")
-    d[V] = d[V].fillna(0)
-    d = d.dropna(subset=["Ngày"] + OHLC)
-    return d[["Ngày"] + OHLC + [V]].drop_duplicates("Ngày", keep="last").sort_values("Ngày").reset_index(drop=True)
+            pass
+    return merge_index_candidates(sources, INDEX_CODES, OHLC, V)
 
 
 # ------------------------------------------------------------------ CHUAN BI DU LIEU BIEU DO (ham thuan, de kiem tra)
@@ -369,7 +368,10 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     if d_all.empty:
         st.error("Không tìm thấy dữ liệu VNINDEX (mã VNINDEX) trong dữ liệu cuối phiên.")
         return
-    key = data_key or (str(os.path.getmtime(EOD_CSV)) if os.path.exists(EOD_CSV) else "")
+    # Invalidate report cache when index CSV changes, independent of stock EOD.
+    index_mtime = os.path.getmtime(INDEX_CSV) if os.path.exists(INDEX_CSV) else 0.0
+    eod_mtime = os.path.getmtime(EOD_CSV) if os.path.exists(EOD_CSV) else 0.0
+    key = f"{data_key}|index:{index_mtime}|eod:{eod_mtime}"
 
     s = _stats(d_all)
     m1, m2, m3, m4 = st.columns(4)
@@ -397,6 +399,25 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         st.warning(info)
         return
     st.subheader(_bulletin_heading(view["title"]))
+    # Read-only provenance from actual candles, not potentially stale metadata.
+    index_day = pd.Timestamp(d_all["Ngày"].iloc[-1]).normalize()
+    index_source = d_all.attrs.get("latest_source", "không rõ")
+    stock_day = None
+    if raw is not None and not raw.empty and "Ngày" in raw.columns:
+        parsed = pd.to_datetime(raw["Ngày"], errors="coerce", format="mixed", dayfirst=True)
+        if parsed.notna().any():
+            stock_day = pd.Timestamp(parsed.max()).normalize()
+    from pathlib import Path as _Path
+    from vnindex_market_cap import load_shares as _load_shares
+    share_rows = _load_shares(_Path(_HERE) / "data" / "shares_outstanding.csv", as_of=index_day.date())
+    cap_label = ("Bộ lọc vốn hóa: CÓ dữ liệu cổ phiếu lưu hành · Chứng khoán ≥5.000 tỷ"
+                 if share_rows else "Bộ lọc vốn hóa: THIẾU dữ liệu cổ phiếu lưu hành · Không chọn mã thiếu vốn hóa")
+    eod_label = f" · EOD cổ phiếu: {stock_day:%d/%m/%Y}" if stock_day is not None else ""
+    st.caption(f"VNINDEX: {index_day:%d/%m/%Y} ({index_source}){eod_label} · {cap_label}")
+    sector_data_behind = stock_day is not None and stock_day < index_day
+    if sector_data_behind:
+        st.warning(f"Dữ liệu nhóm ngành chỉ đến {stock_day:%d/%m/%Y}, sau VNINDEX "
+                   f"{index_day:%d/%m/%Y}. Tạm ẩn xếp hạng dòng tiền để tránh nhầm kỳ.")
     # Refresh warning for all timeframes even when their report is cached.
     A, _ = _auto_mods()
     sections = (A.refresh_fomo_sections(view["sections"], _panel(raw, key), s["date"])
@@ -406,11 +427,24 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     try:
         source_raw = raw if raw is not None else (_csv_all(EOD_CSV, os.path.getmtime(EOD_CSV)) if os.path.exists(EOD_CSV) else None)
         _A, _WL = _auto_mods()
-        leading = leading_from_eod(source_raw, d_all, tf, _WL.GROUPS)
-        sections = replace_strong_sector_block(sections, leading, tf)
+        if sector_data_behind:
+            # Never label an old sector panel as if it belonged to the newer index date.
+            sections = [{**section, "items": [{"tone": "vang", "text":
+                        "Nhóm ngành chưa đồng bộ ngày dữ liệu với VNINDEX; chưa xếp hạng.", "subs": []}]}
+                        if section.get("name") == "DÒNG TIỀN" else section
+                        for section in sections]
+        else:
+            leading = leading_from_eod(source_raw, d_all, tf, _WL.GROUPS)
+            sections = replace_strong_sector_block(sections, leading, tf)
     except Exception as exc:
-        # Preserve the original report if the sector dataset cannot be loaded.
-        st.warning(f"Chưa đồng bộ được Dòng dẫn sóng: {type(exc).__name__}. Đang hiển thị nhóm theo cách tính cũ.")
+        # Fail closed: never show unfiltered representative tickers if cap sync fails.
+        st.error(f"Không thể xác minh xếp hạng ngành và vốn hóa ({type(exc).__name__}); tạm ẩn DÒNG TIỀN.")
+        sections = [
+            {**section, "items": [{"tone": "vang", "text":
+                         "Chưa xác minh được dữ liệu nhóm ngành/vốn hóa; tạm ẩn xếp hạng.", "subs": []}]}
+            if section.get("name") == "DÒNG TIỀN" else section
+            for section in sections
+        ]
     # Separate read-only institution net-flow card: never mutate upstream report/cache.
     from vnindex_institutional_flow import net_flow_sections
     sections = list(sections) + [net_flow_sections(d_all["Ngày"], tf, __import__("pathlib").Path(_HERE) / "data")]
