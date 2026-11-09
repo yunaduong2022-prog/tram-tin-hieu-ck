@@ -21,6 +21,7 @@ import engine as E
 import supertrend as SPT
 import hull_suite as HUL
 import crosshair as CH
+from vnindex_chart_range import RANGE_OPTIONS, chart_range_view
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 EOD_CSV = os.path.join(_HERE, "data", "eod_prices.csv")
@@ -383,16 +384,17 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     trend = " · ".join(f"{'trên' if s['close'] >= s[k] else 'dưới'} {k.upper()}" for k in ("ma20", "ma50") if s[k] is not None)
     m4.metric("Vị trí so với MA", trend or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
 
-    c1, c2, c3, c4, c5 = st.columns([2.0, 1.3, 0.9, 1.2, 1.2])
+    c1, c2, c3, c4 = st.columns([2.0, 1.0, 1.15, 1.15])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
                               label_visibility="collapsed") or "D"
-    choices = BAR_CHOICES[tf]
-    n_show = c2.selectbox("Số nến hiển thị", choices, index=choices.index(BAR_DEFAULT[tf]), key=f"vnv_n_{tf}",
-                          format_func=lambda v: f"{v} nến", label_visibility="collapsed")
-    use_news = c3.checkbox("Tin RSS", value=True, key="vnv_news", help="Lấy tin từ các RSS trong data/rss_feeds.txt (làm mới mỗi 30 phút)")
-
-    show_st = c4.checkbox("Supertrend", value=True, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
-    show_hull = c5.checkbox("Hull Suite", value=True, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH}): dải xanh = Hull đang hướng lên, đỏ = hướng xuống")
+    use_news = c2.checkbox("Tin RSS", value=True, key="vnv_news", help="Lấy tin từ các RSS trong data/rss_feeds.txt (làm mới mỗi 30 phút)")
+    show_st = c3.checkbox("Supertrend", value=True, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
+    show_hull = c4.checkbox("Hull Suite", value=True, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH})")
+    # Selector is intentionally BELOW the chart. Read its previous widget state
+    # here; Streamlit reruns the script automatically after any pill click.
+    chart_range = st.session_state.get("vnv_chart_range", "1Y")
+    if chart_range not in RANGE_OPTIONS:
+        chart_range = "1Y"
     entries, _ = _entries()
     view, info = _auto_view(raw, key, tf, use_news, int(time.time() // 1800), len(entries), "sector-reasons-v1")
     if view is None:
@@ -466,11 +468,16 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     flow_card = _flow_card_without_intro(report_by_name.get("DÒNG TIỀN"))
     chart_col, flow_col = st.columns([2, 1], gap="medium")
     with chart_col:
-        P = prep_chart(d_all, tf, int(n_show))
+        # Indicators use full EOD history; presets only crop the rendered bars.
+        P = prep_chart(d_all, tf, len(d_all))
+        P = chart_range_view(P, d_all["Ngày"], chart_range)
         fig = build_chart(P, show_st, show_hull)
         fig.update_layout(height=485)
-        _plot(fig, f"vnv_chart_{tf}")
+        _plot(fig, f"vnv_chart_{tf}_{chart_range}")
         CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+        st.pills("Khoảng thời gian hiển thị", list(RANGE_OPTIONS),
+                 selection_mode="single", default="1Y",
+                 key="vnv_chart_range", label_visibility="collapsed")
         st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
                    f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
 
