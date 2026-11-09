@@ -133,5 +133,66 @@ class TestVNIndexChartRanges(unittest.TestCase):
         self.assertIn('A.refresh_fomo_sections(view["sections"]', code)
 
 
+    def test_weekly_3y_month_labels_are_sparse_and_readable(self):
+        from vnindex_chart_range import MAX_TIME_TICKS
+        days = pd.bdate_range("2023-11-01", "2026-11-06")
+        frame = pd.DataFrame({"Ngày": days})
+        weekly = frame.groupby(frame["Ngày"].dt.to_period("W-FRI"), sort=True).last().reset_index(drop=True)
+        chart = {"g": weekly, "tf": "W", "labels": [str(x) for x in weekly["Ngày"]], "ticks": []}
+        view = chart_range_view(chart, days, "3Y")
+        ticks = view["ticks"]
+        self.assertGreaterEqual(len(ticks), 4)
+        self.assertLessEqual(len(ticks), MAX_TIME_TICKS)
+        self.assertTrue(all(b[0] - a[0] >= 8 for a, b in zip(ticks, ticks[1:])))
+        self.assertTrue(any("2024" in label for _, label in ticks))
+        self.assertTrue(any("2025" in label for _, label in ticks))
+        self.assertTrue(any("2026" in label for _, label in ticks))
+        self.assertEqual(len(view["g"]), len(view["labels"]))
+        self.assertEqual(view["g"]["Ngày"].iloc[-1], weekly["Ngày"].iloc[-1])
+
+    def test_daily_1y_and_3y_ticks_do_not_overcrowd(self):
+        from vnindex_chart_range import MAX_TIME_TICKS
+        days = pd.bdate_range("2023-11-01", "2026-11-06")
+        frame = pd.DataFrame({"Ngày": days})
+        chart = {"g": frame, "tf": "D", "labels": [str(x) for x in days], "ticks": []}
+        for period in ("1Y", "2Y", "3Y", "Tất cả"):
+            with self.subTest(period=period):
+                view = chart_range_view(chart, days, period)
+                self.assertLessEqual(len(view["ticks"]), MAX_TIME_TICKS)
+                self.assertGreaterEqual(len(view["ticks"]), 1)
+                self.assertEqual(view["g"]["Ngày"].iloc[-1], days[-1])
+
+    def test_short_month_and_january_year_transition_are_preserved(self):
+        days = pd.bdate_range("2025-12-15", "2026-01-15")
+        chart = {"g": pd.DataFrame({"Ngày": days}), "tf": "D",
+                 "labels": [str(x) for x in days], "ticks": []}
+        view = chart_range_view(chart, days, "Tất cả")
+        self.assertEqual(len(view["ticks"]), 2)
+        self.assertIn("Th1/2026", [label for _, label in view["ticks"]])
+
+    def test_long_monthly_quarterly_history_year_ticks_are_limited(self):
+        from vnindex_chart_range import MAX_TIME_TICKS
+        days = pd.date_range("2002-01-31", periods=280, freq="ME")
+        for tf, period in (("M", "M"), ("Q", "Q")):
+            with self.subTest(tf=tf):
+                frame = pd.DataFrame({"Ngày": days})
+                bars = frame.groupby(frame["Ngày"].dt.to_period(period), sort=True).last().reset_index(drop=True)
+                chart = {"g": bars, "tf": tf, "labels": [str(x) for x in bars["Ngày"]], "ticks": []}
+                view = chart_range_view(chart, days, "Tất cả")
+                self.assertLessEqual(len(view["ticks"]), MAX_TIME_TICKS)
+                self.assertTrue(all(label.isdigit() for _, label in view["ticks"]))
+
+    def test_thinning_never_removes_candle_data_or_hover_labels(self):
+        days = pd.bdate_range("2023-11-01", "2026-11-06")
+        chart = {"g": pd.DataFrame({"Ngày": days, "MA10": range(len(days))}),
+                 "tf": "D", "labels": [f"hover-{i}" for i in range(len(days))], "ticks": []}
+        view = chart_range_view(chart, days, "3Y")
+        self.assertEqual(len(view["g"]), len(view["labels"]))
+        self.assertEqual(view["labels"][-1], chart["labels"][-1])
+        self.assertEqual(view["g"]["MA10"].iloc[-1], chart["g"]["MA10"].iloc[-1])
+        self.assertLess(len(view["ticks"]), 12)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
