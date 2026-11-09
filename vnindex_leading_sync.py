@@ -5,6 +5,8 @@ This module does not infer verified buying/net inflow from EOD turnover.
 from __future__ import annotations
 
 import pandas as pd
+from pathlib import Path
+from vnindex_market_cap import load_shares, threshold_for_group, filtered_top_codes
 
 PERIOD_FOR_TF = {"D": ("1 phiên", 1), "W": ("1 tuần", 5),
                  "M": ("1 tháng", 21), "Q": ("3 tháng", 63)}
@@ -44,16 +46,23 @@ def leading_from_eod(raw: pd.DataFrame, index_daily: pd.DataFrame, tf: str,
     if board.empty:
         return []
     leaders = board.loc[board["Dẫn sóng"].fillna(False)].sort_values("#").head(3)
+    # Shares are the public-market-data snapshot already mirrored by R2.
+    # The groups and their price-strength ranking must remain unchanged.
+    shares = load_shares(Path(__file__).resolve().parent / 'data' / 'shares_outstanding.csv',
+                         as_of=end.date())
     result = []
     for _, row in leaders.iterrows():
         group = str(row["Dòng"])
-        reps = ND.rep_stocks(P, groups.get(group, []), n,
-                             meta.get(group, {}).get("leaders"), top=5)
-        codes = [str(code) for code in reps["Mã"]] if not reps.empty else []
-        if not codes:
-            continue
+        members = groups.get(group, [])
+        threshold = threshold_for_group(group, len(set(members)))
+        # IMPORTANT: rank ALL representatives first, then filter capitalization;
+        # otherwise an undersized Top-5 code would block an eligible #6 code.
+        reps = ND.rep_stocks(P, members, n, meta.get(group, {}).get("leaders"), top=None)
+        codes = filtered_top_codes(reps.to_dict("records") if not reps.empty else [],
+                                   shares, threshold, top=5)
+        # Keep the TOP-3 sector group even if no representative passes the cap.
         result.append({"group": group, "return": float(row["Giai đoạn"]),
-                       "codes": codes, "rank": int(row["#"])})
+                       "codes": codes, "rank": int(row["#"]), "min_cap_bil": threshold})
     return result
 
 
@@ -67,8 +76,16 @@ def leading_items(rows: list[dict], tf: str) -> list[dict]:
               f"({performance}); đây là hiệu suất giá, không phải dòng tiền mua ròng.")
     items = [dict(tone="xanh", text=f"TOP {len(rows)} NHÓM DẪN SÓNG ({period}):", subs=[]),
              dict(tone="", text=reason, subs=[])]
-    items.extend(dict(tone="xanh", text=x["group"] + ": " + ", ".join(x["codes"]), subs=[])
-                 for x in rows)
+    for x in rows:
+        codes = x.get("codes", [])
+        if codes:
+            label = x["group"] + ": " + ", ".join(codes)
+        else:
+            amount = x.get("min_cap_bil", 0)
+            cap_text = f"{amount:,.0f}".replace(",", ".")
+            label = (f'{x["group"]}: Chưa có mã đạt vốn hóa ≥{cap_text} tỷ '
+                     'hoặc chưa đủ dữ liệu để xác minh.')
+        items.append(dict(tone="xanh" if codes else "vang", text=label, subs=[]))
     return items
 
 
