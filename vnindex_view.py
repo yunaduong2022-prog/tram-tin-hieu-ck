@@ -184,13 +184,21 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
 
     lo, hi = float(g[L].min()), float(g[H].max())
     pad = max(hi - lo, 1.0) * 0.06
-    fig.update_xaxes(type="category", range=right_axis_range(n, tf), rangeslider_visible=False, showgrid=False, showline=True, linecolor="rgba(128,128,128,.35)")
+    # Two panes share the same candle positions; ONLY the volume pane shows time.
+    # Space at the right is inside the plot, not between VNINDEX and DÒNG TIỀN.
+    visible_x_range = right_axis_range(n, tf)
+    fig.update_xaxes(type="category", range=visible_x_range, rangeslider_visible=False,
+                     showgrid=False, showline=True, linecolor="rgba(128,128,128,.35)",
+                     showticklabels=False, row=1, col=1)
+    fig.update_xaxes(type="category", range=visible_x_range, rangeslider_visible=False,
+                     showgrid=False, showline=True, linecolor="rgba(128,128,128,.35)",
+                     showticklabels=bool(P["ticks"]), row=2, col=1)
     if P["ticks"]:
-        # nhãn tháng hiện cả dưới biểu đồ nến (trên khối lượng) lẫn ở đáy
-        fig.update_xaxes(tickmode="array", tickvals=[x[i] for i, _ in P["ticks"]], ticktext=[t for _, t in P["ticks"]],
-                         ticks="outside", ticklen=4, tickangle=0, tickfont=dict(size=11), showticklabels=True)
-    else:
-        fig.update_xaxes(showticklabels=False)
+        # A single month/year time row BELOW volume; keep hover/crosshair intact.
+        fig.update_xaxes(tickmode="array", tickvals=[x[i] for i, _ in P["ticks"]],
+                         ticktext=[t for _, t in P["ticks"]], ticks="outside",
+                         ticklen=4, tickangle=0, tickfont=dict(size=11),
+                         showticklabels=True, row=2, col=1)
     fig.update_yaxes(range=[lo - pad, hi + pad], side="right", tickformat=",d", showgrid=True, gridcolor="rgba(128,128,128,.18)",
                      zeroline=False, showline=True, linecolor="rgba(128,128,128,.35)", row=1, col=1)
     fig.update_yaxes(range=[0, float(g[V].max()) * 1.08], showticklabels=False, showgrid=False, zeroline=False,

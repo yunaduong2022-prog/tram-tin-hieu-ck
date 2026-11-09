@@ -34,8 +34,8 @@ class TestCandleToPriceAxisSpacing(unittest.TestCase):
         self.assertLess(m, w)
         self.assertLess(w, q)
 
-    def test_weekly_and_quarterly_visible_empty_area_about_one_quarter(self):
-        for tf, minimum, maximum in (("W", 0.25, 0.28), ("Q", 0.27, 0.30)):
+    def test_weekly_and_quarterly_visible_empty_area_is_compact(self):
+        for tf, minimum, maximum in (("W", 0.19, 0.21), ("Q", 0.21, 0.23)):
             with self.subTest(tf=tf):
                 start, end = right_axis_range(52, tf)
                 extra = end - 51.5
@@ -62,8 +62,11 @@ class TestCandleToPriceAxisSpacing(unittest.TestCase):
 
     def test_use_numeric_category_range_in_chart(self):
         self.assertIn('from vnindex_chart_right_pad import right_axis_range', SRC)
-        self.assertEqual(SRC.count('fig.update_xaxes(type="category", range=right_axis_range(n, tf),'), 1)
-        self.assertNotIn('fig.update_xaxes(type="category", rangeslider_visible=False', SRC)
+        self.assertIn('visible_x_range = right_axis_range(n, tf)', SRC)
+        self.assertEqual(SRC.count('range=visible_x_range, rangeslider_visible=False,'), 2)
+        self.assertIn('showticklabels=False, row=1, col=1)', SRC)
+        self.assertIn('showticklabels=True, row=2, col=1)', SRC)
+        self.assertNotIn('fig.update_xaxes(type="category", range=right_axis_range(n, tf),', SRC)
 
     def test_full_price_and_volume_panels_share_the_range(self):
         import plotly.graph_objects as go
