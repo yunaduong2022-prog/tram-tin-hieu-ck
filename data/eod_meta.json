@@ -1,9 +1,9 @@
 {
- "updated_at": "06/11/2026 22:33 (giờ VN)",
- "latest_date": "2026-11-06",
+ "updated_at": "09/11/2026 22:30 (giờ VN)",
+ "latest_date": "2026-11-09",
  "symbols": 281,
- "symbols_on_latest_date": 247,
- "rows": 513042,
+ "symbols_on_latest_date": 242,
+ "rows": 513284,
  "sources": {
   "vci": 265
  },
