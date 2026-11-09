@@ -401,21 +401,13 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         st.warning(info)
         return
     st.subheader(_bulletin_heading(view["title"]))
-    # Read-only provenance from actual candles, not potentially stale metadata.
+    # Dates still drive freshness checks; hide the read-only metadata row.
     index_day = pd.Timestamp(d_all["Ngày"].iloc[-1]).normalize()
-    index_source = d_all.attrs.get("latest_source", "không rõ")
     stock_day = None
     if raw is not None and not raw.empty and "Ngày" in raw.columns:
         parsed = pd.to_datetime(raw["Ngày"], errors="coerce", format="mixed", dayfirst=True)
         if parsed.notna().any():
             stock_day = pd.Timestamp(parsed.max()).normalize()
-    from pathlib import Path as _Path
-    from vnindex_market_cap import load_shares as _load_shares
-    share_rows = _load_shares(_Path(_HERE) / "data" / "shares_outstanding.csv", as_of=index_day.date())
-    cap_label = ("Bộ lọc vốn hóa: CÓ dữ liệu cổ phiếu lưu hành · Chứng khoán ≥5.000 tỷ"
-                 if share_rows else "Bộ lọc vốn hóa: THIẾU dữ liệu cổ phiếu lưu hành · Không chọn mã thiếu vốn hóa")
-    eod_label = f" · EOD cổ phiếu: {stock_day:%d/%m/%Y}" if stock_day is not None else ""
-    st.caption(f"VNINDEX: {index_day:%d/%m/%Y} ({index_source}){eod_label} · {cap_label}")
     sector_data_behind = stock_day is not None and stock_day < index_day
     if sector_data_behind:
         st.warning(f"Dữ liệu nhóm ngành chỉ đến {stock_day:%d/%m/%Y}, sau VNINDEX "
