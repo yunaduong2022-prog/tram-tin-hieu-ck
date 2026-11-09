@@ -35,13 +35,19 @@ class TestCandleToPriceAxisSpacing(unittest.TestCase):
         self.assertLess(w, q)
 
     def test_weekly_and_quarterly_visible_empty_area_is_compact(self):
-        for tf, minimum, maximum in (("W", 0.19, 0.21), ("Q", 0.21, 0.23)):
+        for tf, minimum, maximum in (("W", 0.14, 0.16), ("Q", 0.16, 0.18)):
             with self.subTest(tf=tf):
                 start, end = right_axis_range(52, tf)
                 extra = end - 51.5
                 portion = extra / (end-start)
                 self.assertGreaterEqual(portion, minimum)
                 self.assertLessEqual(portion, maximum)
+
+    def test_monthly_blank_share_is_smaller(self):
+        start, end = right_axis_range(52, "M")
+        share = (end - 51.5) / (end - start)
+        self.assertGreater(share, 0.12)
+        self.assertLess(share, 0.14)
 
     def test_daily_not_overpadded(self):
         start, end = right_axis_range(250, "D")

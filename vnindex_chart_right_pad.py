@@ -8,14 +8,14 @@ from __future__ import annotations
 
 # Extra axis lengths relative to the number of real candles.
 # Visible blank share = ratio / (1 + ratio) for typical n > 3.
-RIGHT_EXTRA_RATIO = {"D": 0.14, "W": 0.25, "M": 0.20, "Q": 0.28}
+RIGHT_EXTRA_RATIO = {"D": 0.14, "W": 0.18, "M": 0.15, "Q": 0.21}
 
 
 def right_axis_range(n_bars: int, tf: str) -> list[float]:
     """Return a numeric category range with trailing empty plot area.
 
-    More compact trailing space: daily ~12%, weekly ~20%, monthly ~17%
-    and quarterly ~22%, for every 5D/1M/1Y/all preset.
+    Fine-tuned trailing space: daily ~12% unchanged, weekly ~15%,
+    monthly ~13% and quarterly ~17% across all chart time ranges.
     Both price and volume panes must receive the same x range.
     """
     if isinstance(n_bars, bool) or not isinstance(n_bars, int) or n_bars < 1:

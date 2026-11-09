@@ -14,7 +14,7 @@ SOURCE = (Path(__file__).resolve().parent / "vnindex_view.py").read_text(encodin
 
 class TestVNIndexSingleTimeAxis(unittest.TestCase):
     def test_ratios_are_new_compact_values(self):
-        self.assertEqual(RIGHT_EXTRA_RATIO, {"D": 0.14, "W": 0.25, "M": 0.20, "Q": 0.28})
+        self.assertEqual(RIGHT_EXTRA_RATIO, {"D": 0.14, "W": 0.18, "M": 0.15, "Q": 0.21})
 
     def test_right_gap_is_reduced_from_previous_release(self):
         old = {"D": 0.18, "W": 0.37, "M": 0.26, "Q": 0.40}
