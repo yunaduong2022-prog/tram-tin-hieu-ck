@@ -22,6 +22,7 @@ import theme as TH
 import supertrend as SPT
 import hull_suite as HUL
 import crosshair as CH
+import vnindex_draw_tools as VDT  # MIN_VNINDEX_DRAW_TOOLBAR_V1
 from vnindex_chart_range import RANGE_OPTIONS, chart_range_view
 from vnindex_chart_right_pad import right_axis_range
 
@@ -158,7 +159,7 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
     hover = [f"<b>{lb}</b><br>Mở {r[O]:,.2f} · Cao {r[H]:,.2f}<br>Thấp {r[L]:,.2f} · Đóng {r[C]:,.2f}"
              f"<br>KL {r[V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(cross, g.iterrows())]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=DATE_GAP_PX / 620)
-    fig.add_trace(go.Candlestick(x=x, open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
+    fig.add_trace(go.Candlestick(x=x, name="VNINDEX", customdata=[pd.Timestamp(t).strftime("%Y-%m-%d") for t in g["Ngày"]], open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
                                  showlegend=False, whiskerwidth=0, meta=cross,
                                  increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
                                  decreasing=dict(line=dict(color=DN, width=1), fillcolor=DN)), row=1, col=1)
@@ -484,7 +485,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         P = prep_chart(d_all, tf, len(d_all))
         P = chart_range_view(P, d_all["Ngày"], chart_range)
         fig = build_chart(P, show_st, show_hull)
-        fig.update_layout(height=485)
+        fig.update_layout(height=485, meta=dict(vn_code="VNINDEX", vn_tf=tf))
         TH.style_fig(fig)
         if not TH.is_dark():
             # Ensure clear legend and date/price ticks on a light background.
@@ -500,6 +501,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
             fig.update_yaxes(tickfont=dict(color=chart_muted, size=11), tickcolor="#9AB2A6")
         _plot(fig, f"vnv_chart_{tf}_{chart_range}")
         CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+        VDT.inject(tf)  # Thanh công cụ vẽ bên trái, lưu theo VNINDEX và khung thời gian
         st.pills("Khoảng thời gian hiển thị", list(RANGE_OPTIONS),
                  selection_mode="single", default="1Y",
                  key="vnv_chart_range", label_visibility="collapsed")
