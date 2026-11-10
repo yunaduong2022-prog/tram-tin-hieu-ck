@@ -139,9 +139,26 @@ def _dark_table(cols, rows, height=600):
     """Bảng ngang nền tối, bấm tiêu đề để sắp xếp. cols = [(tiêu đề, 'txt'|'num1'|'num2'|'pct')]."""
     import json
     import streamlit.components.v1 as components
+    # iframe không thừa hưởng CSS từ trang cha nên truyền riêng bảng màu đang chọn.
+    p = TH.palette()
+    extra = """<style>
+    body{background:__BG__!important;color:__TXT__!important}
+    .wrap{border-color:__LINE__!important}
+    th{background:__BG2__!important;color:__TXT__!important;border-color:__LINE__!important}
+    td{border-color:__LINE__!important;color:__TXT__}
+    tbody tr:nth-child(odd){background:__CARD__!important}
+    tbody tr:nth-child(even){background:__BG__!important}
+    tbody tr:hover{background:__BG2__!important}
+    td.code{color:__ACCENT__!important}td.pos{color:__GREEN__!important}
+    td.neg{color:__RED__!important}td.na{color:__MUTED__!important}
+    </style>"""
+    for k, v in {"BG":p["bg"], "BG2":p["bg2"], "CARD":p["card"], "TXT":p["txt"],
+                 "LINE":p["line"], "ACCENT":p["accent"], "GREEN":p["green"],
+                 "RED":p["red"], "MUTED":p["muted"]}.items():
+        extra = extra.replace("__" + k + "__", v)
     html = (_TABLE_HTML.replace("__COLS__", json.dumps(cols, ensure_ascii=False))
             .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)).replace("__H__", str(height)))
-    components.html(html, height=height + 20, scrolling=False)
+    components.html(extra + html, height=height + 20, scrolling=False)
 
 
 def _bctc_frame(codes, fund_map):

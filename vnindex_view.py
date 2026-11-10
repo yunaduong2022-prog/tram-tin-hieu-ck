@@ -18,9 +18,11 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import theme as TH
 import supertrend as SPT
 import hull_suite as HUL
 import crosshair as CH
+import vnindex_draw_tools as VDT  # MIN_VNINDEX_DRAW_TOOLBAR_V1
 from vnindex_chart_range import RANGE_OPTIONS, chart_range_view
 from vnindex_chart_right_pad import right_axis_range
 
@@ -140,6 +142,11 @@ def _plot(fig, key: str):
         kw["config"] = cfg
     else:
         kw.update(cfg)
+    # MIN_FINANCE_LIGHT_V2_1_VNINDEX: bypass Streamlit's dark Plotly skin in light mode.
+    # The app's config.toml intentionally stays dark by default; Plotly must use
+    # the chart's own plotly_white template when the user chooses Sáng.
+    if not TH.is_dark() and "theme" in params:
+        kw["theme"] = None
     st.plotly_chart(fig, key=key, **kw)
 
 
@@ -152,7 +159,7 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
     hover = [f"<b>{lb}</b><br>Mở {r[O]:,.2f} · Cao {r[H]:,.2f}<br>Thấp {r[L]:,.2f} · Đóng {r[C]:,.2f}"
              f"<br>KL {r[V] / 1e6:,.1f} triệu cp" for lb, (_, r) in zip(cross, g.iterrows())]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=DATE_GAP_PX / 620)
-    fig.add_trace(go.Candlestick(x=x, open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
+    fig.add_trace(go.Candlestick(x=x, name="VNINDEX", customdata=[pd.Timestamp(t).strftime("%Y-%m-%d") for t in g["Ngày"]], open=g[O], high=g[H], low=g[L], close=g[C], text=hover, hoverinfo="text",
                                  showlegend=False, whiskerwidth=0, meta=cross,
                                  increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
                                  decreasing=dict(line=dict(color=DN, width=1), fillcolor=DN)), row=1, col=1)
@@ -391,7 +398,12 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
               None if s["vol_vs"] is None else f"{s['vol_vs']:+.0f}% so với TB 20 phiên", delta_color="off")
     m3.metric("Cách đỉnh 52 tuần", "–" if s["from_hi"] is None else f"{s['from_hi']:+.1f}%", delta_color="off")
     trend = " · ".join(f"{'trên' if s['close'] >= s[k] else 'dưới'} {k.upper()}" for k in ("ma20", "ma50") if s[k] is not None)
-    m4.metric("Vị trí so với MA", trend or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
+    # Abbreviate only the visual metric (same data and MA comparison).
+    trend_compact = " · ".join(
+        f"{'↑' if s['close'] >= s[k] else '↓'} {k.upper()}"
+        for k in ("ma20", "ma50") if s[k] is not None
+    )
+    m4.metric("Vị trí so với MA", trend_compact or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
 
     c1, c2, c3, c4 = st.columns([2.0, 1.0, 1.15, 1.15])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
@@ -473,9 +485,23 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         P = prep_chart(d_all, tf, len(d_all))
         P = chart_range_view(P, d_all["Ngày"], chart_range)
         fig = build_chart(P, show_st, show_hull)
-        fig.update_layout(height=485)
+        fig.update_layout(height=485, meta=dict(vn_code="VNINDEX", vn_tf=tf))
+        TH.style_fig(fig)
+        if not TH.is_dark():
+            # Ensure clear legend and date/price ticks on a light background.
+            # Do not alter candle, volume, MA or report computations.
+            chart_txt = TH.palette()["txt"]
+            chart_muted = "#526F62"
+            fig.update_layout(
+                font=dict(color=chart_txt),
+                legend=dict(font=dict(color=chart_txt, size=11)),
+                hoverlabel=dict(bgcolor="#FFFFFF", font=dict(color=chart_txt, size=12)),
+            )
+            fig.update_xaxes(tickfont=dict(color=chart_muted, size=11), tickcolor="#9AB2A6")
+            fig.update_yaxes(tickfont=dict(color=chart_muted, size=11), tickcolor="#9AB2A6")
         _plot(fig, f"vnv_chart_{tf}_{chart_range}")
         CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
+        VDT.inject(tf)  # Thanh công cụ vẽ bên trái, lưu theo VNINDEX và khung thời gian
         st.pills("Khoảng thời gian hiển thị", list(RANGE_OPTIONS),
                  selection_mode="single", default="1Y",
                  key="vnv_chart_range", label_visibility="collapsed")

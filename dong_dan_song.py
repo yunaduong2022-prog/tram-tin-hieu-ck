@@ -13,6 +13,7 @@ import zlib
 import numpy as np
 import pandas as pd
 import streamlit as st
+import theme as TH
 
 import nhom_nganh_data as ND
 from nhom_nganh_homnay import DECIMAL_COMMA, PALETTE, _cls, _pct, _vn
@@ -169,7 +170,7 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
 
     left, right = st.columns([1.3, 1], gap="medium")
     with left:
-        st.markdown('<div class="dd-topbar"><b style="color:#E6EDF3;letter-spacing:.4px">TRẠM TÍN HIỆU</b>&nbsp;<span style="color:#6B7686">|</span>&nbsp;<b style="color:#E8C47C;letter-spacing:.4px">MIN TRADING</b></div>', unsafe_allow_html=True)
+        st.markdown('<div class="dd-topbar"><b class="dd-brand-name" style="color:#E6EDF3;letter-spacing:.4px">TRẠM TÍN HIỆU</b>&nbsp;<span style="color:#6B7686">|</span>&nbsp;<b class="dd-brand-gold" style="color:#E8C47C;letter-spacing:.4px">MIN TRADING</b></div>', unsafe_allow_html=True)
         styler = _styler(view, ["Biến động giai đoạn", "Biến động ngày"], sel_name)
         picked = None
         ev = None
@@ -224,7 +225,7 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
         for code_ in cf.columns:
             fig.add_trace(go.Scatter(x=cf.index, y=cf[code_], mode="lines", name=str(code_), line=dict(width=1.8)))
         fig.add_hline(y=100, line_dash="dot", line_color="#6B7686")
-        fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", y=1.1), template="plotly_dark",
+        fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", y=1.1), template=TH.plotly_template(),
                           paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis_title="Quy về 100")
         st.plotly_chart(fig, **ND.stretch(st.plotly_chart))
     st.caption(f"Biến động dòng = trung vị % của các mã trong dòng (dòng dưới {ND.MIN_FOR_MEDIAN} mã dùng trung bình); giai đoạn tính trên {n} phiên. "

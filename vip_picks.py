@@ -68,6 +68,7 @@ import pandas as pd
 import streamlit as st
 
 import action_summary as AS
+import theme as TH
 
 PATH = "data/khuyen_nghi_khach_hang.csv"
 FOREIGN_PATH = "data/foreign_flow.csv"
@@ -974,6 +975,103 @@ CSS = """
 </style>
 """
 
+# MIN_VIP_LIGHT_THEME_V1: CSS-only override for light theme; dark theme unchanged.
+# VIP sections intentionally use their own palette, so inheriting :root is not enough.
+LIGHT_VIP_CSS = """
+<style>
+/* Only enabled while min_theme_mode == 'light'. */
+.tp-wrap.vpb{
+  --card:#FFFFFF;--card2:#F1F8F4;--line:#CCDCD3;--line2:#E1ECE5;
+  --txt:#19382B;--txt2:#102E22;--muted:#4D695B;
+  --accent:#087C5C;--green:#087C5C;--red:#BF2B45;
+  --tag-green-bg:#E0F3E9;--tag-green-fg:#086748;
+  --tag-amber-bg:#FCF0D6;--tag-amber-fg:#875709;
+  --tag-red-bg:#FCE6E9;--tag-gray-bg:#E9F0EC;--tag-gray-fg:#4D695B;
+  background:linear-gradient(135deg,#FFFFFF 0%,#F6FAF7 100%);
+  border-color:var(--line);color:var(--txt);
+}
+.vpb .tp-tb td.pl,.vpb .tp-tb td.pl.key{color:var(--txt)}
+.vpb .pl-code,.vpb .tp-sc,.vpb .tp-score{color:var(--txt2)}
+.vpb .tp-tb td.pl.ex,.vpb .tp-chip{color:var(--muted)}
+.vpb .cmd-t{color:#8C5B09}
+.vpb .cmd-t.green,.vpb .lv.up{color:#087C5C}
+.vpb .cmd-t.red,.vpb .lv.dn{color:#BF2B45}
+.vpb .cmd-t.gray{color:var(--muted)}
+.vpb .lv.fl{color:#94610A}
+.vpb .tp-bar{background:var(--line)}
+.vpb .tp-grade{background:var(--tag-green-bg);color:var(--tag-green-fg)}
+.vpb .tp-chip:before{color:var(--green)}
+.vpb .tp-rec{color:var(--txt2)}
+.vpb .tp-rec.green{color:var(--green)}
+.vpb .tp-rec.red{color:var(--red)}
+.vpb .tp-rec.gray{color:var(--muted)}
+.vpb .tp-tb tbody tr:hover td{background:rgba(8,124,92,.06)}
+/* Closed trades: the neutral price was previously hard-coded to white inline. */
+.vpb .lvrow .lv:not(.up):not(.dn):not(.fl){color:var(--txt2)!important}
+/* P&L summary on the Holding tab also had a fixed dark background. */
+.vp-hold-kpis{background:linear-gradient(135deg,#F5FAF7,#EDF6F0);
+  border-color:#C9DED1;color:#173329}
+.vp-hold-k-card{background:#FFFFFF;border-color:#D5E5DA;color:#173329}
+.vp-hold-k-label,.vp-hold-k-note{color:#526C5E}
+.vp-hold-bottom{background:#EDF6F0;border-color:#C9DED1;color:#173329}
+.vp-hold-positive{color:#087C5C!important}
+.vp-hold-negative{color:#BF2B45!important}
+.vp-hold-neutral{color:#173329!important}
+
+/* MIN_FINANCE_LIGHT_V2 — high-density VIP terminal tables, light mode only. */
+.tp-wrap.vpb{
+  --card:#F3F8F4;--card2:#E8F2EB;--line:#BACFC1;--line2:#D5E2D8;
+  --txt:#173A2C;--txt2:#102D22;--muted:#4A6757;
+  --accent:#0B6B53;--green:#087A58;--red:#C2354A;
+  --tag-green-bg:#D7E9DE;--tag-green-fg:#08664A;
+  --tag-amber-bg:#F5EACF;--tag-amber-fg:#916314;
+  --tag-red-bg:#F6E1E5;--tag-gray-bg:#E0EAE3;--tag-gray-fg:#476356;
+  background:linear-gradient(120deg,#E9F2EC,#F5F9F5 48%,#EAF3ED);
+  border:1px solid #B8D1C2;border-top:3px solid #195B45;
+  box-shadow:0 4px 15px rgba(19,66,40,.09);
+}
+.tp-wrap.vpb .tp-tb th{
+  background:#1C4D3C;color:#EAF5ED!important;font-size:clamp(10px,.66vw,12px);
+  border-bottom:1px solid #3E705A;padding-top:13px;padding-bottom:13px;
+}
+.tp-wrap.vpb .tp-tb tbody tr:nth-child(odd):not(.th) td{background:rgba(235,245,237,.60)}
+.tp-wrap.vpb .tp-tb tbody tr:nth-child(even):not(.th) td{background:rgba(246,250,246,.68)}
+.tp-wrap.vpb .tp-tb tbody tr:hover td{background:#DCECE1!important}
+.tp-wrap.vpb .tp-tb td.pl,.tp-wrap.vpb .tp-tb td.pl.key{color:#16382A}
+.tp-wrap.vpb .tp-tb td.pl.ex,.tp-wrap.vpb .tp-chip{color:#486657}
+.tp-wrap.vpb .pl-code{color:#0E3022}
+.tp-wrap.vpb .tp-score,.tp-wrap.vpb .tp-sc{color:#0F3426}
+.tp-wrap.vpb .cmd-t{color:#906116}
+.tp-wrap.vpb .cmd-t.green,.tp-wrap.vpb .lv.up{color:#087A58}
+.tp-wrap.vpb .cmd-t.red,.tp-wrap.vpb .lv.dn{color:#BD3045}
+.tp-wrap.vpb .cmd-t.gray{color:#506F61}
+.tp-wrap.vpb .tp-rec{color:#184233}
+.tp-wrap.vpb .tp-rec.green{color:#086D4C}
+.tp-wrap.vpb .tp-rec.red{color:#B72B43}
+.tp-wrap.vpb .tp-rec.gray{color:#465F51}
+.tp-wrap.vpb .tp-bar{background:#C4D6CA}
+.tp-wrap.vpb .tp-chip:before{color:#087A58}
+.tp-wrap.vpb .tp-grade{background:#D7EADF;color:#0D6A4A}
+.tp-wrap.vpb .lvrow .lv:not(.up):not(.dn):not(.fl){color:#1B3F30!important}
+/* Holding P&L KPIs: darker market-green header surface, gentle ivory cards. */
+.vp-hold-kpis{background:linear-gradient(110deg,#DCEBE0,#EBF2E9)!important;
+  border:1px solid #ABC9B3!important;border-top:3px solid #1D674C!important;color:#173C2D!important}
+.vp-hold-k-card{background:#F7FAF5!important;border:1px solid #C4DACA!important;color:#173C2D!important}
+.vp-hold-k-label,.vp-hold-k-note{color:#4C6858!important}
+.vp-hold-bottom{background:#E0EDE2!important;border:1px solid #A9C9B3!important;color:#153A2B!important}
+.vp-hold-positive{color:#087550!important}
+.vp-hold-negative{color:#BF3449!important}
+.vp-hold-neutral{color:#153A2B!important}
+/* VIP hero: premium restrained gold-green tint, not white-on-white. */
+.vp-hero{background:linear-gradient(110deg,#E7ECD9,#F0F4E9 65%,#EAF2EB)!important;
+  border-color:#CBD8C7!important;box-shadow:0 2px 10px rgba(45,71,28,.06)}
+.vp-badge{background:#F8EDD0!important;color:#805B19!important;border-color:#CBAA56!important}
+.vp-badge.n{background:#E1EBE3!important;color:#264A39!important;border-color:#C2D6C6!important}
+
+</style>
+"""
+
+
 
 def _ok(v) -> bool:
     return v is not None and not (isinstance(v, float) and np.isnan(v))
@@ -1835,7 +1933,7 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
                        ". Đây không phải giá của phiên mới nhất; không tự tạo nến khi mã không có giao dịch.")
     plans = load()
     groups = {s_: plans[plans["Trạng thái"] == s_] for s_ in STATUSES}
-    st.markdown(CSS + _hero_html(len(groups["Chờ mua"]) + len(groups["Đang nắm giữ"])), unsafe_allow_html=True)
+    st.markdown(CSS + (LIGHT_VIP_CSS if not TH.is_dark() else "") + _hero_html(len(groups["Chờ mua"]) + len(groups["Đang nắm giữ"])), unsafe_allow_html=True)
 
     if admin:
         _admin_panel(available)
