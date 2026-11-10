@@ -2803,7 +2803,7 @@ def _code_px(code: str) -> int:
 
 def _brand_tag() -> str:
     """Dòng thương hiệu trên biểu đồ: TRẠM TÍN HIỆU | MIN TRADING (tên lấy từ brand.py)."""
-    return (f'<b style="color:#E6EDF3">{BR.TITLE.upper()}</b> <span style="color:#6B7686">|</span> '
+    return (f'<b style="color:{TH.palette()["txt"]}">{BR.TITLE.upper()}</b> <span style="color:#6B7686">|</span> '
             f'<b style="color:#E8C47C">{BR.BRAND.upper()}</b>')
 
 
@@ -2817,7 +2817,7 @@ def _ma_row_html(code) -> str:
             v = pd.to_numeric(f_.loc[f_["Mã"] == code, col], errors="coerce").iloc[-1]
         except Exception:  # noqa: BLE001
             v = float("nan")
-        parts.append(f'<span style="color:{color}">{nm}</span> <b style="color:#E6EDF3">{"-" if pd.isna(v) else f"{v:,.2f}"}</b>')
+        parts.append(f'<span style="color:{color}">{nm}</span> <b style="color:{TH.palette()["txt"]}">{"-" if pd.isna(v) else f"{v:,.2f}"}</b>')
     return "&nbsp;&nbsp;&nbsp;".join(parts)
 
 
@@ -3053,14 +3053,14 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
             dom = fig.get_subplot(2 + subs.index(sub), 1).yaxis.domain
             if sub_hdr_right and not hdr_right:       # trang Cổ phiếu: góc trên phải, cách mép khung, nền mờ để không dính/đè lên đường giá
                 fig.add_annotation(xref="paper", yref="paper", x=0.985, y=dom[1], xanchor="right", yanchor="top", yshift=-8, showarrow=False,
-                                   align="right", text=html_, font=dict(size=11, color="#8B95A5"),
+                                   align="right", text=html_, font=dict(size=11, color=TH.palette()["muted"]),
                                    bgcolor="rgba(14,27,23,0.78)", borderpad=4)
             elif (hdr_right if sub_hdr_right is None else sub_hdr_right):
                 fig.add_annotation(xref="paper", yref="paper", x=0.996, y=dom[0], xanchor="right", yanchor="bottom", yshift=4, showarrow=False,
-                                   align="right", text=html_, font=dict(size=11, color="#8B95A5"))
+                                   align="right", text=html_, font=dict(size=11, color=TH.palette()["muted"]))
             else:
                 fig.add_annotation(xref="paper", yref="paper", x=0.004, y=dom[1], xanchor="left", yanchor="top", showarrow=False,
-                                   align="left", text=html_, font=dict(size=11, color="#8B95A5"))
+                                   align="left", text=html_, font=dict(size=11, color=TH.palette()["muted"]))
     lr = t.iloc[-1]
     if "Khối lượng" in subs:
         _hdr("Khối lượng", f'VOL: <b style="color:#CBD2DC">{_fv(vol.iloc[-1])}</b>  MA20: <span style="color:#F59E0B">{_fv(vol_ma20.iloc[-1])}</span>')
@@ -3134,7 +3134,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Mỗi chỉ số = 3 chú thích riêng (nhãn / giá trị / dòng phụ) xếp bằng yshift (px) để không đè nhau khi khác cỡ chữ
         for i, m in enumerate(others):
             base = dict(xref="paper", yref="paper", x=code_w + i * step, y=1, xanchor="left", showarrow=False, align="left")
-            fig.add_annotation(**base, yanchor="bottom", yshift=50, text=m["label"], font=dict(size=10, color="#8B95A5"),
+            fig.add_annotation(**base, yanchor="bottom", yshift=50, text=m["label"], font=dict(size=10, color=TH.palette()["muted"]),
                                hovertext=m.get("tip"))
             fig.add_annotation(**base, yanchor="bottom", yshift=29, text=f'<b>{m["value"]}</b>', font=dict(size=18),
                                hovertext=m.get("tip"))
@@ -3160,7 +3160,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         if name_lines:
             fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=86, showarrow=False,
                                align="left", text="<br>".join(htmllib.escape(x_) for x_ in name_lines),
-                               font=dict(size=NAME_PX, color="#E6EDF3"))
+                               font=dict(size=NAME_PX, color=TH.palette()["txt"]))
         fig.add_annotation(xref="paper", yref="paper", x=code_w, y=1, xanchor="left", yanchor="bottom", yshift=70, showarrow=False,
                            align="left", text=_ohlc_header(code, tf, g))
         if _ma_row:
@@ -3176,7 +3176,7 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=54, t=20, b=130),
                           legend=dict(orientation="h", yanchor="top", y=-0.035, font=dict(size=10)))
     else:
-        _title = (f'<b style="color:#E6EDF3">{htmllib.escape(title_text)}</b>' if title_text else _brand_tag())
+        _title = (f'<b style="color:{TH.palette()["txt"]}">{htmllib.escape(title_text)}</b>' if title_text else _brand_tag())
         fig.add_annotation(xref="paper", yref="paper", x=0, y=1, xanchor="left", yanchor="bottom", yshift=(12 if hide_legend else 58), showarrow=False,
                            text=_title, font=dict(size=22))
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=(50 if hide_legend else 96), b=10),
@@ -3810,6 +3810,9 @@ def _rt_go(target: str, code: str):
 # ------------------------------------------------------------------ ĐIỀU HƯỚNG (Mega Navigation Bar)
 def _route_inner():
     BR.render_header(f"Dữ liệu EOD · {latest_date:%d/%m/%Y}")
+    with st.container(key="min-theme-selector"):
+        TH.toggle()
+    TH.inject()  # cập nhật CSS sau lựa chọn giao diện
     _go = st.query_params.get("wbgo")      # liên kết "Xem thêm" ở bảng Cổ phiếu chờ mua -> mở thẻ của mã đó
     if _go:
         st.query_params.clear()

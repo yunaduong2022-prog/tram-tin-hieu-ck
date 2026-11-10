@@ -18,6 +18,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import theme as TH
 import supertrend as SPT
 import hull_suite as HUL
 import crosshair as CH
@@ -474,6 +475,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         P = chart_range_view(P, d_all["Ngày"], chart_range)
         fig = build_chart(P, show_st, show_hull)
         fig.update_layout(height=485)
+        TH.style_fig(fig)
         _plot(fig, f"vnv_chart_{tf}_{chart_range}")
         CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
         st.pills("Khoảng thời gian hiển thị", list(RANGE_OPTIONS),
