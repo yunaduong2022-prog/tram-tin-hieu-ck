@@ -141,6 +141,11 @@ def _plot(fig, key: str):
         kw["config"] = cfg
     else:
         kw.update(cfg)
+    # MIN_FINANCE_LIGHT_V2_1_VNINDEX: bypass Streamlit's dark Plotly skin in light mode.
+    # The app's config.toml intentionally stays dark by default; Plotly must use
+    # the chart's own plotly_white template when the user chooses Sáng.
+    if not TH.is_dark() and "theme" in params:
+        kw["theme"] = None
     st.plotly_chart(fig, key=key, **kw)
 
 
@@ -392,7 +397,12 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
               None if s["vol_vs"] is None else f"{s['vol_vs']:+.0f}% so với TB 20 phiên", delta_color="off")
     m3.metric("Cách đỉnh 52 tuần", "–" if s["from_hi"] is None else f"{s['from_hi']:+.1f}%", delta_color="off")
     trend = " · ".join(f"{'trên' if s['close'] >= s[k] else 'dưới'} {k.upper()}" for k in ("ma20", "ma50") if s[k] is not None)
-    m4.metric("Vị trí so với MA", trend or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
+    # Abbreviate only the visual metric (same data and MA comparison).
+    trend_compact = " · ".join(
+        f"{'↑' if s['close'] >= s[k] else '↓'} {k.upper()}"
+        for k in ("ma20", "ma50") if s[k] is not None
+    )
+    m4.metric("Vị trí so với MA", trend_compact or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
 
     c1, c2, c3, c4 = st.columns([2.0, 1.0, 1.15, 1.15])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
@@ -476,6 +486,18 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         fig = build_chart(P, show_st, show_hull)
         fig.update_layout(height=485)
         TH.style_fig(fig)
+        if not TH.is_dark():
+            # Ensure clear legend and date/price ticks on a light background.
+            # Do not alter candle, volume, MA or report computations.
+            chart_txt = TH.palette()["txt"]
+            chart_muted = "#526F62"
+            fig.update_layout(
+                font=dict(color=chart_txt),
+                legend=dict(font=dict(color=chart_txt, size=11)),
+                hoverlabel=dict(bgcolor="#FFFFFF", font=dict(color=chart_txt, size=12)),
+            )
+            fig.update_xaxes(tickfont=dict(color=chart_muted, size=11), tickcolor="#9AB2A6")
+            fig.update_yaxes(tickfont=dict(color=chart_muted, size=11), tickcolor="#9AB2A6")
         _plot(fig, f"vnv_chart_{tf}_{chart_range}")
         CH.inject()        # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
         st.pills("Khoảng thời gian hiển thị", list(RANGE_OPTIONS),
