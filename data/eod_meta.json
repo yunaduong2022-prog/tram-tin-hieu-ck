@@ -1,14 +1,17 @@
 {
- "updated_at": "09/11/2026 22:30 (giờ VN)",
- "latest_date": "2026-11-09",
+ "updated_at": "10/11/2026 19:16 (giờ VN)",
+ "latest_date": "2026-11-10",
  "symbols": 281,
  "symbols_on_latest_date": 242,
- "rows": 513284,
+ "rows": 512444,
  "sources": {
   "vci": 265
  },
  "failed": [],
  "skipped": 0,
- "adjusted": [],
+ "adjusted": [
+  "GVR",
+  "VPI"
+ ],
  "stopped": null
 }
