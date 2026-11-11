@@ -176,7 +176,7 @@ def _empty_card(code: str, ver: int) -> None:
             st.rerun()
 
 
-def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
+def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None, daily=None, asof=None, eod_key="") -> None:
     """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ; card_fn(wb_row, user_row): vẽ thẻ giống mục Chờ mua."""
     ver = st.session_state.setdefault("wl_ver", 0)
     available = set(res["Mã"].astype(str).str.upper())
@@ -238,16 +238,9 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, card_fn=None) -> None:
                     else:
                         _empty_card(code, ver)
         else:
-            cols = ["Mã", "Tín hiệu", "Trạng thái", "Giá", "Chg %", "Giá vốn", "Lãi/lỗ %", "Cắt lỗ", "Cách cắt lỗ %", "Mục tiêu",
-                    "Cách mục tiêu %", "Score", "RS20", "Wyckoff", "MA align", "Nhóm", "Ghi chú"]
-            cols = [c for c in cols if c in v.columns]
-            pr = st.column_config.NumberColumn
-            st.dataframe(v[cols], hide_index=True, column_config={
-                "Giá": pr(format="%.1f"), "Chg %": pr(format="%+.2f%%"), "Giá vốn": pr(format="%.1f"),
-                "Lãi/lỗ %": pr(format="%+.1f%%"), "Cắt lỗ": pr(format="%.1f"), "Cách cắt lỗ %": pr(format="%+.1f%%"),
-                "Mục tiêu": pr(format="%.1f"), "Cách mục tiêu %": pr(format="%+.1f%%"),
-                "Score": pr(format="%.1f"), "RS20": pr("RS vs VNI", format="%.2f")}, **_DF)
-            st.caption("“Cách cắt lỗ %” dương nghĩa là giá còn trên mức cắt lỗ bạn đặt.")
+            # MIN_WATCHLIST_T2_TABLE_V1: preserve user Watchlist membership and edit features.
+            from watchlist_t2_board import render_board
+            render_board(w, wb, res, daily, asof, eod_key)
             st.subheader("Chi tiết một mã")
             pick = st.selectbox("Chọn mã", list(v["Mã"]), key="wl_pick", label_visibility="collapsed")
             r = v[v["Mã"] == pick].iloc[0]
