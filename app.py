@@ -2000,7 +2000,8 @@ def page_watchlist():
             st.session_state[_k] = code
         NAV.goto("Cổ phiếu", "Biểu đồ")
 
-    MW.render(_wb_table(), res_df, _open_chart, _wl_card)
+    # MIN_WATCHLIST_T2_TABLE_V1: read-only Watchlist grid, exact EOD/T+2 source.
+    MW.render(_wb_table(), res_df, _open_chart, _wl_card, daily=frames["D"], asof=latest_date, eod_key=DATA_KEY)
     _rt_focus_scroll()
 
 
