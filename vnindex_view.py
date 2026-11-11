@@ -318,7 +318,7 @@ def _bulletin_heading(source_title: str) -> str:
     for period in ("PHIÊN", "TUẦN", "THÁNG", "QUÝ"):
         prefix = f"NHẬN ĐỊNH {period}"
         if title.startswith(prefix):
-            return f"VNINDEX - BẢN TIN {period} MỚI" + title[len(prefix):]
+            return f"VNINDEX - NHẬN ĐỊNH {period}" + title[len(prefix):]
     return "VNINDEX - " + title
 
 
@@ -378,6 +378,441 @@ def _sections(sections: list[dict]):
                     st.markdown("".join(_item_html(it, compact=compact) for it in sec["items"]), unsafe_allow_html=True)
 
 
+
+# MIN_VNINDEX_EDITORIAL_STORY_V1: Tóm tắt tự động theo dữ liệu EOD, dùng được ở cả Sáng/Tối.
+# MIN_VNINDEX_EDITORIAL_COMPACT_V2: Thu gọn card và đổi tên bản tin.
+def _vni_streak_sentence(d: pd.DataFrame) -> str:
+    """Đếm chuỗi tăng/giảm giá đóng cửa theo PHIÊN liên tiếp, kể cả phiên hiện tại.
+
+    Phiên đi ngang hoặc thiếu giá ngắt chuỗi. Không nhầm lần đầu tăng sau giảm
+    với phiên tăng thứ N của một chuỗi tăng đã hình thành.
+    """
+    prices = pd.to_numeric(d[C], errors="coerce").tolist()
+    if len(prices) < 2:
+        return "Chưa đủ dữ liệu để xác định chuỗi phiên tăng/giảm"
+
+    directions = []
+    for prev, cur in zip(prices[:-1], prices[1:]):
+        if pd.isna(prev) or pd.isna(cur):
+            directions.append(None)
+        else:
+            diff = float(cur) - float(prev)
+            directions.append(1 if diff > 1e-7 else -1 if diff < -1e-7 else 0)
+
+    latest = directions[-1]
+    if latest is None:
+        return "Chưa đủ dữ liệu giá đóng cửa để xác định diễn biến phiên"
+    if latest == 0:
+        return "VNINDEX đi ngang so với phiên trước, chuỗi tăng/giảm đã ngắt"
+
+    n = 0
+    j = len(directions) - 1
+    while j >= 0 and directions[j] == latest:
+        n += 1
+        j -= 1
+    up = latest > 0
+    word = "tăng" if up else "giảm"
+    opposite = "giảm" if up else "tăng"
+    if n >= 2:
+        return f"Phiên {word} thứ {n} liên tiếp"
+
+    prior = 0
+    while j >= 0 and directions[j] == -latest:
+        prior += 1
+        j -= 1
+    if prior >= 2:
+        return f"Phiên {word} đầu tiên sau chuỗi {prior} phiên {opposite} liên tiếp"
+    if prior == 1:
+        return f"Phiên {word} sau 1 phiên {opposite}"
+    if len(directions) >= 2 and directions[-2] == 0:
+        return f"Phiên {word} sau phiên đi ngang"
+    return f"VNINDEX ghi nhận phiên {word}"
+
+
+def _vni_editorial_bullets(s: dict, d: pd.DataFrame) -> list[str]:
+    bullets = [_vni_streak_sentence(d)]
+    close, ma20, dist = s.get("close"), s.get("ma20"), s.get("from_hi")
+    ma_part = None
+    if close is not None and ma20 is not None and pd.notna(ma20):
+        pos = "trên" if float(close) > float(ma20) else ("dưới" if float(close) < float(ma20) else "ngay tại")
+        ma_part = f"{pos.capitalize()} MA20 ({float(ma20):,.2f})"
+    top_part = None
+    if dist is not None and pd.notna(dist):
+        if abs(float(dist)) < 0.05:
+            top_part = "đang ở vùng đỉnh 52 tuần"
+        elif float(dist) < 0:
+            top_part = f"cách đỉnh 52 tuần {abs(float(dist)):.1f}%"
+        else:
+            top_part = f"cao hơn đỉnh 52 tuần {float(dist):.1f}%"
+    if ma_part and top_part:
+        bullets.append(ma_part + ", " + top_part)
+    elif ma_part or top_part:
+        bullets.append(ma_part or top_part)
+    else:
+        bullets.append("Chưa đủ dữ liệu MA20 và đỉnh 52 tuần")
+
+    vol_diff = s.get("vol_vs")
+    if vol_diff is None or pd.isna(vol_diff):
+        bullets.append("Chưa đủ dữ liệu để so sánh khối lượng với trung bình 20 phiên")
+    elif abs(float(vol_diff)) < 0.5:
+        bullets.append("Khối lượng tương đương trung bình 20 phiên")
+    elif vol_diff > 0:
+        bullets.append(f"Khối lượng cao hơn trung bình 20 phiên {abs(float(vol_diff)):.0f}%")
+    else:
+        bullets.append(f"Khối lượng thấp hơn trung bình 20 phiên {abs(float(vol_diff)):.0f}%")
+    return bullets
+
+
+
+# MIN_VNINDEX_SR_LEVELS_V4: mức MA theo phiên D + pivot đã xác nhận; đọc dữ liệu EOD.
+def _vni_recent_confirmed_pivots(d: pd.DataFrame) -> tuple:
+    """Đáy/đỉnh swing gần nhất: 2 phiên trái + 2 phiên phải xác nhận.
+
+    Ưu tiên pivot mới nhất trong 60 phiên đã qua (không dùng 2 phiên cuối
+    làm điểm pivot vì chưa có hai phiên phía sau xác nhận). Nếu không có,
+    trả về cực trị 20 phiên với nhãn trung thực, không giả làm swing.
+    """
+    g = d[["Ngày", L, H]].sort_values("Ngày").reset_index(drop=True).copy()
+    low = pd.to_numeric(g[L], errors="coerce")
+    high = pd.to_numeric(g[H], errors="coerce")
+    n = len(g)
+    low_found = None
+    high_found = None
+    for i in range(n - 3, max(1, n - 63), -1):
+        if i < 2:
+            continue
+        lo = low.iloc[i-2:i+3]
+        hi = high.iloc[i-2:i+3]
+        if len(lo) != 5 or len(hi) != 5:
+            continue
+        if low_found is None and lo.notna().all():
+            v = float(low.iat[i])
+            if v < float(lo.iloc[:2].min()) and v <= float(lo.iloc[3:].min()):
+                low_found = ("Đáy gần nhất", v, pd.Timestamp(g["Ngày"].iat[i]))
+        if high_found is None and hi.notna().all():
+            v = float(high.iat[i])
+            if v > float(hi.iloc[:2].max()) and v >= float(hi.iloc[3:].max()):
+                high_found = ("Đỉnh gần nhất", v, pd.Timestamp(g["Ngày"].iat[i]))
+        if low_found is not None and high_found is not None:
+            break
+
+    # Fallback nếu chưa xác nhận được một swing hợp lệ.
+    if low_found is None:
+        tail = low.tail(20).dropna()
+        if not tail.empty:
+            pos = int(tail.idxmin())
+            low_found = ("Thấp nhất 20 phiên", float(low.iat[pos]), pd.Timestamp(g["Ngày"].iat[pos]))
+    if high_found is None:
+        tail = high.tail(20).dropna()
+        if not tail.empty:
+            pos = int(tail.idxmax())
+            high_found = ("Cao nhất 20 phiên", float(high.iat[pos]), pd.Timestamp(g["Ngày"].iat[pos]))
+    return low_found, high_found
+
+
+def _vni_sr_strip(d: pd.DataFrame, s: dict) -> str:
+    """Hiển thị vùng hỗ trợ (trái) và kháng cự (phải) theo khoảng cách tới đóng cửa.
+
+    Dữ liệu: MA10/20/50/200 ngày và swing high/low đã xác nhận (giữ từ V4).
+    Chỉ gộp hai MA khi khoảng cách không quá 1.5% giá đóng cửa; không gộp
+    đỉnh/đáy vào MA. Giá tròn điểm để dễ đọc; hover cho giá chính xác 2 số.
+    """
+    close = float(s["close"])
+    closes = pd.to_numeric(d.sort_values("Ngày")[C], errors="coerce").dropna()
+    support, resistance, unavailable = [], [], []
+    for period in (10, 20, 50, 200):
+        if len(closes) < period:
+            unavailable.append(f"MA{period}: chưa đủ {period} phiên")
+            continue
+        value = float(closes.tail(period).mean())
+        item = (f"MA{period}", value, "sát giá" if abs(value - close) < 1e-8 else "", "")
+        (support if value <= close else resistance).append(item)
+
+    pivot_low, pivot_high = _vni_recent_confirmed_pivots(d)
+    if pivot_low is not None:
+        name, value, when = pivot_low
+        support.append((name, value, "đã thủng" if value > close else "", f"{when:%d/%m/%Y}"))
+    if pivot_high is not None:
+        name, value, when = pivot_high
+        resistance.append((name, value, "đã vượt" if value < close else "", f"{when:%d/%m/%Y}"))
+
+    def format_group(items: list, side: str) -> str:
+        if not items:
+            msg = "Chưa có hỗ trợ tham khảo" if side == "support" else "Chưa có kháng cự tham khảo"
+            return '<div class="min-vni-sr-empty">' + html.escape(msg) + '</div>'
+
+        active = [x for x in items if x[2] not in ("đã thủng", "đã vượt")]
+        crossed = [x for x in items if x[2] in ("đã thủng", "đã vượt")]
+        is_support = side == "support"
+        ordered_mas = sorted((x for x in active if x[0].startswith("MA")),
+                             key=lambda x: -x[1] if is_support else x[1])
+        groups = []
+        gap_limit = close * 0.015
+        for it in ordered_mas:
+            if (groups and len(groups[-1]) < 2 and
+                    abs(it[1] - groups[-1][0][1]) <= gap_limit):
+                groups[-1].append(it)
+            else:
+                groups.append([it])
+        groups.extend([[it] for it in active if not it[0].startswith("MA")])
+        # Cụm gần giá hiện tại nhất luôn đứng trên cùng.
+        groups.sort(key=lambda group: -max(x[1] for x in group) if is_support
+                    else min(x[1] for x in group))
+        # Những pivot đã thủng/vượt được đánh dấu và đưa xuống cuối.
+        groups.extend([[it] for it in crossed])
+
+        rows = []
+        for group in groups:
+            ordered = sorted(group, key=lambda x: -x[1] if is_support else x[1])
+            numbers = [f"{x[1]:,.0f}" for x in ordered]
+            # Không lặp một giá khi nhiều MA làm tròn cùng số điểm.
+            numbers = list(dict.fromkeys(numbers))
+            display = " – ".join(numbers)
+            source = " · ".join(x[0] for x in ordered)
+            note = next((x[2] for x in ordered if x[2]), "")
+            detail = " | ".join(f"{x[0]}: {x[1]:,.2f}" +
+                                (f" ({x[3]})" if x[3] else "") for x in ordered)
+            crossed_class = " is-crossed" if note in ("đã thủng", "đã vượt") else ""
+            suffix = f" · {note}" if note else ""
+            rows.append(
+                '<div class="min-vni-sr-row' + crossed_class + '" title="' +
+                html.escape(detail, quote=True) + '">'
+                '<strong class="min-vni-sr-price">' + html.escape(display) + '</strong>'
+                '<span class="min-vni-sr-source">' + html.escape(source + suffix) + '</span>'
+                '</div>'
+            )
+        return '<div class="min-vni-sr-levels">' + ''.join(rows) + '</div>'
+
+    missing = '' if not unavailable else (
+        '<div class="min-vni-sr-missing">' + html.escape(' · '.join(unavailable)) + '</div>'
+    )
+    return (
+        '<div class="min-vni-sr-wrap">'
+        '<div class="min-vni-sr-caption">VÙNG GIÁ THAM KHẢO '
+        '<small>· MA khung Phiên (D) · so với giá đóng cửa</small></div>'
+        '<div class="min-vni-sr-grid">'
+        '<div class="min-vni-sr-column">'
+        '<div class="min-vni-sr-heading support">HỖ TRỢ</div>'
+        + format_group(support, 'support') + '</div>'
+        '<div class="min-vni-sr-column">'
+        '<div class="min-vni-sr-heading resistance">KHÁNG CỰ</div>'
+        + format_group(resistance, 'resistance') + '</div>'
+        '</div>' + missing + '</div>'
+    )
+
+def render_vnindex_editorial(d_all: pd.DataFrame, s: dict) -> None:
+    """Thay đúng 4 metric ở đầu trang; giữ nguyên biểu đồ và các bộ lọc phía dưới."""
+    light = not TH.is_dark()
+    css_mode = "light" if light else "dark"
+    chg, pct = s.get("chg"), s.get("pct")
+    direction = "gain" if chg is not None and chg > 0 else ("loss" if chg is not None and chg < 0 else "flat")
+    points_text = f"{float(chg):+,.2f}" if chg is not None else "—"
+    pct_text = f"{float(pct):+.2f}%" if pct is not None else "—"
+    close_text = f"{float(s['close']):,.2f}"
+    date_value = s.get("date")
+    date_text = f"{date_value:%d/%m/%Y}" if date_value is not None else "chưa xác định"
+    bullets = _vni_editorial_bullets(s, d_all)
+    items = "".join(f"<li>{html.escape(item)}</li>" for item in bullets)
+    # CSS chỉ áp dụng trong khối .min-vni-story, không đổi giao diện các tab khác.
+    st.markdown("""
+<style>
+.min-vni-story{--vni-ink:#19392E;--vni-muted:#4C685B;--vni-panel:#F7F4E9;--vni-panel2:#EDF4EE;--vni-line:#D4DCCB;
+    --vni-up:#087C4E;--vni-down:#C0364B;--vni-flat:#8D6A2D;
+    position:relative;overflow:hidden;padding:15px 21px 13px;border:1px solid var(--vni-line);border-radius:18px;
+    background:linear-gradient(105deg,var(--vni-panel),var(--vni-panel2));color:var(--vni-ink);
+    box-shadow:0 5px 18px rgba(20,51,40,.06);margin:3px 0 12px;max-width:1120px;width:100%;}
+.min-vni-story.dark{--vni-ink:#E7F2E9;--vni-muted:#A8C0B4;--vni-panel:#183328;--vni-panel2:#10251D;--vni-line:#315547;
+    --vni-up:#38DB9A;--vni-down:#FF7387;--vni-flat:#F2C46D;box-shadow:none;}
+.min-vni-story .min-vni-kicker{font-family:Georgia,'Times New Roman',serif;font-size:17px;letter-spacing:1.5px;font-weight:800;}
+.min-vni-story .min-vni-points{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;line-height:1.05;margin:4px 0 2px;
+    font-family:Georgia,'Times New Roman',serif;font-weight:700;}
+.min-vni-story .min-vni-number{font-size:clamp(43px,5vw,68px);font-variant-numeric:tabular-nums;letter-spacing:-2px;}
+.min-vni-story .min-vni-unit{font-size:clamp(19px,1.8vw,27px);}
+.min-vni-story.gain .min-vni-points{color:var(--vni-up)}
+.min-vni-story.loss .min-vni-points{color:var(--vni-down)}
+.min-vni-story.flat .min-vni-points{color:var(--vni-flat)}
+.min-vni-story .min-vni-close{font-family:Georgia,'Times New Roman',serif;font-size:clamp(15px,1.6vw,20px);margin:3px 0 7px;}
+.min-vni-story .min-vni-list{padding:0;margin:0;list-style:none;display:grid;gap:3px;}
+.min-vni-story .min-vni-list li{font-size:clamp(13px,1vw,15.5px);font-weight:550;line-height:1.35;}
+.min-vni-story .min-vni-list li:before{content:'—';display:inline-block;margin-right:9px;font-weight:800;}
+.min-vni-story .min-vni-date{font-size:11px;color:var(--vni-muted);margin-top:8px;border-top:1px solid var(--vni-line);
+    padding-top:6px;font-weight:600;}
+@media(max-width:650px){.min-vni-story{padding:13px 15px;margin-bottom:10px}.min-vni-story .min-vni-number{letter-spacing:-1px;}}
+
+/* MIN_VNINDEX_EDITORIAL_TWO_COLUMN_V3: Cột trái là điểm số, cột phải nhận định. */
+.min-vni-story{padding:13px 20px 11px;max-width:1120px;}
+.min-vni-story .min-vni-content{
+    display:grid;grid-template-columns:minmax(0,.87fr) minmax(0,1.13fr);
+    gap:clamp(18px,2.8vw,38px);align-items:center;
+}
+.min-vni-story .min-vni-left,.min-vni-story .min-vni-right{min-width:0;}
+.min-vni-story .min-vni-right{
+    border-left:1px solid var(--vni-line);padding-left:clamp(18px,2.4vw,32px);
+}
+.min-vni-story .min-vni-highlights-head{
+    color:var(--vni-muted);font-size:11px;letter-spacing:1.1px;
+    font-weight:800;margin:0 0 8px;
+}
+.min-vni-story .min-vni-kicker{font-size:16px;}
+.min-vni-story .min-vni-number{font-size:clamp(43px,4.8vw,61px);letter-spacing:-1.5px;}
+.min-vni-story .min-vni-unit{font-size:clamp(19px,1.9vw,26px);}
+.min-vni-story .min-vni-close{font-size:clamp(15px,1.5vw,19px);margin:3px 0 0;}
+.min-vni-story .min-vni-list{gap:7px;}
+.min-vni-story .min-vni-list li{font-size:clamp(13px,1vw,15px);line-height:1.42;}
+.min-vni-story .min-vni-date{margin-top:9px;padding-top:6px;font-size:11px;}
+@media(max-width:760px){
+    .min-vni-story{padding:13px 15px 11px;}
+    .min-vni-story .min-vni-content{grid-template-columns:1fr;gap:12px;}
+    .min-vni-story .min-vni-right{
+        border-left:0;border-top:1px solid var(--vni-line);padding-left:0;padding-top:12px;
+    }
+    .min-vni-story .min-vni-number{font-size:clamp(43px,8vw,59px);}
+    .min-vni-story .min-vni-list{gap:5px;}
+}
+
+/* MIN_VNINDEX_SR_V4_CSS: chỉ dùng trong khung tóm tắt VNINDEX. */
+.min-vni-story .min-vni-sr-wrap{border-top:1px solid var(--vni-line);margin-top:9px;padding-top:9px;}
+.min-vni-story .min-vni-sr-caption{font-size:11px;letter-spacing:.65px;color:var(--vni-muted);font-weight:800;margin-bottom:6px;}
+.min-vni-story .min-vni-sr-caption small{font-size:10px;letter-spacing:0;font-weight:500;}
+.min-vni-story .min-vni-sr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+.min-vni-story .min-vni-sr-column{min-width:0;}
+.min-vni-story .min-vni-sr-heading{font-weight:800;font-size:11px;letter-spacing:.7px;margin:0 0 5px;}
+.min-vni-story .min-vni-sr-heading.support{color:var(--vni-up);}
+.min-vni-story .min-vni-sr-heading.resistance{color:var(--vni-down);}
+.min-vni-story .min-vni-sr-chips{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
+.min-vni-story .min-vni-sr-chip{display:inline-flex;align-items:baseline;gap:6px;min-width:0;
+    border:1px solid var(--vni-line);padding:4px 7px;border-radius:7px;font-size:11px;
+    line-height:1.2;background:rgba(125,145,115,.07);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.min-vni-story .min-vni-sr-chip b{font-weight:650;color:var(--vni-muted);}
+.min-vni-story .min-vni-sr-chip span{font-weight:800;color:var(--vni-ink);}
+.min-vni-story .min-vni-sr-chip em{font-size:9px;opacity:.82;font-style:normal;}
+.min-vni-story .min-vni-sr-chip.is-crossed{opacity:.72;border-style:dashed;}
+.min-vni-story .min-vni-sr-empty,.min-vni-story .min-vni-sr-missing{font-size:11px;color:var(--vni-muted);}
+.min-vni-story .min-vni-sr-missing{margin-top:5px;}
+.min-vni-story .min-vni-date{margin-top:7px;padding-top:6px;}
+@media(max-width:760px){
+    .min-vni-story .min-vni-sr-grid{grid-template-columns:1fr;gap:10px;}
+    .min-vni-story .min-vni-sr-caption small{display:block;margin-top:3px;}
+    .min-vni-story .min-vni-sr-chip{white-space:normal;}
+}
+
+/* MIN_VNINDEX_MA10_20_50_200_COMPACT_V5: bản tin nhỏ gọn, hai cột desktop. */
+.min-vni-story{padding:10px 16px 8px;max-width:1120px;margin:2px 0 10px;border-radius:13px;}
+.min-vni-story .min-vni-content{grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr);gap:clamp(12px,2vw,25px);}
+.min-vni-story .min-vni-right{padding-left:clamp(12px,1.6vw,22px);}
+.min-vni-story .min-vni-kicker{font-size:13px;letter-spacing:1.2px;line-height:1.15;}
+.min-vni-story .min-vni-points{gap:5px;line-height:1; margin:1px 0 1px;}
+.min-vni-story .min-vni-number{font-size:clamp(36px,3.5vw,48px);letter-spacing:-1px;}
+.min-vni-story .min-vni-unit{font-size:clamp(15px,1.5vw,20px);}
+.min-vni-story .min-vni-close{font-size:clamp(13px,1.2vw,16px);line-height:1.2;margin:1px 0 0;}
+.min-vni-story .min-vni-highlights-head{font-size:10px;letter-spacing:.7px;margin:0 0 4px;}
+.min-vni-story .min-vni-list{gap:3px;}
+.min-vni-story .min-vni-list li{font-size:clamp(11.5px,.94vw,13px);line-height:1.24;}
+.min-vni-story .min-vni-list li:before{margin-right:6px;}
+.min-vni-story .min-vni-sr-wrap{margin-top:6px;padding-top:6px;}
+.min-vni-story .min-vni-sr-caption{font-size:10px;margin-bottom:4px;line-height:1.2;}
+.min-vni-story .min-vni-sr-caption small{font-size:9.5px;}
+.min-vni-story .min-vni-sr-grid{gap:10px;}
+.min-vni-story .min-vni-sr-heading{font-size:10px;margin-bottom:3px;}
+.min-vni-story .min-vni-sr-chips{gap:4px;}
+.min-vni-story .min-vni-sr-chip{padding:3px 6px;gap:4px;font-size:10.5px;border-radius:6px;}
+.min-vni-story .min-vni-date{font-size:10px;margin-top:5px;padding-top:4px;line-height:1.2;}
+@media(max-width:760px){
+  .min-vni-story{padding:10px 12px 9px;}
+  .min-vni-story .min-vni-content{grid-template-columns:1fr;gap:8px;}
+  .min-vni-story .min-vni-right{padding:8px 0 0;border-left:0;border-top:1px solid var(--vni-line);}
+  .min-vni-story .min-vni-number{font-size:clamp(36px,8vw,46px);}
+  .min-vni-story .min-vni-sr-grid{grid-template-columns:1fr;gap:7px;}
+  .min-vni-story .min-vni-sr-chip{white-space:normal;}
+}
+
+/* MIN_VNINDEX_EDITORIAL_ONE_ROW_V7: VNINDEX | DIEM NHAN | HO TRO | KHANG CU */
+.min-vni-story{
+    display:grid;
+    grid-template-columns:minmax(0,.93fr) minmax(0,1.95fr) minmax(0,1fr) minmax(0,1.06fr);
+    column-gap:clamp(12px,1.4vw,19px);
+    row-gap:5px;
+    align-items:start;
+    max-width:1200px;
+    padding:12px 18px 7px;
+    margin:3px 0 9px;
+    width:100%;
+}
+.min-vni-story .min-vni-content,
+.min-vni-story .min-vni-sr-wrap,
+.min-vni-story .min-vni-sr-grid{display:contents;}
+.min-vni-story .min-vni-left,
+.min-vni-story .min-vni-right,
+.min-vni-story .min-vni-sr-column{min-width:0;align-self:start;text-align:left;}
+.min-vni-story .min-vni-right,
+.min-vni-story .min-vni-sr-column{
+    border-left:1px solid var(--vni-line);
+    padding:0 0 0 clamp(11px,1.25vw,17px);
+    border-top:0;
+    margin:0;
+}
+.min-vni-story .min-vni-kicker{font-size:13px;line-height:1.2;letter-spacing:1px;}
+.min-vni-story .min-vni-points{gap:3px;line-height:1;margin:2px 0 3px;white-space:nowrap;flex-wrap:nowrap;}
+.min-vni-story .min-vni-number{font-size:clamp(32px,3vw,42px);letter-spacing:-.8px;}
+.min-vni-story .min-vni-unit{font-size:clamp(13px,1.2vw,17px);}
+.min-vni-story .min-vni-close{font-size:clamp(11px,.95vw,13px);line-height:1.23;margin:1px 0 0;}
+.min-vni-story .min-vni-highlights-head{margin:0 0 7px;font-size:10px;letter-spacing:.6px;}
+.min-vni-story .min-vni-list{margin:0;padding:0;gap:6px;}
+.min-vni-story .min-vni-list li{font-size:clamp(11px,.85vw,12.5px);line-height:1.28;}
+.min-vni-story .min-vni-list li:before{margin-right:6px;}
+.min-vni-story .min-vni-sr-caption{display:none;}
+.min-vni-story .min-vni-sr-heading{font-size:11px;line-height:1.2;letter-spacing:.7px;margin:0 0 9px;}
+.min-vni-story .min-vni-sr-levels{display:flex;flex-direction:column;gap:8px;}
+.min-vni-story .min-vni-sr-row{
+    display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;
+    gap:2px;flex-wrap:nowrap;min-width:0;padding:0;line-height:1.25;text-align:left;
+}
+.min-vni-story .min-vni-sr-price{font-size:clamp(12px,.99vw,14px);font-weight:800;white-space:normal;letter-spacing:-.1px;}
+.min-vni-story .min-vni-sr-source{font-size:9.5px;line-height:1.2;color:var(--vni-muted);white-space:normal;}
+.min-vni-story .min-vni-sr-empty{font-size:11px;line-height:1.35;}
+.min-vni-story .min-vni-sr-missing{grid-column:1/-1;margin:3px 0 0;font-size:10px;}
+.min-vni-story .min-vni-date{
+    grid-column:1/-1;margin:4px 0 0;padding:5px 0 0;
+    border-top:1px solid var(--vni-line);font-size:10px;line-height:1.2;
+}
+@media(max-width:1050px){
+    .min-vni-story{grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);row-gap:14px;}
+    .min-vni-story .min-vni-sr-column:nth-child(1){border-left:0;padding-left:0;}
+    .min-vni-story .min-vni-sr-heading{margin-bottom:5px;}
+}
+@media(max-width:650px){
+    .min-vni-story{grid-template-columns:minmax(0,1fr);padding:11px 13px 9px;row-gap:9px;}
+    .min-vni-story .min-vni-right,
+    .min-vni-story .min-vni-sr-column{border-left:0;border-top:1px solid var(--vni-line);padding:8px 0 0;}
+    .min-vni-story .min-vni-points{white-space:normal;flex-wrap:wrap;}
+    .min-vni-story .min-vni-number{font-size:40px;}
+    .min-vni-story .min-vni-sr-levels{gap:4px;}
+    .min-vni-story .min-vni-date{margin-top:0;}
+}
+</style>
+""", unsafe_allow_html=True)
+    st.markdown(
+        f'<section class="min-vni-story {css_mode} {direction}">'
+        f'<div class="min-vni-content">'
+        f'<div class="min-vni-left">'
+        f'<div class="min-vni-kicker">VNINDEX</div>'
+        f'<div class="min-vni-points"><span class="min-vni-number">{html.escape(points_text)}</span>'
+        f'<span class="min-vni-unit">điểm</span></div>'
+        f'<div class="min-vni-close">Đóng cửa <strong>{html.escape(close_text)}</strong>, '
+        f'<strong>{html.escape(pct_text)}</strong></div>'
+        f'</div>'
+        f'<div class="min-vni-right">'
+        f'<div class="min-vni-highlights-head">ĐIỂM NHẤN PHIÊN</div>'
+        f'<ul class="min-vni-list">{items}</ul>'
+        f'</div>'
+        f'</div>'
+        f'{_vni_sr_strip(d_all, s)}'
+        f'<div class="min-vni-date">Dữ liệu chốt phiên {html.escape(date_text)}</div>'
+        '</section>',
+        unsafe_allow_html=True,
+    )
+
+
 # ------------------------------------------------------------------ TRANG
 def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     st.title("📈 Nhận định VNINDEX")
@@ -391,19 +826,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     key = f"{data_key}|index:{index_mtime}|eod:{eod_mtime}"
 
     s = _stats(d_all)
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("VN-Index", f"{s['close']:,.2f}",
-              None if s["chg"] is None else f"{s['chg']:+,.2f} điểm ({s['pct']:+.2f}%)")
-    m2.metric("Khối lượng", f"{s['vol'] / 1e6:,.0f} triệu cp",
-              None if s["vol_vs"] is None else f"{s['vol_vs']:+.0f}% so với TB 20 phiên", delta_color="off")
-    m3.metric("Cách đỉnh 52 tuần", "–" if s["from_hi"] is None else f"{s['from_hi']:+.1f}%", delta_color="off")
-    trend = " · ".join(f"{'trên' if s['close'] >= s[k] else 'dưới'} {k.upper()}" for k in ("ma20", "ma50") if s[k] is not None)
-    # Abbreviate only the visual metric (same data and MA comparison).
-    trend_compact = " · ".join(
-        f"{'↑' if s['close'] >= s[k] else '↓'} {k.upper()}"
-        for k in ("ma20", "ma50") if s[k] is not None
-    )
-    m4.metric("Vị trí so với MA", trend_compact or "–", f"Phiên {s['date']:%d/%m/%Y}", delta_color="off")
+    render_vnindex_editorial(d_all, s)
 
     c1, c2, c3, c4 = st.columns([2.0, 1.0, 1.15, 1.15])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
