@@ -1,17 +1,40 @@
 {
- "updated_at": "10/11/2026 19:16 (giờ VN)",
- "latest_date": "2026-11-10",
- "symbols": 281,
- "symbols_on_latest_date": 242,
- "rows": 512444,
- "sources": {
-  "vci": 265
- },
- "failed": [],
- "skipped": 0,
- "adjusted": [
-  "GVR",
-  "VPI"
- ],
- "stopped": null
+  "updated_at": "11/11/2026 20:23 (giờ VN)",
+  "latest_date": "2026-11-11",
+  "symbols": 281,
+  "symbols_on_latest_date": 240,
+  "rows": 512684,
+  "sources": {
+    "dnse": 240
+  },
+  "failed": [
+    "BRC: CandleSourceError",
+    "CCP: CandleSourceError",
+    "CCR: CandleSourceError",
+    "CMP: CandleSourceError",
+    "CPI: CandleSourceError",
+    "DNH: CandleSourceError",
+    "DS3: CandleSourceError",
+    "HRC: CandleSourceError",
+    "POM: CandleSourceError",
+    "PPC: PRICE_BASELINE_MISMATCH",
+    "PQN: CandleSourceError",
+    "PSN: CandleSourceError",
+    "PVE: CandleSourceError",
+    "PVM: CandleSourceError",
+    "PXS: CandleSourceError",
+    "TTD: CandleSourceError",
+    "VEA: PRICE_BASELINE_MISMATCH",
+    "VIN: CandleSourceError",
+    "VNM: PRICE_BASELINE_MISMATCH",
+    "ACL: NO_11NOV_BAR",
+    "HMC: NO_11NOV_BAR",
+    "HNA: NO_11NOV_BAR",
+    "STG: NO_11NOV_BAR",
+    "TMS: NO_11NOV_BAR",
+    "CCT: PRICE_CHANGE_15.4%"
+  ],
+  "skipped": 25,
+  "adjusted": [],
+  "stopped": null
 }
