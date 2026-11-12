@@ -19,6 +19,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import theme as TH
+import vnindex_macro_context as VMC  # MIN_VNINDEX_MACRO_CONTEXT_V1
 import supertrend as SPT
 import hull_suite as HUL
 import ichimoku_dual as IDU
@@ -1092,6 +1093,9 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
             _vnindex_card(flow_card, compact=True)
         else:
             st.info("Chưa có nhận định DÒNG TIỀN cho khung đang chọn.")
+    # MIN_VNINDEX_MACRO_CONTEXT_V1: verified, external USD/VND & NASDAQ;
+    # independent of EOD calculations and transaction recommendations.
+    VMC.render(d_all, s)
     # Action + note first, full-width institutional flow next, then news.
     action_note = [report_by_name[n] for n in ("HÀNH ĐỘNG", "LƯU Ý") if n in report_by_name]
     if len(action_note) == 2:
