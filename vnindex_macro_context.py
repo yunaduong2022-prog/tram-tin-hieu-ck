@@ -189,6 +189,9 @@ def render(index_daily: pd.DataFrame, stats: dict) -> None:
     left, right = st.columns(2, gap="medium")
     with left:
         _render_card(*SOURCES[0])
+        # MIN_NHNN_QUICKBOX_LAYOUT_V1: source-dated quick insight below USD/VND.
+        from vnindex_nhnn_intelligence import render_nhnn_quick_box
+        render_nhnn_quick_box()
     with right:
         _render_card(*SOURCES[1])
     # NHNN intervention context is independent of Yahoo price moves.
