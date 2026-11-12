@@ -310,6 +310,35 @@ def _vnindex_dual_ichimoku(fig, full, visible, tf, labels):
         hi = max(float(visible["Giá cao nhất"].max()), float(cloud_values.max()))
         pad = max(hi - lo, 1.0) * .06
         fig.update_yaxes(range=[lo - pad, hi + pad], row=1, col=1)
+    # MIN_VNINDEX_ICHI2_PRICE_TAGS_V1: Plotly value badges on right price axis.
+    # Take the LAST computed value of each Ichi 2 line (not the future Kumo).
+    # Same dynamic calculation and colors as the stock chart; no hardcoded levels.
+    tag_specs = (
+        (indicator["tenkan2"][-1], IDU.COL["tenkan2"], "#FFFFFF"),
+        (indicator["kijun2"][-1], IDU.COL["kijun2"], "#131722"),
+    )
+    valid_tags = [(float(v), bg, fg) for v, bg, fg in tag_specs if np.isfinite(v)]
+
+    # If the lines almost coincide, separate only the VISUAL badges slightly.
+    # Their y coordinates remain the true indicator prices on the right axis.
+    tag_yshifts = [0] * len(valid_tags)
+    if len(valid_tags) == 2:
+        y_range = fig.layout.yaxis.range
+        if y_range is not None:
+            price_span = abs(float(y_range[1]) - float(y_range[0]))
+            px_per_price = 340.0 / max(price_span, 1.0)
+            if abs(valid_tags[0][0] - valid_tags[1][0]) * px_per_price < 22:
+                tag_yshifts = [11, -11]
+
+    for (price, background, foreground), shift in zip(valid_tags, tag_yshifts):
+        fig.add_annotation(
+            xref="paper", x=1, xanchor="left", xshift=2,
+            yref="y", y=price, yanchor="middle", yshift=shift,
+            text=f"<b>{price:,.2f}</b>",
+            font=dict(color=foreground, size=12),
+            bgcolor=background, borderpad=3,
+            showarrow=False,
+        )
     return fig
 
 
