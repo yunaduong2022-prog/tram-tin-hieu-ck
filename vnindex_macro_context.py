@@ -191,6 +191,9 @@ def render(index_daily: pd.DataFrame, stats: dict) -> None:
         _render_card(*SOURCES[0])
     with right:
         _render_card(*SOURCES[1])
+    # NHNN intervention context is independent of Yahoo price moves.
+    from vnindex_nhnn_fx import render_fx_interventions
+    render_fx_interventions()
     headline, body = strategy_note(stats)
     with st.container(border=True):
         st.markdown(f"**{headline}**")
