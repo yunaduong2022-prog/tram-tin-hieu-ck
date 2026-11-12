@@ -151,7 +151,7 @@ def _plot(fig, key: str):
     st.plotly_chart(fig, key=key, **kw)
 
 
-def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
+def build_chart(P: dict, supertrend: bool = True, hull: bool = True, show_ma: bool = False):
     g, tf = P["g"], P["tf"]
     n = len(g)
     x = P["labels"]
@@ -164,11 +164,13 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
                                  showlegend=False, whiskerwidth=0, meta=cross,
                                  increasing=dict(line=dict(color=UP, width=1), fillcolor=UP),
                                  decreasing=dict(line=dict(color=DN, width=1), fillcolor=DN)), row=1, col=1)
-    for m, col in zip(P["mas"], MA_COLORS):
-        s = g[f"MA{m}"]
-        if s.notna().any():
-            fig.add_trace(go.Scatter(x=x, y=s, mode="lines", name=f"MA{m}", line=dict(color=col, width=1.6),
-                                     hovertemplate=f"MA{m}: %{{y:,.2f}}<extra></extra>"), row=1, col=1)
+    # MIN_VNINDEX_MA_TOGGLE_V1: display-only overlay; calculations remain unchanged.
+    if show_ma:
+        for m, col in zip(P["mas"], MA_COLORS):
+            s = g[f"MA{m}"]
+            if s.notna().any():
+                fig.add_trace(go.Scatter(x=x, y=s, mode="lines", name=f"MA{m}", line=dict(color=col, width=1.6),
+                                         hovertemplate=f"MA{m}: %{{y:,.2f}}<extra></extra>"), row=1, col=1)
     if hull and "HU_M" in g:
         for _tr in HUL.traces(x, g[["HU_M", "HU_S", "HU_up"]]):
             fig.add_trace(_tr, row=1, col=1)
@@ -977,13 +979,14 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     s = _stats(d_all)
     render_vnindex_editorial(d_all, s)
 
-    c1, c2, c3, c4, c5 = st.columns([2.0, 1.0, 1.15, 1.15, 1.5])
+    c1, c2, c3, c4, c5, c6 = st.columns([2.0, 1.0, 1.15, 1.15, 1.5, 1.15])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
                               label_visibility="collapsed") or "D"
     use_news = c2.checkbox("Tin RSS", value=False, key="vnv_news", help="Lấy tin từ các RSS trong data/rss_feeds.txt (làm mới mỗi 30 phút)")
     show_st = c3.checkbox("Supertrend", value=False, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
     show_hull = c4.checkbox("Hull Suite", value=False, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH})")
     show_ichi = c5.checkbox("Dual Ichimoku", value=True, key="vnv_ichi", help="Kumo 9-17-26, Tenkan 65, Kijun 129; dùng dữ liệu VNINDEX cùng khung")
+    show_ma = c6.checkbox("Đường MA", value=False, key="vnv_show_ma", help="Bật/tắt các đường MA trên biểu đồ; không ảnh hưởng nhận định và các mức hỗ trợ/kháng cự")
     # Selector is intentionally BELOW the chart. Read its previous widget state
     # here; Streamlit reruns the script automatically after any pill click.
     chart_range = st.session_state.get("vnv_chart_range", "1Y")
@@ -1057,7 +1060,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         # Indicators use full EOD history; presets only crop the rendered bars.
         P_full = prep_chart(d_all, tf, len(d_all))
         P = chart_range_view(P_full, d_all["Ngày"], chart_range)
-        fig = build_chart(P, show_st, show_hull)
+        fig = build_chart(P, show_st, show_hull, show_ma=show_ma)
         fig.update_layout(height=485)  # true final height for label collision spacing
         if show_ichi:
             fig = _vnindex_dual_ichimoku(fig, P_full["g"], P["g"], tf, P["labels"])
@@ -1082,7 +1085,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
                  selection_mode="single", default="1Y",
                  key="vnv_chart_range", label_visibility="collapsed")
         st.caption(f"Dữ liệu cuối phiên đến {s['date']:%d/%m/%Y}; tự có nến mới mỗi khi cập nhật data/eod_prices.csv. "
-                   f"Đường MA tính theo khung {TF_NOUN[tf]}: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
+                   + ("MA đang hiển thị: " + ", ".join(f"MA{m}" for m in P["mas"]) + ". " if show_ma else "Đường MA đang ẩn trên biểu đồ. ") + "Rê chuột vào nến để xem giá." + (f" Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}) tính theo khung {TF_NOUN[tf]}." if show_st else "") + (f" Hull Suite (HMA {HUL.LENGTH}) cũng tính theo khung {TF_NOUN[tf]}." if show_hull else ""))
 
     with flow_col:
         if flow_card is not None:
