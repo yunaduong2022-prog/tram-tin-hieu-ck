@@ -211,10 +211,10 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
                      zeroline=False, showline=True, linecolor="rgba(128,128,128,.35)", row=1, col=1)
     fig.update_yaxes(range=[0, float(g[V].max()) * 1.08], showticklabels=False, showgrid=False, zeroline=False,
                      showline=True, linecolor="rgba(128,128,128,.35)", row=2, col=1)
-    fig.update_layout(height=620, margin=dict(l=8, r=72, t=8, b=34), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    fig.update_layout(height=620, margin=dict(l=8, r=148, t=8, b=34), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       dragmode=False, hovermode="closest", bargap=0.25,
                       legend=dict(orientation="h", x=0.01, y=0.995, xanchor="left", yanchor="top", bgcolor="rgba(0,0,0,0)"),
-                      showlegend=True, hoverlabel=dict(bgcolor="#14203F", font=dict(color="#EAF0FF", size=12)))
+                      showlegend=False, hoverlabel=dict(bgcolor="#14203F", font=dict(color="#EAF0FF", size=12)))
     return fig
 
 
@@ -319,24 +319,48 @@ def _vnindex_dual_ichimoku(fig, full, visible, tf, labels):
     )
     valid_tags = [(float(v), bg, fg) for v, bg, fg in tag_specs if np.isfinite(v)]
 
-    # If the lines almost coincide, separate only the VISUAL badges slightly.
-    # Their y coordinates remain the true indicator prices on the right axis.
-    tag_yshifts = [0] * len(valid_tags)
-    if len(valid_tags) == 2:
-        y_range = fig.layout.yaxis.range
-        if y_range is not None:
-            price_span = abs(float(y_range[1]) - float(y_range[0]))
-            px_per_price = 340.0 / max(price_span, 1.0)
-            if abs(valid_tags[0][0] - valid_tags[1][0]) * px_per_price < 22:
-                tag_yshifts = [11, -11]
+    # MIN_VNINDEX_ICHI_PRICE_LAYOUT_V1: presentation-only price labels.
+    # Use the ACTUAL price-panel height and keep tags separate from one another
+    # and from the existing VNINDEX close-price badge. Never modify price levels.
+    y_range = fig.layout.yaxis.range
+    if y_range is not None and len(y_range) == 2:
+        price_span = max(abs(float(y_range[1]) - float(y_range[0])), 1e-9)
+    else:
+        price_span = max(float(visible[H].max() - visible[L].min()), 1.0)
+    margin = fig.layout.margin
+    inner_height = max(float(fig.layout.height or 485) - float(margin.t or 0) - float(margin.b or 0), 1.0)
+    domain = fig.layout.yaxis.domain or (0.0, 1.0)
+    pane_px = inner_height * max(float(domain[1]) - float(domain[0]), 0.1)
+    px_per_price = pane_px / price_span
+
+    # Only the visual positions change when levels are close: y stays the TRUE
+    # technical value, while yshift separates coloured badges in screen pixels.
+    min_gap_px = 27.0
+    close_price = float(visible[C].iloc[-1])
+    close_px = close_price * px_per_price
+    tag_yshifts = [0.0] * len(valid_tags)
+    for indices, direction in (
+        (sorted((i for i, (v, _, _) in enumerate(valid_tags) if v >= close_price),
+                key=lambda i: valid_tags[i][0]), 1),
+        (sorted((i for i, (v, _, _) in enumerate(valid_tags) if v < close_price),
+                key=lambda i: valid_tags[i][0], reverse=True), -1),
+    ):
+        nearest_px = close_px
+        for i in indices:
+            natural_px = valid_tags[i][0] * px_per_price
+            # Higher labels go above and lower labels go below the fixed close.
+            display_px = (max(natural_px, nearest_px + min_gap_px)
+                          if direction > 0 else min(natural_px, nearest_px - min_gap_px))
+            tag_yshifts[i] = display_px - natural_px
+            nearest_px = display_px
 
     for (price, background, foreground), shift in zip(valid_tags, tag_yshifts):
         fig.add_annotation(
-            xref="paper", x=1, xanchor="left", xshift=2,
+            xref="paper", x=1, xanchor="left", xshift=6,
             yref="y", y=price, yanchor="middle", yshift=shift,
             text=f"<b>{price:,.2f}</b>",
             font=dict(color=foreground, size=12),
-            bgcolor=background, borderpad=3,
+            bgcolor=background, borderpad=4,
             showarrow=False,
         )
     return fig
@@ -1034,6 +1058,7 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
         P_full = prep_chart(d_all, tf, len(d_all))
         P = chart_range_view(P_full, d_all["Ngày"], chart_range)
         fig = build_chart(P, show_st, show_hull)
+        fig.update_layout(height=485)  # true final height for label collision spacing
         if show_ichi:
             fig = _vnindex_dual_ichimoku(fig, P_full["g"], P["g"], tf, P["labels"])
         fig.update_layout(height=485, meta=dict(vn_code="VNINDEX", vn_tf=tf))
