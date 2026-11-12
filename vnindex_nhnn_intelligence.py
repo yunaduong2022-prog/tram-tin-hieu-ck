@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from html import escape as escape_html
+from html import escape as escape_html, unescape as unescape_html
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus, urlsplit
 from urllib.request import Request, urlopen
@@ -117,9 +117,84 @@ def _parse_rss(data: bytes, now: datetime) -> list[dict]:
         if published < now - timedelta(days=HEADLINE_WINDOW_DAYS) or published > now + timedelta(days=1):
             continue
         out.append({"title": title[:230], "publisher": source[:90], "url": link,
-                    "date": published, "kind": classify_headline(title, source)})
+                    "date": published, "kind": classify_headline(title, source),
+                    "excerpt": _rss_excerpt(node.findtext("description") or "", title)})
     return out
 
+
+# MIN_NHNN_NEWS_IMPACT_CARDS_V1: verified highlights + RSS excerpt + conditional impact.
+
+def _rss_excerpt(description: str, title: str) -> str:
+    """Only use text RSS actually supplied; don't invent missing article body."""
+    content = unescape_html(description or "")
+    content = re.sub(r"<[^>]*>", " ", content)
+    content = re.sub(r"\s+", " ", content).strip()
+    if not content:
+        return ""
+    # Google News descriptions frequently contain only a repeat of the title
+    # and publisher. Such a field is NOT the original article's summary.
+    norm_content, norm_title = normalized(content), normalized(title)
+    if norm_title and norm_title in norm_content:
+        # Discard rather than claiming to know the article body.
+        if len(norm_content) <= len(norm_title) + 90:
+            return ""
+    if len(content) < 70:
+        return ""
+    return content[:340].rstrip() + ("…" if len(content) > 340 else "")
+
+
+def _conditional_impact(kind: str) -> str:
+    """Topic-level potential mechanism; no unverified policy execution claims."""
+    if kind == "TIN HOÁN ĐỔI":
+        return ("Nếu nghiệp vụ hoán đổi được thực hiện, VND có thể hỗ trợ "
+                "thanh khoản trong kỳ hạn; cần theo dõi giá trị thực hiện "
+                "và nghĩa vụ hoàn trả khi đáo hạn.")
+    if kind == "TIN MUA / BÁN NGOẠI TỆ":
+        return ("Mua USD thực tế có thể cung ứng VND; bán USD thực tế có thể "
+                "hút VND. Chỉ tiêu đề không đủ xác minh hướng giao dịch hay quy mô.")
+    if kind == "TIN ĐỀ CẬP THỰC HIỆN · CẦN ĐỐI CHIẾU":
+        return ("Có thể ảnh hưởng trực tiếp đến thanh khoản, nhưng cần đọc "
+                "nguồn gốc để xác nhận loại nghiệp vụ, giá trị và thời điểm.")
+    if kind == "NGHIÊN CỨU / NHẬN ĐỊNH":
+        return ("Đây có thể là quan điểm của đơn vị phân tích, không phải "
+                "quyết định NHNN hay dự báo chắc chắn về lãi suất/VNINDEX.")
+    return ("Theo dõi thêm tỷ giá liên ngân hàng, lãi suất và thanh khoản; "
+            "chưa đủ dữ liệu để kết luận tác động lên cổ phiếu.")
+
+
+def _render_green_impact_brief() -> None:
+    """A dated, source-backed summary card matching the requested green style."""
+    # Static policy history is dated on purpose. New RSS items appear below.
+    st.markdown("""
+<style>
+.nhnn-impact-brief{border:1.5px solid #27d49b;border-radius:12px;
+ background:rgba(23,133,92,.07);padding:11px 16px 13px;
+ margin:14px 0 17px;color:var(--txt,#e6efe9);font-size:13px;line-height:1.55}
+.nhnn-impact-title{display:inline-block;background:#36dca0;color:#08281c;
+ font-weight:850;font-size:13px;padding:5px 11px;border-radius:6px;
+ margin:-3px 0 8px}
+.nhnn-impact-brief p{margin:3px 0 6px!important;color:var(--txt,#e6efe9)!important}
+.nhnn-impact-brief .nhnn-green{color:#39d5a1!important;font-weight:750}
+.nhnn-impact-brief .nhnn-gold{color:#f5bf54!important;font-weight:750}
+.nhnn-impact-brief .nhnn-muted{font-size:11px;opacity:.85;margin-top:6px!important}
+.nhnn-impact-brief a{color:#77c6ef!important;text-decoration:underline}
+</style>
+<section class="nhnn-impact-brief">
+  <div class="nhnn-impact-title">NHNN MUA USD · TÁC ĐỘNG THANH KHOẢN</div>
+  <p>• <strong>Thông báo 10/11:</strong> dự kiến mua USD giao ngay giá
+    <strong>25.500 VND/USD</strong> từ 11/11, thứ Hai và thứ Tư hằng tuần.</p>
+  <p>• <strong>Hoán đổi USD/VND:</strong> VnEconomy ngày 11/11 dẫn đại diện NHNN
+    cho biết đã cung ứng <strong>gần 50.000 tỷ VND</strong> qua nghiệp vụ ngày 09/11;
+    <strong>khác với mua USD giao ngay</strong> và có kỳ hạn hoàn trả.</p>
+  <p class="nhnn-green">⇒ Nếu NHNN thực mua USD giao ngay, ngân hàng bán USD sẽ
+    nhận VND; có thể hỗ trợ thanh khoản và giảm áp lực chi phí vốn.</p>
+  <p class="nhnn-gold">⇒ Chưa có khối lượng mua USD giao ngay được xác minh;
+    không kết luận đã bơm thêm VND qua kênh này hoặc lãi suất/VNINDEX chắc chắn giảm/tăng.</p>
+  <p class="nhnn-muted">Tin có ngày gốc, không phải báo giá hay số liệu hôm nay ·
+    <a href="https://vnexpress.net/ngan-hang-nha-nuoc-se-dinh-ky-mua-usd-tu-cac-nha-bang-5142801.html" target="_blank">VnExpress 10/11</a>
+    · <a href="https://vneconomy.vn/phan-ung-cua-thi-truong-sau-khi-hoan-doi-va-mo-kenh-mua-ngoai-te.htm" target="_blank">VnEconomy 11/11</a></p>
+</section>
+""", unsafe_allow_html=True)
 
 @st.cache_data(ttl=FEED_TTL_SECONDS, show_spinner=False)
 def fetch_updates() -> dict:
@@ -152,6 +227,7 @@ def render_nhnn_briefing() -> None:
     st.markdown("##### NHNN & THANH KHOẢN · BẢN TIN KIỂM CHỨNG")
     st.caption("Phân biệt: thông báo chính sách / số liệu được báo chí dẫn nguồn / nghiên cứu lịch sử / dự báo. "
                "Không suy ra lượng USD đã thực mua từ biến động tỷ giá.")
+    _render_green_impact_brief()
 
     with st.container(border=True):
         a, b = st.columns(2, gap="medium")
@@ -193,25 +269,43 @@ def render_nhnn_briefing() -> None:
             st.write("Kiểm tra lịch và tuyên bố mới trực tiếp từ Fed; không lặp lại lịch tháng 12/2026 đã qua.")
         st.caption(f"[Nguồn chính thức: Federal Reserve FOMC calendar]({FED_CALENDAR})")
 
-    st.markdown("**Tin mới liên quan · tự kiểm tra mỗi 30 phút khi trang được mở**")
+    st.markdown("**Tin mới về NHNN · Nội dung & tác động có điều kiện**")
     monitor = fetch_updates()
     stamp = monitor["checked_at"].astimezone(TZ).strftime("%d/%m/%Y %H:%M")
-    st.caption(f"Lần kiểm tra nguồn RSS: {stamp} (giờ VN). "
-               "Đây là tiêu đề và phân loại chủ đề, không xác minh các con số trong bài.")
+    st.caption(f"Kiểm tra RSS: {stamp} (giờ VN) · cập nhật mỗi 30 phút khi trang mở. "
+               "Trích yếu chỉ lấy từ RSS, không thay thế bài viết gốc hay xác nhận giao dịch.")
     if not monitor["available"]:
-        st.warning("Không kết nối được nguồn tổng hợp tin. Giữ thông tin có ngày ở trên; "
-                   "không có nghĩa là NHNN không thực hiện giao dịch mới.")
+        st.warning("Không kết nối được nguồn tin. Các nội dung có ngày ở trên vẫn là "
+                   "dữ liệu lịch sử; không thể suy ra NHNN không có giao dịch mới.")
     elif not monitor["items"]:
-        st.info("Chưa tìm được tiêu đề phù hợp trong 14 ngày qua. "
-                "Không kết luận NHNN không hoạt động.")
+        st.info("Chưa tìm được tin phù hợp trong 14 ngày qua. Không đồng nghĩa "
+                "NHNN không có hoạt động mua/bán ngoại tệ.")
     else:
         if monitor["some_sources_failed"]:
-            st.caption("Một số nguồn tin đang lỗi hoặc bị giới hạn; kết quả có thể chưa đầy đủ.")
-        for news in monitor["items"]:
+            st.caption("Một số nguồn đang giới hạn truy cập; danh sách có thể thiếu tin.")
+        recent = monitor["items"][:4]
+        extra = monitor["items"][4:]
+
+        def news_card(news: dict) -> None:
             when = news["date"].astimezone(TZ).strftime("%d/%m/%Y %H:%M")
-            st.markdown(f"- **{news['kind']} · {when}** · "
-                        f"[{_safe_md(news['title'])}]({news['url']}) "
-                        f"· {_safe_md(news['publisher'])}")
-    st.caption("Muốn xác nhận lượng USD/VND thực hiện hoặc nhận định nguyên bản HSC/VNDIRECT: "
-               "cần tài liệu gốc hay thông báo NHNN; tiêu đề RSS không đủ bằng chứng. "
-               "Không phải khuyến nghị giao dịch.")
+            with st.container(border=True):
+                st.markdown(f"**{news['kind']} · {when}**")
+                st.markdown(f"[{_safe_md(news['title'])}]({news['url']})")
+                snippet = news.get("excerpt", "")
+                if snippet:
+                    st.write("**Nội dung RSS:** " + _safe_md(snippet))
+                else:
+                    st.caption("Nguồn RSS chưa có trích yếu độc lập từ nội dung bài; "
+                               "mở đường dẫn để đọc chi tiết. Không tự tạo bản tóm tắt.")
+                st.write("**Tác động tiềm năng:** " + _conditional_impact(news["kind"]))
+                st.caption("Nguồn tổng hợp: " + _safe_md(news["publisher"]) + " · "
+                           "Chưa đối chiếu toàn văn và số liệu giao dịch.")
+
+        for news in recent:
+            news_card(news)
+        if extra:
+            with st.expander(f"Xem thêm {len(extra)} tin cùng chủ đề", expanded=False):
+                for news in extra:
+                    news_card(news)
+    st.caption("Tin tổng hợp và nhận định có điều kiện, không phải xác nhận thực hiện "
+               "giao dịch NHNN hay khuyến nghị mua bán cổ phiếu.")
