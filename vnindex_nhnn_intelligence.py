@@ -162,8 +162,8 @@ def _conditional_impact(kind: str) -> str:
             "chưa đủ dữ liệu để kết luận tác động lên cổ phiếu.")
 
 
-def _render_green_impact_brief() -> None:
-    """A dated, source-backed summary card matching the requested green style."""
+def render_nhnn_quick_box() -> None:
+    """Dated NHNN summary, shown once below the USD/VND mini-chart."""
     # Static policy history is dated on purpose. New RSS items appear below.
     st.markdown("""
 <style>
@@ -188,6 +188,9 @@ def _render_green_impact_brief() -> None:
     <strong>khác với mua USD giao ngay</strong> và có kỳ hạn hoàn trả.</p>
   <p class="nhnn-green">⇒ Nếu NHNN thực mua USD giao ngay, ngân hàng bán USD sẽ
     nhận VND; có thể hỗ trợ thanh khoản và giảm áp lực chi phí vốn.</p>
+  <p class="nhnn-green">⇒ <strong>NGÂN HÀNG HƯỞNG LỢI TRỰC TIẾP VỀ THANH KHOẢN</strong>
+    nếu thực tế bán USD cho NHNN và nhận VND. Điều này không đồng nghĩa
+    mọi ngân hàng hay cổ phiếu ngân hàng chắc chắn hưởng lợi.</p>
   <p class="nhnn-gold">⇒ Chưa có khối lượng mua USD giao ngay được xác minh;
     không kết luận đã bơm thêm VND qua kênh này hoặc lãi suất/VNINDEX chắc chắn giảm/tăng.</p>
   <p class="nhnn-muted">Tin có ngày gốc, không phải báo giá hay số liệu hôm nay ·
@@ -227,7 +230,7 @@ def render_nhnn_briefing() -> None:
     st.markdown("##### NHNN & THANH KHOẢN · BẢN TIN KIỂM CHỨNG")
     st.caption("Phân biệt: thông báo chính sách / số liệu được báo chí dẫn nguồn / nghiên cứu lịch sử / dự báo. "
                "Không suy ra lượng USD đã thực mua từ biến động tỷ giá.")
-    _render_green_impact_brief()
+    # The green quick box is rendered beside the USD/VND chart, not repeated here.
 
     with st.container(border=True):
         a, b = st.columns(2, gap="medium")
