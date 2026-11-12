@@ -21,6 +21,7 @@ import engine as E
 import theme as TH
 import supertrend as SPT
 import hull_suite as HUL
+import ichimoku_dual as IDU
 import crosshair as CH
 import vnindex_draw_tools as VDT  # MIN_VNINDEX_DRAW_TOOLBAR_V1
 from vnindex_chart_range import RANGE_OPTIONS, chart_range_view
@@ -214,6 +215,101 @@ def build_chart(P: dict, supertrend: bool = True, hull: bool = True):
                       dragmode=False, hovermode="closest", bargap=0.25,
                       legend=dict(orientation="h", x=0.01, y=0.995, xanchor="left", yanchor="top", bgcolor="rgba(0,0,0,0)"),
                       showlegend=True, hoverlabel=dict(bgcolor="#14203F", font=dict(color="#EAF0FF", size=12)))
+    return fig
+
+
+# MIN_VNINDEX_DUAL_ICHI_V1: reuse stock dual-Ichimoku formula on VNINDEX categorical chart.
+def _vnindex_dual_ichimoku(fig, full, visible, tf, labels):
+    """Draw Ichimoku 1 projected Kumo + Ichimoku 2 Tenkan/Kijun.
+
+    Compute with the FULL resampled index history, never just the visible window.
+    Keep bar labels/crosshair/volume on the original categorical X axis.
+    """
+    if full.empty or visible.empty:
+        return fig
+    last_date = pd.Timestamp(full["Ngày"].iat[-1])
+
+    def future_date(k):
+        if tf == "D":
+            return last_date + pd.offsets.BDay(k)
+        if tf == "W":
+            return last_date + pd.Timedelta(weeks=k)
+        if tf == "M":
+            return last_date.to_period("M").end_time.normalize() + pd.offsets.MonthEnd(k)
+        return last_date.to_period("Q").end_time.normalize() + pd.offsets.QuarterEnd(k)
+
+    n = len(visible)
+    indicator = IDU.compute(full, n, future_date)
+    ext_x = list(labels) + [
+        _label(pd.Timestamp(date), tf) for date in indicator["x"][n:]
+    ]
+    a = np.asarray(indicator["a"], dtype=float)
+    b = np.asarray(indicator["b"], dtype=float)
+    if len(ext_x) != len(a) or len(a) != len(b):
+        raise ValueError("VNINDEX_ICHIMOKU_AXIS_MISMATCH")
+
+    original_count = len(fig.data)
+    cloud_positions = []
+    line_positions = []
+    good = np.isfinite(a) & np.isfinite(b)
+    rising = good & (a >= b)
+    falling = good & (a < b)
+    high, low = np.maximum(a, b), np.minimum(a, b)
+
+    # Categorical axis: plot the cloud using existing candle labels, plus 25
+    # future category labels; never invent OHLCV candles or volume.
+    for mask, color, name in (
+        (rising, IDU.COL["up"], "Ichimoku 1 · Kumo tăng"),
+        (falling, IDU.COL["down"], "Ichimoku 1 · Kumo giảm"),
+    ):
+        px, py = IDU._polygons(
+            ext_x, np.where(mask, high, np.nan),
+            np.where(mask, low, np.nan)
+        )
+        if px:
+            fig.add_trace(go.Scatter(
+                x=px, y=py, mode="lines", fill="toself",
+                fillcolor=color, line=dict(width=0),
+                name=name, hoverinfo="skip", legendgroup="vni_kumo"
+            ), row=1, col=1)
+            cloud_positions.append(len(fig.data) - 1)
+
+    for name, values, color, width in (
+        ("Ichi 1 · Lead 1 (Span A)", a, IDU.COL["span_a"], IDU.W_EDGE),
+        ("Ichi 1 · Leading Span B", b, IDU.COL["span_b"], IDU.W_EDGE),
+        (f"Ichi 2 · Tenkan {IDU.CFG['t2']}", indicator["tenkan2"], IDU.COL["tenkan2"], IDU.W_LINE),
+        (f"Ichi 2 · Kijun {IDU.CFG['k2']}", indicator["kijun2"], IDU.COL["kijun2"], IDU.W_LINE),
+    ):
+        xi = ext_x if len(values) == len(ext_x) else list(labels)
+        fig.add_trace(go.Scatter(
+            x=xi, y=values, mode="lines", name=name,
+            line=dict(color=color, width=width),
+            hovertemplate=f"{name}: %{{y:,.2f}}<extra></extra>"
+        ), row=1, col=1)
+        line_positions.append(len(fig.data) - 1)
+
+    # Cloud behind the candles, blue/orange Ichimoku lines above the candles.
+    all_traces = list(fig.data)
+    fig.data = tuple(
+        all_traces[i] for i in
+        cloud_positions + list(range(original_count)) + line_positions
+    )
+    # Existing index chart uses categorical dates. Predeclare future categories
+    # so the displacement matches 25 trading periods without moving real bars.
+    fig.update_xaxes(categoryorder="array", categoryarray=ext_x)
+    existing_end = right_axis_range(n, tf)[1]
+    show_future = min(int(indicator["off"]), max(2, round(n * 0.2)))
+    right_end = max(existing_end, n - 0.5 + show_future)
+    fig.update_xaxes(range=[-0.5, right_end])
+    # Keep the Y axis fitted to real candles plus visible Kumo projection.
+    visible_limit = min(len(a), n + show_future)
+    cloud_values = np.concatenate((a[:visible_limit], b[:visible_limit]))
+    cloud_values = cloud_values[np.isfinite(cloud_values)]
+    if len(cloud_values):
+        lo = min(float(visible["Giá thấp nhất"].min()), float(cloud_values.min()))
+        hi = max(float(visible["Giá cao nhất"].max()), float(cloud_values.max()))
+        pad = max(hi - lo, 1.0) * .06
+        fig.update_yaxes(range=[lo - pad, hi + pad], row=1, col=1)
     return fig
 
 
@@ -828,12 +924,13 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     s = _stats(d_all)
     render_vnindex_editorial(d_all, s)
 
-    c1, c2, c3, c4 = st.columns([2.0, 1.0, 1.15, 1.15])
+    c1, c2, c3, c4, c5 = st.columns([2.0, 1.0, 1.15, 1.15, 1.5])
     tf = c1.segmented_control("Khung", list(TF_LABEL), default="D", key="vnv_tf", format_func=TF_LABEL.get,
                               label_visibility="collapsed") or "D"
-    use_news = c2.checkbox("Tin RSS", value=True, key="vnv_news", help="Lấy tin từ các RSS trong data/rss_feeds.txt (làm mới mỗi 30 phút)")
-    show_st = c3.checkbox("Supertrend", value=True, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
-    show_hull = c4.checkbox("Hull Suite", value=True, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH})")
+    use_news = c2.checkbox("Tin RSS", value=False, key="vnv_news", help="Lấy tin từ các RSS trong data/rss_feeds.txt (làm mới mỗi 30 phút)")
+    show_st = c3.checkbox("Supertrend", value=False, key="vnv_st", help=f"Supertrend (ATR {SPT.PERIOD}, hệ số {SPT.MULTIPLIER:g}): xanh = xu hướng tăng, đỏ = xu hướng giảm")
+    show_hull = c4.checkbox("Hull Suite", value=False, key="vnv_hull", help=f"Hull Suite (HMA {HUL.LENGTH})")
+    show_ichi = c5.checkbox("Dual Ichimoku", value=True, key="vnv_ichi", help="Kumo 9-17-26, Tenkan 65, Kijun 129; dùng dữ liệu VNINDEX cùng khung")
     # Selector is intentionally BELOW the chart. Read its previous widget state
     # here; Streamlit reruns the script automatically after any pill click.
     chart_range = st.session_state.get("vnv_chart_range", "1Y")
@@ -905,9 +1002,11 @@ def render(raw: pd.DataFrame | None = None, data_key: str = ""):
     chart_col, flow_col = st.columns([2, 1], gap="medium")
     with chart_col:
         # Indicators use full EOD history; presets only crop the rendered bars.
-        P = prep_chart(d_all, tf, len(d_all))
-        P = chart_range_view(P, d_all["Ngày"], chart_range)
+        P_full = prep_chart(d_all, tf, len(d_all))
+        P = chart_range_view(P_full, d_all["Ngày"], chart_range)
         fig = build_chart(P, show_st, show_hull)
+        if show_ichi:
+            fig = _vnindex_dual_ichimoku(fig, P_full["g"], P["g"], tf, P["labels"])
         fig.update_layout(height=485, meta=dict(vn_code="VNINDEX", vn_tf=tf))
         TH.style_fig(fig)
         if not TH.is_dark():
