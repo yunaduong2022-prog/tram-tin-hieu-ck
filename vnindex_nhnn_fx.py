@@ -109,13 +109,7 @@ def render_fx_interventions() -> None:
         if (today - EVENT_DATE).days > 14:
             st.warning("Thông báo đang hiển thị là dữ liệu lịch sử; cần kiểm tra xem chính sách đã thay đổi hay chưa.")
         st.caption("Nguồn thông báo được dẫn lại: " + " · ".join(f"[{label}]({url})" for label, url in SOURCES))
-    with st.expander("Tin mới về hoạt động ngoại tệ NHNN · tự kiểm tra 30 phút/lần", expanded=False):
-        items = fetch_policy_headlines()
-        if not items:
-            st.caption("Chưa lấy được tin mới phù hợp từ nguồn tổng hợp RSS. Không suy diễn từ tỷ giá USD/VND.")
-        else:
-            st.caption("Tin từ Google News RSS; tiêu đề và ngày đăng, **không phải dữ liệu giao dịch NHNN đã xác nhận**.")
-            for item in items:
-                when = item["date"].astimezone(VNN_TZ).strftime("%d/%m/%Y %H:%M")
-                title = escape(item["title"]).replace("[", "\\[").replace("]", "\\]")
-                st.markdown(f"- **{when}** · [{title}]({item['url']})")
+    # MIN_VNINDEX_NHNN_INTELLIGENCE_V1: dated evidence + live headline discovery.
+    # Replaces the old, headline-only expander. Never infer actual FX volume.
+    from vnindex_nhnn_intelligence import render_nhnn_briefing
+    render_nhnn_briefing()
