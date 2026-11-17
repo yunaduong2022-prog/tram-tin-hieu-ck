@@ -3498,6 +3498,74 @@ def page_stock():
                            else f"{_label}: chưa đủ dữ liệu")
             st.caption("P/E, P/B, ROE, vốn hóa: nguồn EOD hiện có. "
                        "Điểm số/VIP/Backtest không bị thay đổi sang DNSE.")
+
+            # Keep the DNSE candle chart separate from the established EOD analytics.
+            # Restore the same EOD analysis cards that the early DNSE return bypasses.
+            st.markdown("---")
+            st.markdown("**Thẻ phân tích EOD đã xác nhận**")
+            st.caption(f"Các thẻ bên dưới lấy từ hệ thống phân tích EOD đến {latest_date:%d/%m/%Y}; "
+                       "biểu đồ và chỉ báo phía trên lấy từ nến DNSE. "
+                       "Nếu hai nguồn có giá khác nhau, không dùng giá DNSE để suy ra điểm mua EOD.")
+            _eod_eligible = code in set(res_df["Mã"].astype(str).str.upper())
+            if not _eod_eligible:
+                st.info(f"{code}: chưa thuộc danh sách phân tích EOD phiên mới nhất; "
+                        "không tạo tín hiệu, dự báo hay backtest từ dữ liệu cũ.")
+            else:
+                try:
+                    _eod_info = stock_row(code)
+                    if _eod_info is None:
+                        st.info(f"{code}: chưa đủ dữ liệu EOD để dựng các thẻ phân tích.")
+                    else:
+                        _eod_A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
+                        # A DNSE 1H chart has no matching EOD hourly frame.
+                        _eod_tf = tf if tf in ("D", "W", "M") else "D"
+                        if tf == "1H":
+                            st.caption("Đang xem DNSE 1H: các thẻ tham chiếu khung Ngày (EOD).")
+                        _eod_a = _eod_A[_eod_tf]
+                        _eod_change = df.loc[df["Mã"].astype(str).str.upper().eq(code), "Chg_%"]
+                        if _eod_change.empty:
+                            st.info(f"{code}: chưa có biến động phiên EOD hợp lệ để hiển thị các thẻ.")
+                        else:
+                            _eod_d_chg = _eod_change.iloc[-1]
+                            _eod_short = st.toggle(
+                                "Mô phỏng cả lệnh Bán (short) · EOD", value=False,
+                                key="dnse_eod_cards_short",
+                                help="Chỉ áp dụng cho thẻ tín hiệu/backtest EOD, không thay đổi nến DNSE.")
+                            st.markdown(
+                                mtf_card(E.mtf_conclusion(_eod_A), _eod_A, code,
+                                         _eod_info["Giá"], _eod_d_chg),
+                                unsafe_allow_html=True)
+                            try:
+                                st.markdown(setup_card(_eod_A["D"]["g"]), unsafe_allow_html=True)
+                            except Exception as _e:
+                                st.caption(f"Không tính được phân loại trạng thái EOD: {_e}")
+                            if _eod_a["enough"]:
+                                st.markdown(forecast_card(_eod_a, _eod_tf), unsafe_allow_html=True)
+                            st.markdown(backtest_card(_eod_a, _eod_tf, code, _eod_short),
+                                        unsafe_allow_html=True)
+                            st.markdown(rsi_card(_eod_a, _eod_tf, code), unsafe_allow_html=True)
+                            if _eod_a["enough"]:
+                                st.markdown(wyckoff_card(_eod_a), unsafe_allow_html=True)
+                                st.markdown(zones_card(_eod_a), unsafe_allow_html=True)
+                            st.markdown(signals_card(_eod_a, _eod_short), unsafe_allow_html=True)
+                            with st.expander("📋 Thẻ lý do Wyckoff · Volume (khung Ngày · EOD)"):
+                                if _eod_info["Tín hiệu"] != "WAIT":
+                                    st.markdown(
+                                        f'<div class="ticket-buy"><b>{_eod_info["Tín hiệu"]}</b> · '
+                                        f'Điểm {_eod_info["Điểm số"]}/6.0<br>'
+                                        f'📍 Entry: {fp(_eod_info["Entry"])} · '
+                                        f'🛑 Stoploss: {fp(_eod_info["Stoploss"])} · '
+                                        f'🎯 TakeProfit: {fp(_eod_info["TakeProfit"])}</div>',
+                                        unsafe_allow_html=True)
+                                else:
+                                    st.warning("ĐỨNG NGOÀI (WAIT) – chưa đủ điểm đồng thuận")
+                                for _cat, _pts, _txt in _eod_info["reasons"] or []:
+                                    st.write(f"• **{_cat} (+{_pts}đ):** {_txt}")
+                                if not _eod_info["reasons"]:
+                                    st.write("Chưa có chỉ báo nào đóng góp điểm.")
+                except (KeyError, IndexError, ValueError, TypeError) as _e:
+                    st.warning(f"Không dựng được thẻ phân tích EOD cho {code}: "
+                               f"{type(_e).__name__}: {_e}")
         return
     if data_mode == MODE_EOD:
         st.caption(f"Kho EOD: {len(all_eod)} mã · 1H: VCI nguyên gốc · 1D/1W/1M: EOD đã xác nhận.")
