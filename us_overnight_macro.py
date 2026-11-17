@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 import us_macro_impact as IMPACT  # MIN_MACRO_SECTOR_IMPACT_V1
+import us_macro_deep_dive as DEEP  # MIN_MACRO_MULTISESSION_V1
 
 TZ_VN = ZoneInfo('Asia/Ho_Chi_Minh')
 USER_AGENT = 'Mozilla/5.0 (compatible; TramTinHieuMacro/1.0)'
@@ -106,7 +107,7 @@ def _fetch_one(symbol: str) -> dict:
     err = None
     for host in ('query1.finance.yahoo.com', 'query2.finance.yahoo.com'):
         url = ('https://' + host + '/v8/finance/chart/' + quote(symbol, safe='')
-               + '?range=3mo&interval=1d')
+               + '?range=2y&interval=1d')
         request = Request(url, headers={'User-Agent': USER_AGENT, 'Accept': 'application/json'})
         try:
             with urlopen(request, timeout=8) as response:
@@ -184,7 +185,7 @@ def _card(item: dict, spec: tuple[str, str, str], idx: int) -> str:
                 '<span class="usn-change usn-neutral">Chưa có dữ liệu</span></div>'
                 '<div class="usn-asof">Không nhận được giá từ nguồn</div>'
                 '<div class="usn-blank">Đang chờ dữ liệu hợp lệ</div>'
-                f'{IMPACT.render_html(item)}'
+                f'{DEEP.short_html(item)}'
                 f'<a class="usn-link" href="{href}" target="_blank" '
                 'rel="noopener noreferrer">Xem nguồn ↗</a></article>')
     positive = item['change_pct'] >= 0
@@ -204,11 +205,11 @@ def _card(item: dict, spec: tuple[str, str, str], idx: int) -> str:
         f'<div class="usn-head"><span class="usn-price">{_number(item["price"], unit)}</span>'
         f'<span class="usn-change {"usn-up" if positive else "usn-down"}">{change_text}</span></div>'
         f'<div class="usn-asof">Phiên {day}{market_label}</div>'
-        f'<div class="usn-chart">{_spark_svg(item["points"], idx, positive)}</div>'
+        f'<div class="usn-chart">{_spark_svg(item["points"][-64:], idx, positive)}</div>'
         f'<div class="usn-footer"><span>{extra}</span>'
         f'<a class="usn-link" href="{href}" target="_blank" '
         'rel="noopener noreferrer">Yahoo Finance ↗</a></div>'
-        f'{IMPACT.render_html(item)}'
+        f'{DEEP.short_html(item)}'
         '</article>'
     )
 
@@ -257,34 +258,50 @@ CSS = """
 def _live_dashboard() -> None:
     with st.spinner('Đang kiểm tra dữ liệu thị trường quốc tế...'):
         quotes, fetched_at = _fetch_all()
-    count = sum(bool(x.get('ok')) for x in quotes)
-    head = (
-        '<section class="usn-shell">'
+    instruments = {spec[0]: spec for spec in INSTRUMENTS}
+    by_symbol = {q['symbol']: q for q in quotes}
+    count = sum(bool(q.get('ok')) for q in quotes)
+    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(
         '<div class="usn-headline">'
         '<div class="usn-kicker">TRẠM TÍN HIỆU · MIN TRADING</div>'
         '<div class="usn-title">THỊ TRƯỜNG MỸ &amp; HÀNG HÓA ĐÊM QUA</div>'
-        '<div class="usn-subtitle">Phiên gần nhất · mức thay đổi so với phiên trước · '
-        'biểu đồ xu hướng 3 tháng</div></div>'
-    )
-    body = '<div class="usn-grid">' + ''.join(
-        _card(q, spec, idx) for idx, (q, spec) in enumerate(zip(quotes, INSTRUMENTS))
-    ) + '</div>'
-    foot = (
-        '<div class="usn-divider"></div>'
-        '<div class="usn-footer-title">TẬP TRUNG CỔ PHIẾU HƠN CHỈ SỐ</div>'
+        '<div class="usn-subtitle">Bấm Phân tích chi tiết tại từng chỉ số để xem lũy kế '
+        '5/10/20/60/120/252 phiên, vị trí vùng giá và tác động tới chứng khoán Việt Nam.</div>'
+        '</div>', unsafe_allow_html=True)
+    selected = st.session_state.get('us_macro_selected_symbol')
+    if selected in instruments:
+        if st.button('← Quay lại bảng 9 chỉ số', key='usn_macro_back'):
+            st.session_state['us_macro_selected_symbol'] = None
+            st.rerun(scope='fragment')
+        DEEP.render_detail(by_symbol.get(selected, {'ok': False}), instruments[selected])
+        return
+    # Native Streamlit buttons avoid injected JavaScript / untrusted external links.
+    # One button per tile; selecting a tile shows ONLY its full analysis.
+    for start in range(0, len(INSTRUMENTS), 3):
+        cols = st.columns(3, gap='medium')
+        for idx in range(start, min(start + 3, len(INSTRUMENTS))):
+            spec = INSTRUMENTS[idx]
+            symbol = spec[0]
+            with cols[idx - start]:
+                st.markdown(_card(by_symbol.get(symbol, {'ok': False, 'symbol': symbol}), spec, idx),
+                            unsafe_allow_html=True)
+                if st.button(f'Phân tích chi tiết · {spec[1]}',
+                             key=f'usn_macro_open_{idx}', use_container_width=True):
+                    st.session_state['us_macro_selected_symbol'] = symbol
+                    st.rerun(scope='fragment')
+    st.markdown(
+        '<div class="usn-divider"></div><div class="usn-footer-title">TẬP TRUNG CỔ PHIẾU HƠN CHỈ SỐ</div>'
         '<div class="usn-source-note">'
-        f'Nguồn Yahoo Finance (không chính thức, có thể trễ hoặc giới hạn truy cập). '
+        'Nguồn Yahoo Finance không chính thức: không phải báo giá trực tiếp. '
+        'Biểu đồ nhỏ là khoảng 3 tháng gần nhất; tính xu hướng lũy kế bằng lịch sử 2 năm. '
         f'Truy vấn lúc {escape(fetched_at)} giờ VN · {count}/9 chỉ số có dữ liệu. '
-        'Tự làm mới mỗi 15 phút khi mở trang Vĩ mô; không phải giá thời gian thực. '
-        'Với lợi suất trái phiếu Mỹ 10 năm, tỷ lệ thay đổi là % tương đối của lợi suất, '
-        'không phải điểm phần trăm. Hàng hóa hiển thị giá hợp đồng tương lai. '
-        'Nhận định tác động tới cổ phiếu Việt Nam là kịch bản định tính có điều kiện, '
-        'không dự báo chắc chắn VN-Index hay thay thế đánh giá kết quả kinh doanh.'
-        '</div></section>'
-    )
-    st.markdown(CSS + head + body + foot, unsafe_allow_html=True)
+        'Làm mới mỗi 15 phút khi trang được mở. '
+        'Ảnh hưởng tới ngành Việt Nam là kịch bản định tính có điều kiện, '
+        'không thay thế việc kiểm tra dữ liệu trong nước hay khuyến nghị mua/bán.'
+        '</div>', unsafe_allow_html=True)
     if count == 0:
-        st.warning('Nguồn Yahoo Finance chưa trả dữ liệu trên máy chủ. Kiểm tra kết nối hoặc thử lại sau; không sử dụng giá ước tính.')
+        st.warning('Nguồn chưa trả dữ liệu; không suy diễn từ giá giả hoặc dữ liệu cũ.')
 
 
 def render() -> None:
