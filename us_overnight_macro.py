@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 import streamlit as st
+import us_macro_impact as IMPACT  # MIN_MACRO_SECTOR_IMPACT_V1
 
 TZ_VN = ZoneInfo('Asia/Ho_Chi_Minh')
 USER_AGENT = 'Mozilla/5.0 (compatible; TramTinHieuMacro/1.0)'
@@ -183,6 +184,7 @@ def _card(item: dict, spec: tuple[str, str, str], idx: int) -> str:
                 '<span class="usn-change usn-neutral">Chưa có dữ liệu</span></div>'
                 '<div class="usn-asof">Không nhận được giá từ nguồn</div>'
                 '<div class="usn-blank">Đang chờ dữ liệu hợp lệ</div>'
+                f'{IMPACT.render_html(item)}'
                 f'<a class="usn-link" href="{href}" target="_blank" '
                 'rel="noopener noreferrer">Xem nguồn ↗</a></article>')
     positive = item['change_pct'] >= 0
@@ -205,7 +207,9 @@ def _card(item: dict, spec: tuple[str, str, str], idx: int) -> str:
         f'<div class="usn-chart">{_spark_svg(item["points"], idx, positive)}</div>'
         f'<div class="usn-footer"><span>{extra}</span>'
         f'<a class="usn-link" href="{href}" target="_blank" '
-        'rel="noopener noreferrer">Yahoo Finance ↗</a></div></article>'
+        'rel="noopener noreferrer">Yahoo Finance ↗</a></div>'
+        f'{IMPACT.render_html(item)}'
+        '</article>'
     )
 
 
@@ -230,6 +234,16 @@ CSS = """
 .usn-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
   font-size:10.5px;color:#899bb7;margin-top:4px}
 .usn-link{color:#93b6e4!important;text-decoration:none!important}.usn-link:hover{text-decoration:underline!important}
+.usn-impact{background:#0a1325;border:1px solid #293b56;border-radius:9px;
+  margin-top:12px;padding:11px 12px;color:#dbe6f5;font-size:11.5px;line-height:1.48}
+.usn-impact-title{color:#e9b85c;font-size:10.5px;font-weight:800;letter-spacing:.45px;margin-bottom:5px}
+.usn-impact-move{font-size:11px;color:#b9cbea;margin-bottom:5px;font-weight:650}
+.usn-impact-note{color:#d4deed;margin:5px 0 8px}
+.usn-impact-line{padding:4px 0;border-top:1px solid #24354c;overflow-wrap:anywhere}
+.usn-impact-line b{color:#f3f5ff}
+.usn-impact-check{margin:6px 0 0;color:#a9bdcf;overflow-wrap:anywhere}
+.usn-impact-check b{color:#e9b85c}
+.usn-impact-neutral .usn-impact-note,.usn-impact-stale .usn-impact-note{color:#9bb0c9}
 .usn-divider{border-top:1px solid #bb9250;margin:26px 0 14px}
 .usn-footer-title{color:var(--txt2,#e8edfa);font-size:16px;font-weight:800;letter-spacing:.35px}
 .usn-source-note{font-size:12px;color:var(--muted,#94a3b8);line-height:1.6;margin:9px 0 3px}
@@ -263,7 +277,9 @@ def _live_dashboard() -> None:
         f'Truy vấn lúc {escape(fetched_at)} giờ VN · {count}/9 chỉ số có dữ liệu. '
         'Tự làm mới mỗi 15 phút khi mở trang Vĩ mô; không phải giá thời gian thực. '
         'Với lợi suất trái phiếu Mỹ 10 năm, tỷ lệ thay đổi là % tương đối của lợi suất, '
-        'không phải điểm phần trăm. Hàng hóa hiển thị giá hợp đồng tương lai.'
+        'không phải điểm phần trăm. Hàng hóa hiển thị giá hợp đồng tương lai. '
+        'Nhận định tác động tới cổ phiếu Việt Nam là kịch bản định tính có điều kiện, '
+        'không dự báo chắc chắn VN-Index hay thay thế đánh giá kết quả kinh doanh.'
         '</div></section>'
     )
     st.markdown(CSS + head + body + foot, unsafe_allow_html=True)
