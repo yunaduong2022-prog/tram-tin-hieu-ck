@@ -16,35 +16,12 @@ Tuy nhiên, quy mô quỹ đất lớn không tự động tạo ra lợi nhuậ
 
 Kết quả 9 tháng đầu năm 2026 cho thấy sự chênh lệch đáng kể giữa doanh thu bán bất động sản và lợi nhuận ghi nhận.
 
-Chỉ tiêu 9T/2026
-
-Kết quả
-
-So với cùng kỳ
-
-Doanh thu thuần
-
-483 tỷ đồng
-
--83,1%
-
-LNST hợp nhất
-
-1.268 tỷ đồng
-
-+50,8%
-
-LNST cổ đông mẹ
-
-1.209 tỷ đồng
-
-+117%
-
-Tổng thu nhập bất thường trước thuế được BSC xác định
-
-1.311 tỷ đồng
-
-—
+| Chỉ tiêu | 9T/2026 | So với cùng kỳ |
+| :--- | ---: | ---: |
+| Doanh thu thuần | 483 tỷ đồng | -83,1% |
+| LNST hợp nhất | 1.268 tỷ đồng | +50,8% |
+| LNST cổ đông mẹ | 1.209 tỷ đồng | +117% |
+| Tổng thu nhập bất thường trước thuế được BSC xác định | 1.311 tỷ đồng | — |
 
 Ba khoản thu nhập bất thường đáng chú ý gồm:
 

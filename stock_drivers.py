@@ -102,6 +102,53 @@ def _note_details(title: str, lines: list[str]) -> str:
             f"{''.join(body)}</details>")
 
 
+def _comment_md_cells(line: str) -> list[str] | None:
+    """A narrow, escaped Markdown table subset; normal prose is unaffected."""
+    line = line.strip()
+    if not (line.startswith("|") and line.endswith("|")):
+        return None
+    return [cell.strip() for cell in line[1:-1].split("|")]
+
+
+def _comment_md_table(lines: list[str], at: int) -> tuple[str, int]:
+    """Return HTML and next line index only for a valid Markdown table."""
+    if at + 2 > len(lines):
+        return "", at
+    cols = _comment_md_cells(lines[at])
+    rule = _comment_md_cells(lines[at + 1]) if at + 1 < len(lines) else None
+    if not cols or len(cols) < 2 or not rule or len(rule) != len(cols):
+        return "", at
+    if not all(re.fullmatch(r":?-{3,}:?", c) for c in rule):
+        return "", at
+
+    def _cells(values: list[str], is_head: bool) -> str:
+        tag = "th" if is_head else "td"
+        result = []
+        for k, val in enumerate(values):
+            align = "left" if k == 0 else "right"
+            color = ""
+            if not is_head and k == len(values) - 1 and re.match(r"^[+\-−]\d", val):
+                color = "color:#43d6a1;" if val.startswith("+") else "color:#ff8e9f;"
+            result.append(f"<{tag} style='text-align:{align};{color}'>" + _inline(val) + f"</{tag}>")
+        return "".join(result)
+
+    out = ["<div style='overflow-x:auto;margin:10px 0 12px;border:1px solid #29384d;border-radius:8px'>",
+           "<table class='live-table' style='width:100%;min-width:325px;border-collapse:collapse'>",
+           "<thead><tr>", _cells(cols, True), "</tr></thead><tbody>"]
+    i, count = at + 2, 0
+    while i < len(lines):
+        row = _comment_md_cells(lines[i])
+        if row is None or len(row) != len(cols):
+            break
+        out.extend(["<tr>", _cells(row, False), "</tr>"])
+        i += 1
+        count += 1
+    if not count:
+        return "", at
+    out.append("</tbody></table></div>")
+    return "".join(out), i
+
+
 def _comment_html(text: str) -> tuple[str, str]:
     """Đổi nội dung file nhận định thành (tiêu đề, phần thân HTML).
 
@@ -154,6 +201,14 @@ def _comment_html(text: str) -> tuple[str, str]:
         if not ln:
             flush(out)
             continue
+        # An explicit Markdown table inside a commentary file becomes a real HTML table.
+        if ln.startswith("|") and ln.endswith("|"):
+            table_html, next_i = _comment_md_table(lines, i - 1)
+            if table_html:
+                flush(out)
+                out.append(table_html)
+                i = next_i
+                continue
         if first and re.match(r"^#\s", ln):
             title, first = ln.lstrip("#").strip(), False
             continue
