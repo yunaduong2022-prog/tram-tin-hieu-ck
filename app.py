@@ -4177,6 +4177,9 @@ def page_livestream():
             _lh = SR.lnst_sector_html(_lnst, _sec) if _have else ""
             if _lh:
                 st.markdown(_lh, unsafe_allow_html=True)
+                if str(_sec).strip().casefold() == "bất động sản":
+                    st.caption("Bổ sung KDH và NLG: tăng trưởng LNST cổ đông mẹ quý III/2026 theo báo cáo TCBS ngày 09–10/11/2026. "
+                               "Mới có 2 doanh nghiệp, chưa đại diện toàn ngành; các quý khác chưa được cập nhật ở lần này.")
                 st.caption("So với cùng quý năm trước. Xanh = lãi tăng, đỏ = lãi giảm hoặc lỗ; càng đậm càng lệch xa 0. Ô \"-\" là chưa có số liệu.")
             else:
                 st.caption(f"Chưa có dữ liệu LNST theo quý cho ngành {_sec}. Thêm các dòng có cột Ngành = \"{_sec}\" vào {SR.LNST_PATH}.")
