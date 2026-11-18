@@ -17,6 +17,7 @@ import re
 
 import numpy as np
 import pandas as pd
+from live_commentary_layout import compact_commentary
 
 DRIVERS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "dong_luc_nganh.csv")
 KINDS = ["Động lực", "Đầu vào", "Đầu ra", "Chỉ số theo dõi", "Rủi ro"]
@@ -281,19 +282,16 @@ def commentary_card(code: str) -> str | None:
             text = f.read()
     except OSError:
         return None
-    title, body = _comment_html(text)
+    # Livestream only: source-based preview + always-visible KQKD table +
+    # collapsed full sections. No financial values are generated or changed.
+    title, body = compact_commentary(text, _comment_html, _comment_md_table, _inline)
     if not (title or body):
         return None
     c = esc(str(code).upper())
     head = (f"<div style='font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.5;margin-bottom:4px'>{_inline(title)}</div>" if title else "")
-    scroll = ("<style>.nd-scroll{scrollbar-width:thin;scrollbar-color:#3b4d66 #0b1422}"
-              ".nd-scroll::-webkit-scrollbar{width:8px}.nd-scroll::-webkit-scrollbar-track{background:#0b1422;border-radius:6px}"
-              ".nd-scroll::-webkit-scrollbar-thumb{background:#3b4d66;border-radius:6px}</style>"
-              f"<div class='nd-scroll' style='max-height:{COMMENT_MAX_H}px;overflow-y:auto;padding:0 10px 4px 0;"
-              f"border-top:1px solid #26364b;border-bottom:1px solid #26364b'>{body}</div>")
     foot = (f"<div class='live-muted' style='margin-top:9px'>Nhận định do bạn tự cập nhật trong data/nhan_dinh_ma/{c}.md; "
             "số liệu trong đoạn là chữ cố định, không tự đổi theo dữ liệu của app; không phải khuyến nghị mua hay bán.</div>")
-    return _card(f"📝 NHẬN ĐỊNH · {c}", head + scroll + foot)
+    return _card(f"📝 NHẬN ĐỊNH · {c}", head + body + foot)
 
 
 # ---------------------------------------------------------------- định giá
