@@ -11,6 +11,8 @@ import math
 
 import pandas as pd
 
+import live_resistance_levels as LRL
+
 TF_LABELS = {"D": "Ngày (D)", "W": "Tuần (W)", "M": "Tháng (M)"}
 DIR_LABELS = {1: "Nghiêng tăng", -1: "Nghiêng giảm", 0: "Chưa rõ xu hướng"}
 
@@ -147,6 +149,7 @@ def build_commentary(code, analyses):
                     if support is None else f"Nếu đóng cửa dưới hỗ trợ {_price(support)}, cần đánh giá lại rủi ro.")
 
     scenarios = [("Tích cực", positive), ("Trung tính", neutral), ("Tiêu cực", negative)]
+    ladder = LRL.build_ladder(analyses)
     weekly_text = weekly["trend"].lower() if weekly["ready"] else "chưa đủ dữ liệu"
     monthly_text = monthly["trend"].lower() if monthly["ready"] else "chưa đủ dữ liệu"
     level_text = (f"Hỗ trợ 20 phiên {_price(support)}, kháng cự 20 phiên {_price(resistance)}. "
@@ -158,8 +161,9 @@ def build_commentary(code, analyses):
               f"{daily['details']}. {level_text}Trạng thái giá: {state_label.lower()}. "
               f"{state_script} "
               "Đây là kịch bản theo điều kiện, không phải khuyến nghị mua bán hay kết quả chắc chắn.")
+    script = script + " " + LRL.spoken_summary(ladder)
     return {"frames": frames, "state": state, "state_label": state_label,
-            "scenarios": scenarios, "script": script, "note": ""}
+            "scenarios": scenarios, "script": script, "note": "", "ladder": ladder}
 
 
 def render(code, analyses, data_date=None):
@@ -190,6 +194,10 @@ def render(code, analyses, data_date=None):
     else:
         st.info(model["note"])
     st.caption("Hỗ trợ/kháng cự tính theo đáy/đỉnh 20 phiên trước, không bao gồm phiên hiện tại. Vượt một mốc chưa đủ xác nhận đảo chiều.")
+    st.markdown("<div class='live-card-title' style='margin-top:14px'>📍 PHÂN BIỆT CÁC MỐC GIÁ</div>", unsafe_allow_html=True)
+    st.dataframe(pd.DataFrame((model.get("ladder") or LRL.build_ladder(analyses))["rows"]),
+                 hide_index=True, use_container_width=True, height=143)
+    st.caption("Đỉnh 20 phiên, Kijun 129 ngày và giả định +15% là ba khái niệm khác nhau. Mức +15% không phải cản kỹ thuật hay mục tiêu đã xác nhận.")
     with st.expander("🎤 LỜI DẪN TỰ ĐỘNG · SAO CHÉP ĐỂ LIVESTREAM", expanded=False):
         if model["script"]:
             st.code(model["script"], language=None, wrap_lines=True)

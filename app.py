@@ -14,6 +14,7 @@ from plotly.subplots import make_subplots
 
 import engine as E
 import live_technical_panel as LTP
+import live_resistance_levels as LRL
 import hourly_native_1h as NH
 import dnse_chart_source as DC
 import signal_source_policy as SSP
@@ -4054,7 +4055,20 @@ def page_livestream():
     # Chỉ dùng mức mục tiêu/cắt lỗ tính minh họa khi không có mức kỹ thuật tương ứng.
     buy_low = price * 0.98 if pd.notna(price) else None
     buy_high = price * 1.02 if pd.notna(price) else None
-    target = resistance if resistance is not None else (price * 1.15 if pd.notna(price) else None)
+    # Livestream display only: prefer a sourced overhead line to arbitrary +15% price.
+    _ladder = LRL.build_ladder(A)
+    _real_overhead = []
+    _kijun = _ladder.get("overhead_kijun")
+    if _kijun is not None and pd.notna(price):
+        _real_overhead.append((_kijun, f"CẢN KIJUN {_ladder['kijun_period']} (D)"))
+    try:
+        _pivot = float(resistance)
+        if pd.notna(price) and math.isfinite(_pivot) and _pivot > price:
+            _real_overhead.append((_pivot, "CẢN ĐỈNH SÓNG"))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    target, target_label = (min(_real_overhead, key=lambda item: item[0])
+                            if _real_overhead else (None, "CẢN KỸ THUẬT PHÍA TRÊN"))
     stop = support if support is not None else (price * 0.92 if pd.notna(price) else None)
 
     try:
@@ -4110,7 +4124,7 @@ def page_livestream():
             f"<div style='height:1px;background:#29384d;margin:12px 0'></div>"
             f"<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
             f"<div class='live-kpi'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
-            f"<div class='live-kpi'><span>MỤC TIÊU / KHÁNG CỰ</span><b>{_fmt_level(target)}</b></div>"
+            f"<div class='live-kpi'><span>{htmllib.escape(target_label)}</span><b>{_fmt_level(target)}</b></div>"
             f"<div class='live-kpi'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
             f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{_rs_txt}</b></div>"
             f"</div><div class='live-muted' style='margin-top:9px'>Vùng mua/cắt lỗ dự phòng là mức tham khảo nếu dữ liệu kỹ thuật không trả về hỗ trợ/kháng cự.</div></div>",
