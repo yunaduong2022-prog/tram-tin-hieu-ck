@@ -1,11 +1,11 @@
 {
-  "updated_at": "17/11/2026 20:52 (gio VN)",
-  "latest_date": "2026-11-17",
+  "updated_at": "18/11/2026 16:47 (gio VN)",
+  "latest_date": "2026-11-18",
   "symbols": 281,
-  "symbols_on_latest_date": 241,
-  "rows": 513638,
+  "symbols_on_latest_date": 238,
+  "rows": 513876,
   "sources": {
-    "SSI_IBOARD_PUBLIC": 241
+    "SSI_IBOARD_PUBLIC": 238
   },
   "failed": [
     "AGP: AGP: NO_OVERLAP_WITH_EXISTING_HISTORY",
@@ -32,6 +32,7 @@
     "PPC: PPC: PRICE_BASELINE_MISMATCH 2026-11-10: old=8.73, source=8.280405",
     "PQN: PQN: EMPTY_STOCKINFO",
     "PSN: PSN: EMPTY_STOCKINFO",
+    "PVB: PVB: PRICE_BASELINE_MISMATCH 2026-11-11: old=18.7, source=17.70516",
     "PVE: PVE: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "PVM: PVM: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "PXS: PXS: NO_OVERLAP_WITH_EXISTING_HISTORY",
@@ -44,7 +45,7 @@
     "VIN: VIN: EMPTY_STOCKINFO",
     "VNM: VNM: PRICE_BASELINE_MISMATCH 2026-11-10: old=57.9, source=55.398720000000004"
   ],
-  "skipped": 35,
+  "skipped": 36,
   "adjusted": [],
   "stopped": null
 }
