@@ -13,6 +13,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 import engine as E
+import live_technical_panel as LTP
 import hourly_native_1h as NH
 import dnse_chart_source as DC
 import signal_source_policy as SSP
@@ -4097,6 +4098,7 @@ def page_livestream():
             st.warning(f"Không dựng được biểu đồ tuần: {exc}")
         range_bar_ui("W", _nW, "live_", "2Y")
         st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
+        LTP.render(code, A, latest_date)
 
     with right:
         verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
