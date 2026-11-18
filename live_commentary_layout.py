@@ -10,6 +10,7 @@ import html
 import re
 from dataclasses import dataclass
 from typing import Callable
+from live_detail_format import render_detail_section
 
 
 HEADING = re.compile(r"^\s*(#{1,6})\s+(.+?)\s*$")
@@ -168,8 +169,8 @@ def compact_commentary(
 
     rendered = []
     for section in sections:
-        section_text = "\n".join(section.lines)
-        _, body = markdown_renderer(section_text)
+        # Presentation only: highlight numbered arguments and sourced monetary items.
+        body = render_detail_section(section.lines, markdown_renderer, inline_renderer)
         # Empty headings still retain their source heading in the clickable row.
         if not body and not section.label:
             continue

@@ -1,5 +1,6 @@
 """Offline regression tests for compact Livestream commentary, no Streamlit UI."""
 import html
+import re
 import unittest
 from live_commentary_layout import compact_commentary, _split_sections
 
@@ -68,7 +69,7 @@ class CompactLayoutTests(unittest.TestCase):
 
     def test_body_after_lift_preserved_once(self):
         _, result = render(KDH)
-        self.assertEqual(result.count('Lãi thoái vốn Bình Trưng Mới khoảng 896 tỷ đồng.'), 1)
+        self.assertEqual(html.unescape(re.sub(r'<[^>]+>', '', result)).count('Lãi thoái vốn Bình Trưng Mới khoảng 896 tỷ đồng.'), 1)
         self.assertEqual(result.count('<table>'), 1)
         self.assertIn('Ba khoản thu nhập bất thường', result)
 
@@ -120,7 +121,7 @@ class CompactLayoutTests(unittest.TestCase):
         self.assertIn('TÓM TẮT NHANH', rendered)
         self.assertIn('483 tỷ đồng', rendered)
         self.assertIn('1.209 tỷ đồng', rendered)
-        self.assertIn('Lãi thoái vốn Bình Trưng Mới khoảng 896 tỷ đồng.', rendered)
+        self.assertIn('Lãi thoái vốn Bình Trưng Mới khoảng 896 tỷ đồng.', html.unescape(re.sub(r'<[^>]+>', '', rendered)))
         self.assertNotIn('nd-scroll', rendered)
         self.assertIn('số liệu trong đoạn là chữ cố định', rendered)
 
