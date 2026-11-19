@@ -172,14 +172,21 @@ def render(code, analyses, data_date=None):
 
     model = build_commentary(code, analyses)
     safe_code = html.escape(str(code))
-    st.markdown(f"<div class='live-card-title' style='margin-top:16px'>🧭 TỔNG HỢP KỸ THUẬT ĐA KHUNG · {safe_code}</div>", unsafe_allow_html=True)
-    rows = []
-    for tf in ("D", "W", "M"):
-        snapshot = model["frames"][tf]
-        rows.append({"Khung": TF_LABELS[tf], "Xu hướng": snapshot["trend"],
-                     "Tín hiệu xác nhận": snapshot["details"]})
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=143)
-    st.caption("Xu hướng lấy từ D/W/M hiện có. Vol/MA10 ở khung tuần/tháng chỉ tạm tính khi nến chưa hoàn tất; không dùng để xác nhận bứt phá ngày.")
+    with st.expander("📊 CHỈ BÁO XÁC NHẬN D/W/M · MA20 & KHỐI LƯỢNG", expanded=False):
+        rows = []
+        for tf in ("D", "W", "M"):
+            snap = model["frames"][tf]
+            ma20, close, ratio = snap.get("ma20"), snap.get("close"), snap.get("vol_ratio")
+            relation = ("Trên" if close > ma20 else "Dưới" if close < ma20 else "Bằng") if ma20 and close else "—"
+            ratio_text = f"{ratio:.2f}x" if ratio is not None else "—"
+            if tf in ("W", "M") and ratio is not None:
+                ratio_text += " (tạm tính)"
+            rows.append({"Khung": TF_LABELS[tf], "MA20": _price(ma20),
+                         "Giá so với MA20": relation, "Vol/MA10": ratio_text})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=143)
+        st.caption("Khung tuần/tháng có thể là nến chưa hoàn tất; không dùng Vol/MA10 tuần/tháng để xác nhận bứt phá ngày. "
+                   "Xu hướng D/W/M đã hiển thị trong thẻ kết luận bên phải.")
+
     st.markdown("<div class='live-card-title' style='margin-top:14px'>🎯 BA KỊCH BẢN DIỄN BIẾN GIÁ</div>", unsafe_allow_html=True)
     st.caption(f"Trạng thái theo giá đóng cửa EOD: **{model['state_label']}**.")
     if model["scenarios"]:
@@ -194,10 +201,11 @@ def render(code, analyses, data_date=None):
     else:
         st.info(model["note"])
     st.caption("Hỗ trợ/kháng cự tính theo đáy/đỉnh 20 phiên trước, không bao gồm phiên hiện tại. Vượt một mốc chưa đủ xác nhận đảo chiều.")
-    st.markdown("<div class='live-card-title' style='margin-top:14px'>📍 PHÂN BIỆT CÁC MỐC GIÁ</div>", unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame((model.get("ladder") or LRL.build_ladder(analyses))["rows"]),
-                 hide_index=True, use_container_width=True, height=143)
-    st.caption("Đỉnh 20 phiên, Kijun 129 ngày và giả định +15% là ba khái niệm khác nhau. Mức +15% không phải cản kỹ thuật hay mục tiêu đã xác nhận.")
+    with st.expander("📍 NGUỒN CÁC MỐC GIÁ · CHI TIẾT", expanded=False):
+        st.dataframe(pd.DataFrame((model.get("ladder") or LRL.build_ladder(analyses))["rows"]),
+                     hide_index=True, use_container_width=True, height=143)
+        st.caption("Đỉnh 20 phiên, Kijun 129 ngày và giả định +15% là ba khái niệm khác nhau. "
+                   "Mức +15% không phải cản kỹ thuật hay mục tiêu đã xác nhận.")
     with st.expander("🎤 LỜI DẪN TỰ ĐỘNG · SAO CHÉP ĐỂ LIVESTREAM", expanded=False):
         if model["script"]:
             st.code(model["script"], language=None, wrap_lines=True)

@@ -2437,18 +2437,66 @@ def _mtf_price_html(price, chg) -> str:
     return (f'<div class="mtf-px" style="color:{col}"><b>{price:,.2f}</b>' + (f"<span>{sub}</span>" if sub else "") + "</div>")
 
 
+
+def _technical_horizon_html(A, show_frames=True):
+    """Source-shared MA states plus existing engine D/W/M directions; display only.
+
+    MA = ma_structure_view.trend_state (daily), D/W/M = engine scores.
+    No change to mtf_conclusion, screening, backtesting, or trading decisions.
+    """
+    d = (A.get("D") or {}).get("g") if isinstance(A, dict) else None
+    row_ = d.iloc[-1] if d is not None and not getattr(d, "empty", True) else {}
+    names = ("Ngắn hạn", "Trung hạn", "Dài hạn")
+    ma_states = [(name, MAV.trend_state(row_, name)) for name in names]
+
+    def _group(items):
+        parts = []
+        for label_, value_ in items:
+            val_ = str(value_)
+            col_ = ("#43d6a1" if val_ in ("TĂNG", "Nghiêng tăng") else
+                    "#f38a96" if val_ in ("GIẢM", "Nghiêng giảm") else "#dfba76")
+            parts.append("<div style='min-width:0;border:1px solid #29384d;border-radius:8px;"
+                         "padding:7px 4px;text-align:center'>"
+                         f"<div style='font-size:10px;color:#8fa1b8'>{htmllib.escape(label_)}</div>"
+                         f"<div style='font-size:11px;font-weight:750;color:{col_};margin-top:4px;"
+                         f"overflow-wrap:anywhere'>{htmllib.escape(val_)}</div></div>")
+        return ("<div style='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));"
+                "gap:6px;margin:7px 0'>" + "".join(parts) + "</div>")
+
+    out_ = ["<div style='font-size:12px;color:#c7d4e5;font-weight:800;"
+            "margin-top:10px'>CẤU TRÚC MA · NẾN NGÀY</div>", _group(ma_states)]
+    if show_frames:
+        directions_ = []
+        for tf_, label_ in (("D", "Ngày (D)"), ("W", "Tuần (W)"), ("M", "Tháng (M)")):
+            a_ = (A.get(tf_) or {}) if isinstance(A, dict) else {}
+            direction_ = a_.get("dir")
+            value_ = ("Nghiêng tăng" if direction_ == 1 else
+                      "Nghiêng giảm" if direction_ == -1 else
+                      "Đi ngang" if direction_ == 0 else "Chưa đủ dữ liệu")
+            if not a_.get("enough"):
+                value_ = "Chưa đủ dữ liệu"
+            directions_.append((label_, value_))
+        out_.extend(("<div style='font-size:12px;color:#c7d4e5;font-weight:800;"
+                     "margin-top:11px'>XU HƯỚNG ĐA CHỈ BÁO D/W/M</div>",
+                     _group(directions_)))
+    else:
+        out_.append("<div class='muted'>MA10/20 · MA20/50/100 · MA50/100/200;"
+                    " không phải tín hiệu mua/bán.</div>")
+    return "".join(out_)
+
+
 def mtf_card(conc, A, code="", price=None, chg=None):
     code_html = f'<div class="mtf-code">{htmllib.escape(str(code))}</div>' if code else ""
     if code_html:       # giá hiện tại nằm cạnh mã
         code_html = f'<div class="mtf-right">{code_html}{_mtf_price_html(price, chg)}</div>'
     if conc is None:
-        return card("Kết luận đa khung", f'<div class="mtf-top"><div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>{code_html}</div>')
+        return card("Kết luận kỹ thuật · D/W/M", f'<div class="mtf-top"><div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>{code_html}</div>')
     k = conc["kind"]
     # Tên mã nằm bên phải, cao bằng 2 hàng: tiêu đề "Kết luận đa khung" + kết luận (ƯU TIÊN MUA...)
-    html = [f'<div class="mtf-top"><div><div class="ct">Kết luận đa khung</div><div class="big c-{k}" style="margin-bottom:0">{conc["verdict"]}</div></div>{code_html}</div>',
+    html = [f'<div class="mtf-top"><div><div class="ct">Kết luận kỹ thuật · D/W/M</div><div class="big c-{k}" style="margin-bottom:0">{conc["verdict"]}</div></div>{code_html}</div>',
             f'<div class="muted" style="margin-top:6px">{conc["text"]}</div>',
             f'<div class="box">Nếu nến đóng ngay lúc này: <b class="c-{k}">{conc["verdict"]}</b></div>',
-            row("Điểm đa khung (-100 đến +100)", f'{conc["score"]:+.0f}'), "<hr style='margin:8px 0'>"]
+            row("Điểm đa khung (-100 đến +100)", f'{conc["score"]:+.0f}'), _technical_horizon_html(A, show_frames=False), "<hr style='margin:8px 0'>"]
     for t in ("M", "W", "D"):
         a = A[t]
         head = f'<span><b>{E.TF_NAME[t]}</b> · <span class="muted">{E.TF_ROLE[t]}</span></span>'
@@ -4115,19 +4163,44 @@ def page_livestream():
         LTP.render(code, A, latest_date)
 
     with right:
+        # MA and D/W/M are displayed together, but their scores are NOT mixed.
+        # MAV.trend_state is the same rule used by the MA Structure tab.
         verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
+        _reason = (conclusion.get("text", "") if isinstance(conclusion, dict) else "Chưa đủ dữ liệu D/W/M")
+        _score = (f'{conclusion["score"]:+.0f}/100' if isinstance(conclusion, dict) else "—")
+        _v_color = ("#f38a96" if "TRÁNH" in verdict else "#43d6a1" if "MUA" in verdict else "#e4bf75")
+        _stop_label = "HỖ TRỢ KỸ THUẬT" if support is not None else "MỐC DỰ PHÒNG −8% (KHÔNG PHẢI SL)"
+        _level_rows = (
+            ("VÙNG GIÁ ±2% · KHÔNG PHẢI ĐIỂM MUA", f"{_fmt_level(buy_low)} – {_fmt_level(buy_high)}"),
+            (target_label, _fmt_level(target)),
+            (_stop_label, _fmt_level(stop)),
+            ("RS VS VNINDEX · THAM KHẢO", _rs_txt),
+        )
+        _level_html = "".join(
+            "<div class='live-kpi' style='min-width:0'>"
+            f"<span>{htmllib.escape(title_)}</span><b>{htmllib.escape(str(value_))}</b></div>"
+            for title_, value_ in _level_rows
+        )
         st.markdown(
-            f"<div class='live-card'><div class='live-card-title'>🏆 KẾT LUẬN ĐA KHUNG</div>"
-            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>"
-            f"<div class='live-verdict'>{htmllib.escape(verdict.upper())}</div>"
-            f"<div style='text-align:right'><div class='live-muted'>{code}</div><div class='live-price'>{price:,.2f}</div></div></div>"
-            f"<div style='height:1px;background:#29384d;margin:12px 0'></div>"
-            f"<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
-            f"<div class='live-kpi'><span>VÙNG MUA THAM KHẢO</span><b>{_fmt_level(buy_low)} – {_fmt_level(buy_high)}</b></div>"
-            f"<div class='live-kpi'><span>{htmllib.escape(target_label)}</span><b>{_fmt_level(target)}</b></div>"
-            f"<div class='live-kpi'><span>CẮT LỖ / HỖ TRỢ</span><b>{_fmt_level(stop)}</b></div>"
-            f"<div class='live-kpi'><span>RS VS VNINDEX</span><b>{_rs_txt}</b></div>"
-            f"</div><div class='live-muted' style='margin-top:9px'>Vùng mua/cắt lỗ dự phòng là mức tham khảo nếu dữ liệu kỹ thuật không trả về hỗ trợ/kháng cự.</div></div>",
+            "<div class='live-card'><div class='live-card-title'>🏆 KẾT LUẬN XU HƯỚNG KỸ THUẬT</div>"
+            "<div style='display:flex;justify-content:space-between;align-items:center;gap:8px'>"
+            f"<div style='color:{_v_color};font-size:23px;font-weight:850'>{htmllib.escape(verdict.upper())}</div>"
+            f"<div style='text-align:right'><div class='live-muted'>{htmllib.escape(code)} · EOD</div>"
+            f"<div class='live-price'>{_fmt_level(price)}</div></div></div>"
+            f"<div class='live-muted' style='margin-top:5px'>Điểm D/W/M: {_score}</div>"
+            "<div style='height:1px;background:#29384d;margin:12px 0'></div>"
+            + _technical_horizon_html(A, show_frames=True)
+            + f"<div style='color:#dce5f0;font-size:12px;line-height:1.6;margin-top:9px'>"
+            f"{htmllib.escape(str(_reason))}</div>"
+            "<div style='height:1px;background:#29384d;margin:12px 0'></div>"
+            "<div style='font-size:12px;font-weight:800;color:#c7d4e5;margin-bottom:8px'>"
+            "MỐC GIÁ & RS · THEO DÕI</div>"
+            "<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
+            + _level_html +
+            "</div><div class='live-muted' style='margin-top:9px'>"
+            "MA là cấu trúc nến ngày, D/W/M là điểm đa chỉ báo; hai kết quả không bị gộp thành tín hiệu mới. "
+            "Vùng ±2% và mốc −8% là phép tính dự phòng, không phải điểm mua/cắt lỗ đã xác nhận. "
+            "RS và các mốc giá không tham gia điểm D/W/M.</div></div>",
             unsafe_allow_html=True
         )
 
@@ -4216,10 +4289,15 @@ def page_livestream():
         except Exception:
             pass
     with lower_right:
-        try:
-            st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
-        except Exception:
-            pass
+        # The visible verdict is in the right column; show only the numerical audit here.
+        with st.expander("🔎 CHI TIẾT ĐIỂM SỐ D/W/M", expanded=False):
+            for _tf, _w in (("D", "40%"), ("W", "30%"), ("M", "30%")):
+                _a = A.get(_tf) or {}
+                if _a.get("enough"):
+                    st.caption(f"{E.TF_NAME[_tf]} · trọng số {_w}: {_a['bias']:+.1f}/100")
+                else:
+                    st.caption(f"{E.TF_NAME[_tf]} · chưa đủ dữ liệu")
+            st.caption("Điểm tổng hợp chuẩn hóa lại trọng số nếu thiếu khung. Nến tuần/tháng có thể chưa hoàn tất.")
         try:
             st.markdown(_wy_note(code), unsafe_allow_html=True)
         except Exception:
