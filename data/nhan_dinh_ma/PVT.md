@@ -1,4 +1,4 @@
-# PVT là cổ phiếu cơ bản, biến động lớn
+# PVT là cổ phiếu cơ bản, biến động lớn. Đợi về chân chữ A, tạo nền rồi tính tiếp.
 
 PVT, GVR, HAH, FRT cổ phiếu đánh biên lớn.
 
