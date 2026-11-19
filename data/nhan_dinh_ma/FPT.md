@@ -1,5 +1,7 @@
 # FPT LÃI KỶ LỤC NHƯNG GIÁ THỦNG ĐÁY 4 NĂM: VÌ SAO "TÂY" XẢ GẦN 18.000 TỶ?
 
+Hiện tại KHÔNG MUA THÊM, KHÔNG MUA MỚI FPT
+
 Cổ phiếu FPT bị khối ngoại bán ròng gần 18.000 tỷ đồng từ đầu năm 2026 (hơn 143 phiên), đẩy giá xuyên thủng mốc 48.500 đồng để lùi về vùng đáy gần 4 năm quanh 46.950 – 47.000 đồng. Nguyên nhân cốt lõi đến từ dòng vốn ngoại rút khỏi thị trường mới nổi và lo ngại AI làm giảm nhu cầu gia công phần mềm truyền thống.
 ## 1. Lo ngại rủi ro từ AI. Giới đầu tư quốc tế sợ các công cụ lập trình AI tự động sẽ làm giảm nhu cầu thuê nhân lực viết code truyền thống của FPT trong dài hạn.
 
