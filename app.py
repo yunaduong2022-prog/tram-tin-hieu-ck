@@ -3197,6 +3197,8 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         # Mã chưa có tên công ty (vd. mã mới thêm): vẫn chừa chỗ cho 1 dòng tên, nếu không dòng thương hiệu tụt xuống đè lên mã và giá
         brand_y = 86 + NAME_LH * max(1, len(name_lines)) + 4
         _ma_row = _ma_row_html(code) if MA_LAYER in layers else ""
+        if _ma_row and a.get("ma_values_source") == "EOD":
+            _ma_row = '<span style="color:#8fa1b8">MA D/W · EOD</span>&nbsp;&nbsp;' + _ma_row
         # Dòng MA nằm sát mép trên biểu đồ; cụm chỉ số phía trên được nâng lên đúng bằng chiều cao các dòng ghi chú dưới chỉ số (TOP n NGÀNH...),
         # nên mã không có ghi chú thì dòng MA nằm sát ngay dưới hàng chỉ số, không chừa khoảng trống thừa.
         _sub_lines = max([sum(len(textwrap.wrap(_l, 34)) or 1 for _l in str(m_["sub"]).split("\n")) for m_ in others if m_.get("sub")] or [0])
@@ -3365,12 +3367,13 @@ def range_bar_ui(tf: str, n_total: int, ns: str = "", dflt=None):
         st.radio("Khoảng thời gian", opts, index=opts.index(d_), horizontal=True, key=_range_key(tf, n_total, ns), label_visibility="collapsed")
 
 
-def pick_layers():
+def pick_layers(default=None):
+    _defaults = LAYER_DEFAULT if default is None else default
     if hasattr(st, "pills"):
-        sel = st.pills("Lớp hiển thị", LAYER_OPTS, selection_mode="multi", default=LAYER_DEFAULT,
+        sel = st.pills("Lớp hiển thị", LAYER_OPTS, selection_mode="multi", default=_defaults,
                        label_visibility="collapsed")
         return sel or []
-    return st.multiselect("Lớp hiển thị", LAYER_OPTS, default=LAYER_DEFAULT)
+    return st.multiselect("Lớp hiển thị", LAYER_OPTS, default=_defaults)
 
 
 # ------------------------------------------------------------------ TRANG 2: CỔ PHIẾU
@@ -3492,8 +3495,10 @@ def page_stock():
                    "Dữ liệu tài chính và bộ lọc vẫn từ kho EOD/nguồn khác.")
         if len(_g) < 129:
             st.caption("Ichimoku dài hạn có thể chưa đủ lịch sử để hiển thị.")
-        _layers = [x for x in pick_layers() if x in {
-            "MA20", "Bollinger", "Dual Ichimoku", "EMA 50/200", "Hull Suite",
+        # Match Livestream: show the D/W MA values row and draw the MA20 curve.
+        # MA row values come from confirmed EOD; MA20 curve is native DNSE bars.
+        _layers = [x for x in pick_layers(default=LAYER_DEFAULT + ["MA20"]) if x in {
+            MA_LAYER, "MA20", "Bollinger", "Dual Ichimoku", "EMA 50/200", "Hull Suite",
             "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI"}]
         if len(_g) < 30:
             _layers = [x for x in _layers if x == "Khối lượng"]
@@ -3531,7 +3536,7 @@ def page_stock():
             _n = range_bars(tf, len(_g), ns="dnse_")
         _main, _side = st.columns([2.2, 1])
         with _main:
-            _figure = make_chart({"g": _g, "enough": False}, code, tf, _layers,
+            _figure = make_chart({"g": _g, "enough": False, "ma_values_source": "EOD"}, code, tf, _layers,
                                  None if _mob else _metrics, _mob, _n, _drag,
                                  sub_hdr_right=not _mob)
             st.plotly_chart(_figure, config=_plot_cfg, **_STRETCH)
