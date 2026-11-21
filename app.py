@@ -3545,23 +3545,9 @@ def page_stock():
                 CH.inject()
                 DT.inject(code, tf)
         with _side:
-            st.markdown("**Chỉ báo từ nến DNSE**")
-            st.metric("Giá đóng nến", f"{_close:,.2f}", f"{_pct:+.2f}%")
-            for _label, _key in (("MA20", "MA20"), ("MA50", "MA50"),
-                                  ("RSI (14)", "RSI"), ("MACD", "MACD")):
-                _v = pd.to_numeric(_g[_key].iat[-1], errors="coerce")
-                st.caption(f"{_label}: {_v:.2f}" if pd.notna(_v)
-                           else f"{_label}: chưa đủ dữ liệu")
-            st.caption("P/E, P/B, ROE, vốn hóa: nguồn EOD hiện có. "
-                       "Điểm số/VIP/Backtest không bị thay đổi sang DNSE.")
-
-            # Keep the DNSE candle chart separate from the established EOD analytics.
-            # Restore the same EOD analysis cards that the early DNSE return bypasses.
-            st.markdown("---")
-            st.markdown("**Thẻ phân tích EOD đã xác nhận**")
-            st.caption(f"Các thẻ bên dưới lấy từ hệ thống phân tích EOD đến {latest_date:%d/%m/%Y}; "
-                       "biểu đồ và chỉ báo phía trên lấy từ nến DNSE. "
-                       "Nếu hai nguồn có giá khác nhau, không dùng giá DNSE để suy ra điểm mua EOD.")
+            # Stock chart uses raw DNSE candles, while the cards below use confirmed EOD.
+            # Compact provenance replaces duplicated DNSE prices/MA/RSI/MACD and the long caption.
+            st.caption(f"Biểu đồ: DNSE · Phân tích kỹ thuật: EOD {latest_date:%d/%m/%Y}")
             _eod_eligible = code in set(res_df["Mã"].astype(str).str.upper())
             if not _eod_eligible:
                 st.info(f"{code}: chưa thuộc danh sách phân tích EOD phiên mới nhất; "
