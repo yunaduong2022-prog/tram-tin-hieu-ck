@@ -49,6 +49,7 @@ import cap_groups as CG
 import cap_filter as CF
 import market_overview as MO
 import us_overnight_macro as UOM
+import macro_vn_dashboard as MVN  # Macro Vietnam phase 1
 import my_watchlist as MW
 import my_portfolio as MP
 import vip_picks as VP
@@ -3940,7 +3941,7 @@ def _route_inner():
     # No modification to confirmed EOD scanners or backtests.
     st.caption(f"✅ Giá EOD đã xác nhận đến {latest_date:%d/%m/%Y} · Biểu đồ 1D / 1W / 1M")
     if main == "Vĩ mô":
-        return UOM.render()
+        return MVN.render(UOM.render)
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
     if main == "Thị trường" and sub == "Tổng quan":
