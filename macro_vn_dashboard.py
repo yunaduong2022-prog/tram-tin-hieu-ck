@@ -261,6 +261,9 @@ def _sector_impact(df: pd.DataFrame) -> None:
 
 def render(international_render) -> None:
     """Mount phase-1 macro VN around existing 9-instrument international page."""
+    # MIN_MACRO_MINDMAP_20261123
+    import macro_vn_mindmap as MVN_MAP
+    MVN_MAP.consume_navigation(SECTIONS, widget_key="mvn_section_v1")
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown("<div class='mvn-head'><div class='mvn-kicker'>TRẠM TÍN HIỆU · MIN TRADING</div>"
                 "<div class='mvn-title'>VĨ MÔ VIỆT NAM & THẾ GIỚI</div>"
@@ -269,7 +272,7 @@ def render(international_render) -> None:
                 unsafe_allow_html=True)
     if hasattr(st, "pills"):
         selected = st.pills("Chuyên mục Vĩ mô", SECTIONS, selection_mode="single",
-                            default="Tổng quan", key="mvn_section_v1")
+                            default=None if "mvn_section_v1" in st.session_state else "Tổng quan", key="mvn_section_v1")
     else:
         selected = st.radio("Chuyên mục Vĩ mô", SECTIONS, horizontal=True, key="mvn_section_v1")
     selected = selected or "Tổng quan"
@@ -282,6 +285,7 @@ def render(international_render) -> None:
     elif df["asof"].max().date() > date.today():
         st.warning("Dữ liệu có kỳ trong tương lai so với ngày hệ thống; cần kiểm tra nguồn trước khi dùng.")
     if selected == "Tổng quan":
+        MVN_MAP.render_mindmap()
         _summary(df)
     elif selected == "Chu kỳ & Lạm phát":
         _growth(df)
