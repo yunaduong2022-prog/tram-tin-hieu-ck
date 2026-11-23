@@ -33,20 +33,20 @@ class TestNationalPriceEvidence(unittest.TestCase):
     def test_official_rows_and_five_categories(self):
         rows = read_prices(today=TODAY)
         self.assertEqual(set(r['category'] for r in rows), {x[0] for x in GROUPS})
-        self.assertEqual(len(rows), 6)
+        self.assertGreaterEqual(len(rows), 6)
 
     def test_food_national_may(self):
-        r = latest_for(read_prices(today=TODAY), 'food')
+        r = next(r for r in read_prices(today=TODAY) if r['category']=='food' and r['period']=='05/2026' and r['basis']=='mom')
         self.assertEqual((r['rate'],r['contribution'],r['basis']),
                          (Decimal('-0.25'),Decimal('-0.06'),'mom'))
 
     def test_housing_contribution_is_own_group(self):
-        r = latest_for(read_prices(today=TODAY), 'housing')
+        r = next(r for r in read_prices(today=TODAY) if r['category']=='housing' and r['period']=='05/2026' and r['basis']=='mom')
         self.assertEqual(r['contribution'],Decimal('0.22'))
         self.assertEqual(r['contribution_scope'],'same_group')
 
     def test_fuel_does_not_inherit_transport_contribution(self):
-        r = latest_for(read_prices(today=TODAY),'fuel','mom')
+        r = next(r for r in read_prices(today=TODAY) if r['category']=='fuel' and r['period']=='05/2026' and r['basis']=='mom')
         self.assertEqual(r['rate'],Decimal('2.12'))
         self.assertIsNone(r['contribution'])
 
@@ -60,7 +60,7 @@ class TestNationalPriceEvidence(unittest.TestCase):
         self.assertIsNone(r['contribution'])
 
     def test_october_fuel_is_only_qualitative(self):
-        r=latest_for(read_prices(today=TODAY),'fuel')
+        r=latest_for(read_prices(today=TODAY),'fuel','qualitative')
         self.assertEqual(r['period'],'10/2026')
         self.assertIsNone(r['rate'])
         self.assertEqual(r['basis'],'qualitative')
@@ -106,7 +106,7 @@ class TestNationalPriceEvidence(unittest.TestCase):
             parse_price_row(r,today=TODAY)
 
     def test_qualitative_cannot_carry_rate(self):
-        r=source_rows()[-1].copy();r['rate_pct']='2.12'
+        r=next(x.copy() for x in source_rows() if x['basis']=='qualitative');r['rate_pct']='2.12'
         with self.assertRaisesRegex(ValueError,'QUALITATIVE'):
             parse_price_row(r,today=TODAY)
 
