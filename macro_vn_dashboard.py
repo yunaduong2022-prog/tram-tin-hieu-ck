@@ -16,6 +16,12 @@ import streamlit as st
 DATA_PATH = Path(__file__).resolve().parent / "data" / "macro_vn.csv"
 COLS = ["id", "group", "label", "period", "asof", "value", "unit",
         "comparison", "source", "source_url", "note"]
+# Snapshot ngày 20/11/2026 (ảnh bảng NHNN), kỳ hạn khác O/N chưa tự đồng bộ.
+_MONETARY_TENORS = [("INTERBANK_ON", "Qua đêm"), ("INTERBANK_1W", "1 tuần"),
+                    ("INTERBANK_2W", "2 tuần"), ("INTERBANK_1M", "1 tháng"),
+                    ("INTERBANK_3M", "3 tháng"), ("INTERBANK_6M", "6 tháng"),
+                    ("INTERBANK_9M", "9 tháng")]
+
 SECTIONS = ["Tổng quan", "Chu kỳ & Lạm phát", "Tiền tệ & Thanh khoản",
             "Tài khóa", "Quốc tế", "Tác động ngành"]
 
@@ -74,6 +80,8 @@ def value_text(record: dict | None) -> str:
     if not record:
         return "Chưa có số liệu"
     val = float(record["value"])
+    if record.get("id") == "USDVND_CENTRAL":
+        return f"{val:,.0f}".replace(",", ".") + " VND/USD"
     raw = f"{val:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return f"{raw} {record['unit']}"
 
@@ -84,7 +92,14 @@ def stale(record: dict | None, now: date | None = None) -> bool:
     now = now or date.today()
     d = pd.Timestamp(record["asof"]).date()
     # Period-based thresholds: annual/quarterly/monthly observations are NOT daily prices.
-    threshold = 7 if record["id"] == "INTERBANK_ON" else (115 if record["id"].startswith("GDP") else 55)
+    if record["id"].startswith("INTERBANK_"):
+        threshold = 7
+    elif record["id"] == "USDVND_CENTRAL":
+        threshold = 5
+    elif record["id"] == "CREDIT_YTD":
+        threshold = 45
+    else:
+        threshold = 115 if record["id"].startswith("GDP") else 55
     return (now - d).days > threshold
 
 
@@ -170,9 +185,12 @@ def _summary(df: pd.DataFrame) -> None:
                    "còn phụ thuộc tiến độ dự án và lợi nhuận từng doanh nghiệp.")
     st.markdown("#### Tình trạng dữ liệu")
     available = df["id"].nunique() if not df.empty else 0
-    st.caption(f"Có {available} nhóm chỉ tiêu nguồn gốc rõ ràng trong kho macro thủ công. "
-               "Chưa có dữ liệu đủ chuẩn cho PMI, OMO, tín dụng, lãi suất liên ngân hàng, "
-               "tỷ giá liên ngân hàng và báo cáo chu kỳ tự động; không tự điền số.")
+    pending = [name for key, name in [("CREDIT_YTD", "tăng trưởng tín dụng"),
+                                   ("INTERBANK_ON", "lãi suất liên ngân hàng")] if latest(df, key) is None]
+    st.caption(f"Kho Vĩ mô có {available} nhóm chỉ tiêu kèm nguồn và kỳ dữ liệu. "
+               "PMI, OMO và tỷ giá *giao dịch* USD/VND liên ngân hàng chưa có chuỗi đủ chuẩn; "
+               "các chỉ tiêu đã có vẫn phải theo dõi kỳ mới. "
+               + ("Đang thiếu: " + ", ".join(pending) + "." if pending else ""))
     with st.expander("Kiểm tra nguồn và kỳ dữ liệu", expanded=False):
         _source_table(df, ["GDP_Q", "CPI_OCT_YOY", "IIP_10M", "PUBLIC_INV_10M"])
 
@@ -204,7 +222,7 @@ def _growth(df: pd.DataFrame) -> None:
 def _monetary(df: pd.DataFrame) -> None:
     _section_heading("Tiền tệ & Thanh khoản", "Tách rõ lãi suất điều hành, thị trường liên ngân hàng, OMO, tín dụng và tỷ giá.")
     _cards(df, [("POLICY_RATE", "Lãi suất tái cấp vốn"), ("INTERBANK_ON", "Liên ngân hàng O/N"),
-                ("CREDIT_YTD", "Tăng trưởng tín dụng"), ("USDVND", "USD/VND liên ngân hàng")])
+                ("CREDIT_YTD", "Tăng trưởng tín dụng"), ("USDVND_CENTRAL", "Tỷ giá trung tâm NHNN")])
     policy = latest(df, "POLICY_RATE")
     discount = latest(df, "POLICY_DISCOUNT")
     overnight = latest(df, "INTERBANK_ON")
@@ -217,11 +235,34 @@ def _monetary(df: pd.DataFrame) -> None:
         st.warning(f"**Lãi suất liên ngân hàng O/N {value_text(overnight)}** là số liệu ngày "
                    f"{overnight['asof']:%d/%m/%Y}, đã quá kỳ cập nhật. "
                    "Không sử dụng như lãi suất hiện tại hoặc tín hiệu giao dịch.")
-    st.info("Kho dữ liệu vĩ mô vẫn **chưa có bản ghi đủ nguồn** cho tăng trưởng tín dụng "
-            "và tỷ giá USD/VND liên ngân hàng. Không tự suy diễn hoặc điền số thay thế.")
-    with st.expander("Nguồn NHNN và ngày áp dụng của các mức lãi suất", expanded=False):
-        _source_table(df, ["POLICY_RATE", "POLICY_DISCOUNT", "INTERBANK_ON"])
+    st.info("**USD/VND giao dịch liên ngân hàng:** chưa có chuỗi báo giá xác minh độc lập. "
+            "Thẻ **Tỷ giá trung tâm NHNN** phía trên là *một chỉ tiêu khác*; "
+            "không sử dụng giá TradingView FX_IDC:USDVND để thay thế. "
+            "Số liệu tín dụng là **lũy kế so cuối năm trước**, không phải chỉ tiêu theo ngày.")
+    with st.expander("Kiểm tra nguồn, loại tỷ giá và ngày dữ liệu", expanded=False):
+        _source_table(df, ["POLICY_RATE", "POLICY_DISCOUNT", "INTERBANK_ON",
+                           "CREDIT_YTD", "USDVND_CENTRAL"] + [key for key, _ in _MONETARY_TENORS])
     st.caption("[Tra cứu trực tiếp bảng lãi suất NHNN](https://sbv.gov.vn/vi/l%C3%A3i-su%E1%BA%A5t1)")
+    # MIN_MACRO_PHASE2_VERIFIED_20261124 — dated tenor snapshot, not an historical trend
+    st.markdown("#### Đường cong lãi suất liên ngân hàng theo kỳ hạn")
+    curve = []
+    for key, label in _MONETARY_TENORS:
+        item = latest(df, key)
+        if overnight and item and item["asof"] == overnight["asof"]:
+            curve.append({"Kỳ hạn": label, "Lãi suất (%/năm)": float(item["value"])})
+    if len(curve) >= 5:
+        curve_df = pd.DataFrame(curve)
+        st.line_chart(curve_df.set_index("Kỳ hạn"), height=235)
+        st.caption(f"Mặt cắt **{overnight['asof']:%d/%m/%Y}** từ bảng NHNN. "
+                   "Đây là **đường cong kỳ hạn của một ngày**, KHÔNG phải đồ thị lịch sử và "
+                   "KHÔNG phải bằng chứng bơm/hút tiền.")
+    else:
+        st.caption("Chưa đủ kỳ hạn cùng ngày được xác minh để vẽ đường cong lãi suất.")
+    st.markdown("#### OMO · Tình trạng dữ liệu")
+    st.caption("Chưa có chuỗi đấu thầu/phát hành/đáo hạn và giao dịch thực tế được đối chiếu "
+               "để tính bơm/hút ròng. Không suy luận từ lãi suất O/N hay một phiên đơn lẻ.")
+    st.caption("[Tra cứu NHNN](https://www.sbv.gov.vn/) · "
+               "[Tín dụng được NHNN công bố qua Thời báo Ngân hàng](https://thoibaonganhang.vn/pho-thong-doc-pham-thanh-ha-tham-gia-doan-cong-tac-cua-pho-thu-tuong-nguyen-van-thang-lam-viec-tai-hai-phong-190872.html)")
     st.markdown("#### Kênh truyền dẫn cần theo dõi")
     st.write("OMO và lãi suất liên ngân hàng → chi phí vốn → tín dụng và định giá; "
              "USD/VND và lợi suất Mỹ → áp lực tỷ giá → không gian chính sách. "
@@ -264,7 +305,7 @@ def _sector_impact(df: pd.DataFrame) -> None:
          "Điều kiện xác nhận": "Đơn hàng, sản lượng, giá bán, biên lợi nhuận và dòng tiền cổ phiếu"},
         {"Yếu tố": "Áp lực CPI tăng", "Ngành liên quan": "Bán lẻ, tiêu dùng, doanh nghiệp vay nợ",
          "Điều kiện xác nhận": "Giá đầu vào, khả năng chuyển giá, lãi suất thực và sức mua"},
-        {"Yếu tố": "Lãi suất / tín dụng thuận lợi (chưa có số)", "Ngành liên quan": "Ngân hàng, chứng khoán, bất động sản",
+        {"Yếu tố": "Lãi suất / tín dụng biến động (cần đánh giá nhiều kỳ)", "Ngành liên quan": "Ngân hàng, chứng khoán, bất động sản",
          "Điều kiện xác nhận": "Chất lượng tín dụng, NIM, thanh khoản giao dịch và dòng tiền"},
         {"Yếu tố": "Giải ngân đầu tư công", "Ngành liên quan": "Xây dựng, vật liệu, hạ tầng",
          "Điều kiện xác nhận": "Hợp đồng trúng thầu, backlog, công nợ và tiến độ thực tế"},
