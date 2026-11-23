@@ -248,13 +248,21 @@ def render_smart_overview(rows: list[dict[str, Any]]) -> None:
     st.markdown("#### Kết luận vĩ mô dựa trên bằng chứng")
     st.info(f"**Điều có thể quan sát:** {view['gdp_evidence']} "
             "**Điều chưa thể xác định:** trạng thái nới lỏng/thắt chặt của chính sách tiền tệ "
-            "và dòng tiền vào chứng khoán. Cần thêm OMO, lãi suất liên ngân hàng nhiều kỳ, PMI "
+            "và dòng tiền vào chứng khoán. Cần OMO từng phiên đủ hai kênh, lãi suất liên ngân hàng nhiều kỳ, PMI "
             "và xác nhận bằng dữ liệu thị trường. Không tự chấm điểm hoặc dự báo VN-Index từ các snapshot.")
+    # Weekly repo-channel snapshot is NOT a full two-channel or daily OMO feed.
+    from macro_omo_weekly import latest_verified_week, fmt_bn, repo_direction
+    omo_week = latest_verified_week()
+    if omo_week:
+        st.caption(f"**OMO kênh cầm cố · tuần {omo_week['start']:%d/%m}–{omo_week['end']:%d/%m/%Y}:** "
+                   f"{repo_direction(omo_week['repo_net']).lower()} "
+                   f"{fmt_bn(abs(omo_week['repo_net']))}. "
+                   "Nguồn tổng hợp thứ cấp; chưa có ròng toàn OMO và chuỗi từng phiên.")
     if view["outdated"]:
         st.warning("**Cần đối chiếu kỳ mới:** " + ", ".join(view["outdated"]) + ".")
     if view["missing"]:
         st.caption("Chưa có bản ghi đủ nguồn cho: " + ", ".join(view["missing"]) + ".")
-    st.caption("Nguồn/chỉ tiêu chưa được kết nối đồng bộ: PMI, OMO, tỷ giá giao dịch USD/VND liên ngân hàng; "
+    st.caption("Nguồn/chỉ tiêu chưa được kết nối đồng bộ: PMI, OMO từng phiên đủ hai kênh, tỷ giá giao dịch USD/VND liên ngân hàng; "
                "Fed/DXY/lợi suất Mỹ xem tại chuyên mục Quốc tế.")
 
     st.markdown("#### Kênh tác động cần xác nhận")
