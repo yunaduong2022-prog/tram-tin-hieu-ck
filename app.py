@@ -3945,7 +3945,7 @@ def _route_inner():
     # No modification to confirmed EOD scanners or backtests.
     st.caption(f"✅ Giá EOD đã xác nhận đến {latest_date:%d/%m/%Y} · Biểu đồ 1D / 1W / 1M")
     if main == "Vĩ mô":
-        return MVN.render(UOM.render)
+        return MVN.render(UOM.render, sector_prices=raw)
     if main == "Cổ phiếu" and sub == "Đa khung D-W-M":
         return page_mtf_levels()
     if main == "Thị trường" and sub == "Tổng quan":
