@@ -1,11 +1,11 @@
 {
-  "updated_at": "21/11/2026 19:06 (gio VN)",
-  "latest_date": "2026-11-20",
+  "updated_at": "24/11/2026 06:39 (gio VN)",
+  "latest_date": "2026-11-23",
   "symbols": 281,
-  "symbols_on_latest_date": 231,
-  "rows": 514341,
+  "symbols_on_latest_date": 232,
+  "rows": 514575,
   "sources": {
-    "SSI_IBOARD_PUBLIC": 231
+    "SSI_IBOARD_PUBLIC": 232
   },
   "failed": [
     "AGP: AGP: NO_OVERLAP_WITH_EXISTING_HISTORY",
@@ -32,13 +32,12 @@
     "PPC: PPC: PRICE_BASELINE_MISMATCH 2026-11-10: old=8.73, source=8.280405",
     "PQN: PQN: EMPTY_STOCKINFO",
     "PSN: PSN: EMPTY_STOCKINFO",
-    "PVB: PVB: PRICE_BASELINE_MISMATCH 2026-11-11: old=18.7, source=16.763245488000003",
+    "PVB: PVB: PRICE_BASELINE_MISMATCH 2026-11-11: old=18.7, source=17.70516",
     "PVE: PVE: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "PVM: PVM: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "PXS: PXS: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "SMB: SMB: PRICE_BASELINE_MISMATCH 2026-11-11: old=41.05, source=39.026235",
     "TBC: TBC: PRICE_BASELINE_MISMATCH 2026-11-11: old=30.9, source=29.89884",
-    "TMP: TMP: PRICE_BASELINE_MISMATCH 2026-11-11: old=49.0, source=46.963609",
     "TNG: TNG: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "TNH: TNH: NO_OVERLAP_WITH_EXISTING_HISTORY",
     "VCR: VCR: NO_OVERLAP_WITH_EXISTING_HISTORY",
@@ -48,7 +47,7 @@
     "VLB: VLB: PRICE_BASELINE_MISMATCH 2026-11-11: old=52.0, source=49.5508",
     "VNM: VNM: PRICE_BASELINE_MISMATCH 2026-11-10: old=57.9, source=55.398720000000004"
   ],
-  "skipped": 39,
+  "skipped": 38,
   "adjusted": [],
   "stopped": null
 }
