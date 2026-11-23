@@ -281,9 +281,9 @@ def _monetary(df: pd.DataFrame) -> None:
                    "Không trộn kỳ công bố khác ngày, không suy ra NHNN bơm/hút ròng.")
     else:
         st.caption("Chưa có đủ 7 kỳ hạn cùng một ngày đã được xác minh để vẽ đường cong.")
-    st.markdown("#### OMO · Tình trạng dữ liệu")
-    st.caption("Chưa có chuỗi đấu thầu/phát hành/đáo hạn và giao dịch thực tế được đối chiếu "
-               "để tính bơm/hút ròng. Không suy luận từ lãi suất O/N hay một phiên đơn lẻ.")
+    # MIN_MACRO_OMO_WEEKLY_20261124: report-sourced repo channel; full OMO unknown.
+    from macro_omo_weekly import render_omo_weekly
+    render_omo_weekly()
     st.caption("[Tra cứu NHNN](https://www.sbv.gov.vn/) · "
                "[Tín dụng được NHNN công bố qua Thời báo Ngân hàng](https://thoibaonganhang.vn/pho-thong-doc-pham-thanh-ha-tham-gia-doan-cong-tac-cua-pho-thu-tuong-nguyen-van-thang-lam-viec-tai-hai-phong-190872.html)")
     st.markdown("#### Kênh truyền dẫn cần theo dõi")
