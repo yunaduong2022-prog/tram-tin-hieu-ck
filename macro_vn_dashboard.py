@@ -22,7 +22,7 @@ _MONETARY_TENORS = [("INTERBANK_ON", "Qua đêm"), ("INTERBANK_1W", "1 tuần"),
                     ("INTERBANK_3M", "3 tháng"), ("INTERBANK_6M", "6 tháng"),
                     ("INTERBANK_9M", "9 tháng")]
 
-SECTIONS = ["Tổng quan", "Chu kỳ & Lạm phát", "Tiền tệ & Thanh khoản",
+SECTIONS = ["Tổng quan", "Chu kỳ kinh tế", "Lạm phát", "Tiền tệ & Thanh khoản",
             "Tài khóa", "Quốc tế", "Tác động ngành"]
 
 CSS = """
@@ -199,28 +199,44 @@ def _summary(df: pd.DataFrame) -> None:
     render_smart_overview(df.to_dict("records"))
 
 
-def _growth(df: pd.DataFrame) -> None:
-    _section_heading("Chu kỳ kinh tế & Lạm phát", "So sánh đúng kỳ: GDP theo quý, CPI theo tháng hoặc bình quân lũy kế.")
-    _cards(df, [("GDP_Q", "GDP quý"), ("GDP_9M", "GDP 9 tháng"),
-                ("CPI_OCT_YOY", "CPI tháng 10 cùng kỳ"), ("CORE_CPI_10M", "CPI lõi bình quân")])
-    st.markdown("#### GDP theo quý")
+def _cycle(df: pd.DataFrame) -> None:
+    _section_heading("Chu kỳ kinh tế", "GDP theo quý, tăng trưởng lũy kế và IIP. Không kết luận pha chu kỳ chỉ từ ba quý GDP.")
+    _cards(df, [("GDP_Q", "GDP quý mới nhất"), ("GDP_9M", "GDP 9 tháng"),
+                ("IIP_10M", "Tăng trưởng IIP 10 tháng")])
+    st.markdown("#### Tăng trưởng GDP theo quý")
     q = df.loc[df["id"].eq("GDP_Q")].sort_values("asof")
     if len(q) >= 2:
         table = q[["period", "value"]].rename(columns={"period": "Quý", "value": "GDP (% YoY)"})
         st.line_chart(table.set_index("Quý"), height=240)
-        st.caption("Mỗi điểm là tăng trưởng so với cùng quý năm trước, không phải tốc độ tăng so với quý liền trước.")
+        st.caption("Mỗi điểm là tăng trưởng so với cùng quý năm trước, không phải tăng trưởng so với quý liền trước.")
     else:
         st.info("Cần ít nhất hai quý có nguồn để vẽ diễn biến GDP.")
-    st.markdown("#### Các thước đo lạm phát")
-    _source_table(df, ["CPI_OCT_MOM", "CPI_OCT_YOY", "CPI_10M", "CORE_CPI_10M"])
     st.markdown("#### Nhận diện giai đoạn chu kỳ")
     st.info("**Chưa đủ bằng chứng để gắn nhãn chu kỳ.** GDP tăng tốc chưa đủ kết luận đang 'phục hồi' "
-            "hay 'cuối chu kỳ'. Cần PMI, tín dụng, lãi suất thực, cầu nội địa và xu hướng lạm phát nhiều kỳ.")
+            "hay 'cuối chu kỳ'. Cần PMI, tín dụng, lãi suất thực, cầu nội địa và lạm phát nhiều kỳ.")
     with st.expander("Khung đọc 4 giai đoạn kinh tế", expanded=False):
-        st.write("**Phục hồi:** hoạt động sản xuất cải thiện từ nền yếu, lạm phát thường bớt căng thẳng.\n\n"
-                 "**Mở rộng:** tăng trưởng và nhu cầu lan rộng, cần đánh giá chất lượng tín dụng.\n\n"
-                 "**Cuối chu kỳ:** áp lực giá hoặc chi phí vốn cao có thể hạn chế tăng trưởng.\n\n"
+        st.write("**Phục hồi:** sản xuất cải thiện từ nền yếu; cần xác nhận độ rộng.\n\n"
+                 "**Mở rộng:** tăng trưởng và nhu cầu lan rộng, xem chất lượng tín dụng.\n\n"
+                 "**Cuối chu kỳ:** áp lực giá hoặc chi phí vốn có thể hạn chế tăng trưởng.\n\n"
                  "**Suy giảm:** sản lượng và nhu cầu yếu, chính sách phản ứng tùy bối cảnh.")
+    st.caption("CPI và CPI lõi được trình bày riêng tại nhánh 02 · Lạm phát.")
+
+
+def _inflation(df: pd.DataFrame) -> None:
+    _section_heading("Lạm phát", "CPI tháng, CPI cùng kỳ, CPI bình quân và CPI lõi; mỗi chỉ tiêu có kỳ và cách đo riêng.")
+    _cards(df, [("CPI_OCT_YOY", "CPI tháng so cùng kỳ"),
+                ("CPI_OCT_MOM", "CPI tháng so tháng trước"),
+                ("CPI_10M", "CPI bình quân lũy kế"),
+                ("CORE_CPI_10M", "CPI lõi bình quân")])
+    st.markdown("#### Các thước đo lạm phát · nguồn và kỳ dữ liệu")
+    _source_table(df, ["CPI_OCT_MOM", "CPI_OCT_YOY", "CPI_10M", "CORE_CPI_10M"])
+    st.markdown("#### Nhận định lạm phát theo dữ liệu hiện có")
+    st.info("**Cần phân biệt cách đo:** CPI tháng so cùng kỳ, CPI so tháng trước và "
+            "CPI bình quân lũy kế không phải cùng một chuỗi. Chưa có chuỗi CPI nhiều tháng "
+            "đồng phương pháp để khẳng định áp lực giá đang tăng hoặc giảm liên tục.")
+    st.markdown("#### Giá hàng hóa và áp lực chi phí")
+    st.caption("Chưa có chuỗi giá hàng hóa cùng kỳ, đủ nguồn và cập nhật trong kho Vĩ mô Việt Nam. "
+               "Không tự suy ra lạm phát từ biến động một mặt hàng hay giá hàng hóa tại thị trường quốc tế.")
 
 
 def _monetary(df: pd.DataFrame) -> None:
@@ -346,6 +362,9 @@ def render(international_render) -> None:
     """Mount phase-1 macro VN around existing 9-instrument international page."""
     # MIN_MACRO_MINDMAP_20261123
     import macro_vn_mindmap as MVN_MAP
+    # Reset a legacy combined-tab session selection before creating the pills widget.
+    if st.session_state.get("mvn_section_v1") == "Chu kỳ & Lạm phát":
+        del st.session_state["mvn_section_v1"]
     MVN_MAP.consume_navigation(SECTIONS, widget_key="mvn_section_v1")
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown("<div class='mvn-head'><div class='mvn-kicker'>TRẠM TÍN HIỆU · MIN TRADING</div>"
@@ -370,8 +389,10 @@ def render(international_render) -> None:
     if selected == "Tổng quan":
         MVN_MAP.render_mindmap()
         _summary(df)
-    elif selected == "Chu kỳ & Lạm phát":
-        _growth(df)
+    elif selected == "Chu kỳ kinh tế":
+        _cycle(df)
+    elif selected == "Lạm phát":
+        _inflation(df)
     elif selected == "Tiền tệ & Thanh khoản":
         _monetary(df)
     elif selected == "Tài khóa":
