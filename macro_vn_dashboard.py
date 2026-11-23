@@ -239,6 +239,7 @@ def _inflation(df: pd.DataFrame) -> None:
     st.markdown("#### Giá hàng hóa và áp lực chi phí")
     from macro_price_pressures import render_price_pressures
     render_price_pressures()
+    st.caption("Đối chiếu giá hàng hóa với sức mạnh giá và GTGD trong chuyên mục **Tác động ngành**.")
 
 
 def _monetary(df: pd.DataFrame) -> None:
@@ -339,7 +340,7 @@ def _fiscal(df: pd.DataFrame) -> None:
     _source_table(df, ["PUBLIC_INV_10M", "PUBLIC_INV_AMOUNT_10M", "BUDGET_REV_10M"])
 
 
-def _sector_impact(df: pd.DataFrame) -> None:
+def _sector_impact(df: pd.DataFrame, sector_prices=None) -> None:
     _section_heading("Bản đồ truyền dẫn Vĩ mô → Ngành", "Kịch bản có điều kiện; không gắn nhãn 'ngành dẫn sóng' khi chưa đối chiếu giá và thanh khoản.")
     pathways = [
         {"Yếu tố": "GDP / IIP tăng tốc", "Ngành liên quan": "Công nghiệp, thép, khu công nghiệp",
@@ -356,11 +357,13 @@ def _sector_impact(df: pd.DataFrame) -> None:
     st.dataframe(pd.DataFrame(pathways), hide_index=True, use_container_width=True)
     st.caption("Ưu tiên nghiên cứu ngành: phải đồng thời kiểm tra dữ liệu **Thị trường → Nhóm ngành** "
                "và **Ngành → Dòng dẫn sóng**; chưa tính sức mạnh giá từ các chỉ tiêu vĩ mô này.")
+    from macro_sector_cost_bridge import render_sector_cost_bridge
+    render_sector_cost_bridge(sector_prices)
     with st.expander("Nguồn số liệu nền", expanded=False):
         _source_table(df, ["GDP_Q", "IIP_10M", "CPI_OCT_YOY", "PUBLIC_INV_10M"])
 
 
-def render(international_render) -> None:
+def render(international_render, sector_prices=None) -> None:
     """Mount phase-1 macro VN around existing 9-instrument international page."""
     # MIN_MACRO_MINDMAP_20261123
     import macro_vn_mindmap as MVN_MAP
@@ -400,7 +403,7 @@ def render(international_render) -> None:
     elif selected == "Tài khóa":
         _fiscal(df)
     else:
-        _sector_impact(df)
+        _sector_impact(df, sector_prices)
     st.caption("Bản dữ liệu nền là snapshot nguồn chính thức, **không tự cập nhật theo phiên cổ phiếu**. "
                "Số liệu kinh tế cần cập nhật theo báo cáo mới và theo cùng phương pháp đo lường; "
                "không phải khuyến nghị giao dịch.")
