@@ -228,12 +228,14 @@ def _inflation(df: pd.DataFrame) -> None:
                 ("CPI_OCT_MOM", "CPI tháng so tháng trước"),
                 ("CPI_10M", "CPI bình quân lũy kế"),
                 ("CORE_CPI_10M", "CPI lõi bình quân")])
+    from macro_cpi_history import render_cpi_history
+    render_cpi_history()
     st.markdown("#### Các thước đo lạm phát · nguồn và kỳ dữ liệu")
     _source_table(df, ["CPI_OCT_MOM", "CPI_OCT_YOY", "CPI_10M", "CORE_CPI_10M"])
     st.markdown("#### Nhận định lạm phát theo dữ liệu hiện có")
-    st.info("**Cần phân biệt cách đo:** CPI tháng so cùng kỳ, CPI so tháng trước và "
-            "CPI bình quân lũy kế không phải cùng một chuỗi. Chưa có chuỗi CPI nhiều tháng "
-            "đồng phương pháp để khẳng định áp lực giá đang tăng hoặc giảm liên tục.")
+    st.info("**Đã có chuỗi CPI theo tháng:** YoY và MoM được so sánh trên hai biểu đồ riêng; "
+            "CPI và CPI lõi bình quân lũy kế được đối chiếu trong biểu đồ thứ ba. "
+            "Không sử dụng riêng chuỗi CPI để suy ra chính sách lãi suất hoặc xu hướng VN-Index.")
     st.markdown("#### Giá hàng hóa và áp lực chi phí")
     st.caption("Chưa có chuỗi giá hàng hóa cùng kỳ, đủ nguồn và cập nhật trong kho Vĩ mô Việt Nam. "
                "Không tự suy ra lạm phát từ biến động một mặt hàng hay giá hàng hóa tại thị trường quốc tế.")
