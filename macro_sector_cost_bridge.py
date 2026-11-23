@@ -36,7 +36,7 @@ EXPOSURES = (
     ('inputs', 'Hàng công nghiệp', 'Giá nguyên liệu sản xuất có thể làm thay đổi giá vốn', 'Kiểm tra tỷ trọng nguyên liệu, khả năng chuyển giá và đơn hàng'),
 )
 MAX_PRICE_AGE_DAYS = 45
-MAX_MARKET_AGE_DAYS = 7
+MAX_MISSED_EXPECTED_SESSIONS = 2  # Conservative, transparent T2–T6 proxy; holidays need separate confirmation.
 MIN_SECTOR_MEMBERS = 3
 MIN_SESSIONS = 22  # >=21 phiên để quan sát lợi suất một tháng
 
@@ -63,6 +63,80 @@ def _as_date(value):
         return None
 
 
+def expected_market_sessions_since(last_date, asof, *, hour_vn=None):
+    """Count expected weekday closings AFTER EOD, without inventing exchange sessions.
+
+    Saturdays and Sundays are excluded. Public holidays and special exchange closures are not removed by the
+    weekday proxy; this can overstate missed sessions, so the result is
+    provisional and explicitly labelled as such in the UI.
+    When hour_vn is supplied and it is before 16:00, do not count today.
+    """
+    from datetime import timedelta
+    last_date = _as_date(last_date)
+    asof = _as_date(asof)
+    if not last_date or not asof or last_date > asof:
+        return None
+    end = asof
+    if hour_vn is not None and int(hour_vn) < 16:
+        end -= timedelta(days=1)
+    if end <= last_date:
+        return 0
+    return sum((last_date + timedelta(days=i)).weekday() < 5
+               for i in range(1, (end - last_date).days + 1))
+
+
+def compact_rows(rows):
+    """UI-only formatted table. Missing measurements are a dash, never zero."""
+    out = []
+    for row in rows:
+        r = row or {}
+        ret = _number(r.get('Hiệu suất 1 tháng (%)'))
+        rs = _number(r.get('RS 1 tháng (điểm %)'))
+        breadth = _number(r.get('Độ rộng tăng giá (%)'))
+        turn = _number(r.get('GTGD/TB20 (lần)'))
+        enough = str(r.get('Trạng thái bằng chứng', '')).startswith('Đủ đối chiếu')
+        out.append({
+            'Ngành': str(r.get('Ngành') or '—'),
+            '1 tháng': f'{ret:+.2f}%' if ret is not None else '—',
+            'RS (điểm %)': f'{rs:+.2f}' if rs is not None else '—',
+            'Độ rộng': f'{breadth:.1f}%' if breadth is not None else '—',
+            'GTGD/TB20': f'{turn:.2f}x' if turn is not None else '—',
+            'Trạng thái': str(r.get('Quan sát sức mạnh giá') or 'Đủ dữ liệu') if enough else 'Thiếu dữ liệu',
+        })
+    return out
+
+
+def sector_evidence_summary(rows, ctx):
+    """Explain observed RS/breadth/trading; never claim CPI causality or flows."""
+    valid = [r for r in rows if str(r.get('Trạng thái bằng chứng', '')).startswith('Đủ đối chiếu')]
+    missing = len(rows) - len(valid)
+    if not valid:
+        return ('Chưa đủ dữ liệu xác minh đồng thời giá ngành, nguồn RS, độ rộng và GTGD '
+                'để đánh giá sức mạnh tương đối. Không suy luận dòng tiền hoặc lợi nhuận từ CPI.')
+    strong = sum(_number(r.get('RS 1 tháng (điểm %)')) > 0 for r in valid)
+    weak = sum(_number(r.get('RS 1 tháng (điểm %)')) < 0 for r in valid)
+    aligned_up = sum(_number(r.get('RS 1 tháng (điểm %)')) > 0 and
+                     _number(r.get('Độ rộng tăng giá (%)')) >= 55 for r in valid)
+    aligned_down = sum(_number(r.get('RS 1 tháng (điểm %)')) < 0 and
+                       _number(r.get('Độ rộng tăng giá (%)')) < 45 for r in valid)
+    intro = (f'Trong {len(valid)} ngành đủ dữ liệu: {strong} RS dương, {weak} RS âm; '
+             f'{aligned_up} ngành mạnh tương đối kèm độ rộng từ 55%, '
+             f'{aligned_down} ngành yếu tương đối kèm độ rộng dưới 45%.')
+    samples = []
+    for r in valid[:4]:
+        rs = _number(r.get('RS 1 tháng (điểm %)'))
+        width = _number(r.get('Độ rộng tăng giá (%)'))
+        vol = _number(r.get('GTGD/TB20 (lần)'))
+        samples.append(f"{r['Ngành']}: RS {rs:+.2f} điểm %, độ rộng {width:.1f}%, GTGD/TB20 {vol:.2f}x")
+    lag = ctx.get('market_lag_sessions')
+    trailing = f' {missing} ngành thiếu xác nhận nên không đưa vào kết luận.' if missing else ''
+    if lag is not None and lag > 0:
+        trailing += f' Giá EOD đã cách {lag} phiên dự kiến T2–T6; chưa xác minh lịch nghỉ lễ.'
+    return (intro + ' ' + '; '.join(samples) + '.' + trailing +
+            ' GTGD là mức giao dịch tương đối, KHÔNG phải dòng tiền mua ròng; '
+            'chưa thể kết luận CPI gây ra biến động giá, doanh thu hoặc biên lợi nhuận.')
+
+
 def latest_factor(prices, factor):
     """Select only numeric, correctly based (MoM / YTD YoY) national reports."""
     if factor not in dict(PRICE_FACTORS):
@@ -73,7 +147,7 @@ def latest_factor(prices, factor):
     return max(items, key=lambda x: _as_date(x['date']), default=None)
 
 
-def bridge_rows(prices, sector_metrics, info, factor, *, today):
+def bridge_rows(prices, sector_metrics, info, factor, *, today, hour_vn=None):
     """Join at sector level with explicit mismatched dates, no inferred causality.
 
     sector_metrics uses existing sector_dashboard's exact field names. Each row
@@ -86,7 +160,8 @@ def bridge_rows(prices, sector_metrics, info, factor, *, today):
     if price_date > today:
         return [], {'reason': 'Kỳ giá trong tương lai', 'price': None}
     market_date = _as_date(info.get('latest_date')) if isinstance(info, dict) else None
-    market_ok = market_date is not None and 0 <= (today - market_date).days <= MAX_MARKET_AGE_DAYS
+    lag_sessions = expected_market_sessions_since(market_date, today, hour_vn=hour_vn)
+    market_ok = lag_sessions is not None and lag_sessions <= MAX_MISSED_EXPECTED_SESSIONS
     price_ok = 0 <= (today - price_date).days <= MAX_PRICE_AGE_DAYS
     sessions_ok = _number(info.get('sessions')) is not None and _number(info['sessions']) >= MIN_SESSIONS if isinstance(info, dict) else False
     # 'has_index' only means a VN-Index ticker was present somewhere in raw EOD.
@@ -139,6 +214,8 @@ def bridge_rows(prices, sector_metrics, info, factor, *, today):
     return output, {
         'price': observation, 'price_date': price_date, 'market_date': market_date,
         'price_ok': price_ok, 'market_ok': market_ok, 'has_index': has_index,
+        'market_lag_sessions': lag_sessions,
+        'market_calendar_note': 'Số phiên dự kiến T2–T6; chưa loại ngày nghỉ lễ/sự kiện đóng cửa đặc biệt',
         'rs_label': ('RS so VN-Index' if has_index else
                      'RS so proxy trung vị cổ phiếu' if has_proxy else
                      'RS chưa xác định nguồn tham chiếu'),
@@ -183,7 +260,8 @@ def render_sector_cost_bridge(raw) -> None:
         return calculate_sector_metrics(data)
     try:
         metrics, info = _compute(raw)
-        rows, ctx = bridge_rows(prices, metrics, info, factor, today=today)
+        hour_vn = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).hour
+        rows, ctx = bridge_rows(prices, metrics, info, factor, today=today, hour_vn=hour_vn)
     except (KeyError, ValueError, TypeError, IndexError) as exc:
         st.warning(f'Không thể đối chiếu dữ liệu ngành một cách tin cậy ({type(exc).__name__}).')
         return
@@ -198,14 +276,32 @@ def render_sector_cost_bridge(raw) -> None:
     if not ctx['price_ok']:
         st.warning('Số liệu giá hàng hóa đã quá 45 ngày. Không ghép với EOD hiện tại để kết luận tác động.')
     if not ctx['market_ok']:
-        st.warning('Dữ liệu giá cổ phiếu thiếu hoặc quá 7 ngày. Không gắn nhãn sức mạnh/dòng tiền hiện tại.')
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
-                 column_config={
-                     'Hiệu suất 1 tháng (%)': st.column_config.NumberColumn(format='%+.2f'),
-                     'RS 1 tháng (điểm %)': st.column_config.NumberColumn(format='%+.2f'),
-                     'Độ rộng tăng giá (%)': st.column_config.NumberColumn(format='%.1f'),
-                     'GTGD/TB20 (lần)': st.column_config.NumberColumn(format='%.2f'),
-                 })
+        st.warning('Giá EOD thiếu hoặc chậm quá 2 phiên dự kiến T2–T6; không gắn nhãn sức mạnh ngành hiện tại.')
+    elif ctx.get('market_lag_sessions', 0) > 0:
+        st.info(f"EOD cách {ctx['market_lag_sessions']} phiên dự kiến T2–T6. "
+                'Ngày nghỉ lễ/đóng cửa đặc biệt chưa được loại trừ; cần xác minh phiên mới nhất.')
+    st.caption('Độ mới EOD xét theo số ngày phiên dự kiến T2–T6 sau kỳ EOD (tối đa 2); '
+               'không thay thế lịch phiên chính thức, không mặc định ngày lễ là phiên giao dịch.')
+
+    # Six-column overview; every missing value is shown as an em dash, not None/0.
+    st.dataframe(pd.DataFrame(compact_rows(rows)), hide_index=True, use_container_width=True)
+    st.markdown('##### Nhận định sức mạnh ngành từ dữ liệu hiện có')
+    st.info(sector_evidence_summary(rows, ctx))
+
+    # Keep long cost hypotheses outside the six-column overview.
+    names = [r['Ngành'] for r in rows]
+    if names:
+        selected = st.selectbox('Chọn ngành để xem chi tiết bằng chứng', names,
+                                key=f'mvn_cost_sector_detail_v2_{factor}')
+        detail = next(r for r in rows if r['Ngành'] == selected)
+        with st.expander(f'Chi tiết ngành: {selected}', expanded=True):
+            st.write('**Kênh chi phí/doanh thu cần kiểm tra:** '
+                     + detail['Kênh chi phí / doanh thu cần kiểm tra'])
+            st.write('**Điều kiện cần xác nhận tại doanh nghiệp:** '
+                     + detail['Cần xác nhận tại doanh nghiệp'])
+            st.write('**Trạng thái bằng chứng:** ' + detail['Trạng thái bằng chứng'])
+            st.write('**Quan sát giao dịch:** ' + detail['Quan sát giao dịch'])
+            st.caption('Không có kết luận lợi nhuận, dòng tiền mua ròng hoặc khuyến nghị giao dịch.')
     st.caption('Độ rộng = tỷ lệ mã tăng ở phiên gần nhất; GTGD/TB20 dùng giá đóng cửa × khối lượng xấp xỉ. '
                'Cần xác nhận thêm doanh thu, chi phí mua vào, biên lợi nhuận, báo cáo doanh nghiệp và '
                'dòng tiền thực tế trước khi nói “ngành hưởng lợi”. Không phải khuyến nghị giao dịch.')
