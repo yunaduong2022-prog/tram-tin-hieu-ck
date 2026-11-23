@@ -135,6 +135,30 @@ def _card(row: dict | None, fallback: str) -> None:
                 unsafe_allow_html=True)
 
 
+
+
+def _latest_complete_interbank_curve(df: pd.DataFrame):
+    """Latest verified same-date 7-tenor snapshot; independent of newer O/N-only data."""
+    keys = [key for key, _ in _MONETARY_TENORS]
+    subset = df.loc[df["id"].isin(keys)]
+    if subset.empty:
+        return None
+    dates = sorted(subset["asof"].dropna().unique(), reverse=True)
+    for when in dates:
+        rows = subset.loc[subset["asof"].eq(when)]
+        if set(rows["id"]) != set(keys):
+            continue
+        points = []
+        for key, label in _MONETARY_TENORS:
+            one = rows.loc[rows["id"].eq(key)]
+            if len(one) != 1:
+                break
+            points.append({"Kỳ hạn": label, "Lãi suất (%/năm)": float(one.iloc[0]["value"])})
+        if len(points) == len(keys):
+            return pd.Timestamp(when), points
+    return None
+
+
 def _cards(df: pd.DataFrame, ids: list[tuple[str, str]]) -> None:
     for first in range(0, len(ids), 4):
         cols = st.columns(min(4, len(ids) - first), gap="small")
@@ -243,21 +267,40 @@ def _monetary(df: pd.DataFrame) -> None:
         _source_table(df, ["POLICY_RATE", "POLICY_DISCOUNT", "INTERBANK_ON",
                            "CREDIT_YTD", "USDVND_CENTRAL"] + [key for key, _ in _MONETARY_TENORS])
     st.caption("[Tra cứu trực tiếp bảng lãi suất NHNN](https://sbv.gov.vn/vi/l%C3%A3i-su%E1%BA%A5t1)")
-    # MIN_MACRO_PHASE2_VERIFIED_20261124 — dated tenor snapshot, not an historical trend
+    # MIN_MACRO_CURVE_ORDER_FIX_20261124: ordered tenor categories, latest complete same-day snapshot
     st.markdown("#### Đường cong lãi suất liên ngân hàng theo kỳ hạn")
-    curve = []
-    for key, label in _MONETARY_TENORS:
-        item = latest(df, key)
-        if overnight and item and item["asof"] == overnight["asof"]:
-            curve.append({"Kỳ hạn": label, "Lãi suất (%/năm)": float(item["value"])})
-    if len(curve) >= 5:
-        curve_df = pd.DataFrame(curve)
-        st.line_chart(curve_df.set_index("Kỳ hạn"), height=235)
-        st.caption(f"Mặt cắt **{overnight['asof']:%d/%m/%Y}** từ bảng NHNN. "
-                   "Đây là **đường cong kỳ hạn của một ngày**, KHÔNG phải đồ thị lịch sử và "
-                   "KHÔNG phải bằng chứng bơm/hút tiền.")
+    snapshot = _latest_complete_interbank_curve(df)
+    if snapshot is not None:
+        chart_day, curve = snapshot
+        # Plotly categoryarray prevents lexicographic resorting of "Qua đêm" to the end.
+        import plotly.graph_objects as go
+        labels = [label for _, label in _MONETARY_TENORS]
+        fig = go.Figure(go.Scatter(
+            x=[point["Kỳ hạn"] for point in curve],
+            y=[point["Lãi suất (%/năm)"] for point in curve],
+            mode="lines+markers",
+            line=dict(color="#64bde9", width=2.5),
+            marker=dict(size=7),
+            hovertemplate="%{x}: %{y:.2f}%/năm<extra></extra>",
+        ))
+        fig.update_layout(
+            height=270, margin=dict(l=8, r=8, b=10, t=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(type="category", categoryorder="array", categoryarray=labels,
+                       showgrid=False, title=None),
+            yaxis=dict(title="%/năm", gridcolor="rgba(150,170,170,0.18)"),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        chart_date = chart_day.date()
+        if stale({"id": "INTERBANK_ON", "asof": chart_day}):
+            st.warning(f"Đường cong lãi suất này là **snapshot lịch sử ngày {chart_day:%d/%m/%Y}**; "
+                       "chưa có đủ 7 kỳ hạn cùng ngày mới hơn. Không dùng như đường cong hiện tại.")
+        st.caption(f"Mặt cắt **{chart_day:%d/%m/%Y}** với 7 kỳ hạn xếp theo thứ tự "
+                   "Qua đêm → 1 tuần → 2 tuần → 1 tháng → 3 tháng → 6 tháng → 9 tháng. "
+                   "Không trộn kỳ công bố khác ngày, không suy ra NHNN bơm/hút ròng.")
     else:
-        st.caption("Chưa đủ kỳ hạn cùng ngày được xác minh để vẽ đường cong lãi suất.")
+        st.caption("Chưa có đủ 7 kỳ hạn cùng một ngày đã được xác minh để vẽ đường cong.")
     st.markdown("#### OMO · Tình trạng dữ liệu")
     st.caption("Chưa có chuỗi đấu thầu/phát hành/đáo hạn và giao dịch thực tế được đối chiếu "
                "để tính bơm/hút ròng. Không suy luận từ lãi suất O/N hay một phiên đơn lẻ.")
