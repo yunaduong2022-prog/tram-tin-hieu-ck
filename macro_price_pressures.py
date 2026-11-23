@@ -176,3 +176,5 @@ def render_price_pressures() -> None:
                             'Ghi chú': row['description'], 'Báo cáo gốc': row['source_url']})
         st.dataframe(pd.DataFrame(display), use_container_width=True, hide_index=True,
                      column_config={'Báo cáo gốc': st.column_config.LinkColumn('Nguồn Cục Thống kê')})
+    from macro_price_trends import render_price_trends
+    render_price_trends(rows)

@@ -1,0 +1,21 @@
+name: Vietnam price groups — read-only official release watch
+on:
+  workflow_dispatch:
+  schedule:
+    # 08:40 Vietnam time (UTC+7), days 2-20. GitHub may delay scheduled jobs.
+    - cron: '40 1 2-20 * *'
+permissions:
+  contents: read
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate read-only watcher offline
+        run: python -m unittest discover -s tests -p test_macro_price_trends.py -v
+      - name: Check next monthly national official release (no CSV write)
+        run: python price_pressure_watch.py --check
