@@ -1,0 +1,59 @@
+name: CPI Vietnam — guarded monthly official sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 08:30 Vietnam time on the 2nd–20th of every month (UTC+7).
+    - cron: '30 1 2-20 * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macro-cpi-official-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline tests and syntax
+        run: |
+          python -m unittest discover -s tests -p test_macro_cpi_auto.py -v
+          python -m unittest discover -s tests -p test_macro_cpi_history.py -v
+          python -m py_compile macro_cpi_auto.py macro_cpi_history.py
+      - name: Fetch and validate next month CPI from official NSO page
+        run: python macro_cpi_auto.py --history data/macro_cpi_history.csv --macro data/macro_vn.csv
+      - name: Validate updated data before commit
+        run: |
+          python -m unittest discover -s tests -p test_macro_cpi_auto.py -v
+          python -m unittest discover -s tests -p test_macro_cpi_history.py -v
+      - name: Commit only two verified CPI CSVs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/macro_cpi_history.csv data/macro_vn.csv; then
+            echo 'CPI_AUTO_NO_NEW_DATA_NO_COMMIT'
+            exit 0
+          fi
+          mapfile -t changed < <(git diff --name-only)
+          mapfile -t expected < <(printf '%s\n' 'data/macro_cpi_history.csv' 'data/macro_vn.csv')
+          if [[ "${changed[*]}" != "${expected[*]}" ]]; then
+            printf 'CPI_UNEXPECTED_CHANGES: %s\n' "${changed[*]}" >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/macro_cpi_history.csv data/macro_vn.csv
+          git diff --cached --check
+          git commit -m 'CPI official verified monthly snapshots [skip ci]'
+          git push origin HEAD:main
