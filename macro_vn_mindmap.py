@@ -14,11 +14,11 @@ import streamlit as st
 NAV_PARAM = "mvn_section"
 NAV_KEY = "mvn_section_v1"
 
-# Map each conceptual economic branch onto existing macro tabs. The domestic
-# dashboard intentionally combines cycle and inflation in one detail tab.
+# Each branch routes to its own relevant macro view. Cycle and inflation are
+# separate views to avoid showing a GDP chart before CPI when opening Lạm phát.
 BRANCHES = (
-    ("01", "Chu kỳ kinh tế", "GDP · PMI · IIP · Pha kinh tế", "Chu kỳ & Lạm phát"),
-    ("02", "Lạm phát", "CPI · CPI lõi · Giá hàng hóa", "Chu kỳ & Lạm phát"),
+    ("01", "Chu kỳ kinh tế", "GDP · PMI · IIP · Pha kinh tế", "Chu kỳ kinh tế"),
+    ("02", "Lạm phát", "CPI · CPI lõi · Giá hàng hóa", "Lạm phát"),
     ("03", "Chính sách tiền tệ", "Lãi suất · OMO · Tín dụng · Tỷ giá · TPCP", "Tiền tệ & Thanh khoản"),
     ("04", "Chính sách tài khóa", "Thuế · Đầu tư công · Ngân sách · Nợ công", "Tài khóa"),
     ("05", "Vĩ mô quốc tế", "Fed · DXY · Lợi suất Mỹ · Hàng hóa", "Quốc tế"),
