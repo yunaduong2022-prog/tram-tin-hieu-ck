@@ -190,33 +190,13 @@ def _section_heading(title: str, subtitle: str) -> None:
 
 
 def _summary(df: pd.DataFrame) -> None:
-    _section_heading("Tổng quan vĩ mô Việt Nam", "Chỉ hiển thị dữ liệu có nguồn và kỳ công bố; không phải bảng tin thời gian thực.")
+    # MIN_MACRO_SMART_OVERVIEW_V1_20261124
+    _section_heading("Tổng quan vĩ mô Việt Nam",
+                     "Dữ liệu có nguồn và kỳ công bố; không phải bảng tin thời gian thực.")
     _cards(df, [("GDP_Q", "GDP quý mới nhất"), ("CPI_OCT_YOY", "CPI cùng kỳ"),
                 ("IIP_10M", "Tăng trưởng IIP"), ("PUBLIC_INV_10M", "Giải ngân đầu tư công")])
-    st.markdown("#### Nhận định nền tảng · không phải tín hiệu giao dịch")
-    growth, cpi, inv = latest(df, "GDP_Q"), latest(df, "CPI_OCT_YOY"), latest(df, "PUBLIC_INV_10M")
-    if growth and cpi:
-        st.markdown("<div class='mvn-alert'>"
-                    "<b>Tăng trưởng và lạm phát phải được đọc cùng nhau.</b> "
-                    "GDP quý III tăng so cùng kỳ, trong khi CPI tháng Mười cùng kỳ ở mức đáng theo dõi. "
-                    "Chỉ từ các số này chưa đủ xác định chu kỳ kinh tế hoặc dự báo VNINDEX; "
-                    "cần bổ sung PMI, tín dụng, lãi suất, tỷ giá và dòng tiền trên thị trường."
-                    "</div>", unsafe_allow_html=True)
-    else:
-        st.info("Chưa đủ hai trụ cột tăng trưởng và CPI để đưa ra nhận định nền tảng.")
-    if inv:
-        st.caption("Đầu tư công đã có dữ liệu giải ngân đến 31/10; tác động đến cổ phiếu xây dựng, vật liệu "
-                   "còn phụ thuộc tiến độ dự án và lợi nhuận từng doanh nghiệp.")
-    st.markdown("#### Tình trạng dữ liệu")
-    available = df["id"].nunique() if not df.empty else 0
-    pending = [name for key, name in [("CREDIT_YTD", "tăng trưởng tín dụng"),
-                                   ("INTERBANK_ON", "lãi suất liên ngân hàng")] if latest(df, key) is None]
-    st.caption(f"Kho Vĩ mô có {available} nhóm chỉ tiêu kèm nguồn và kỳ dữ liệu. "
-               "PMI, OMO và tỷ giá *giao dịch* USD/VND liên ngân hàng chưa có chuỗi đủ chuẩn; "
-               "các chỉ tiêu đã có vẫn phải theo dõi kỳ mới. "
-               + ("Đang thiếu: " + ", ".join(pending) + "." if pending else ""))
-    with st.expander("Kiểm tra nguồn và kỳ dữ liệu", expanded=False):
-        _source_table(df, ["GDP_Q", "CPI_OCT_YOY", "IIP_10M", "PUBLIC_INV_10M"])
+    from macro_vn_overview import render_smart_overview
+    render_smart_overview(df.to_dict("records"))
 
 
 def _growth(df: pd.DataFrame) -> None:
