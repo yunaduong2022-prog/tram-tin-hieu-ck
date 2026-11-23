@@ -237,8 +237,8 @@ def _inflation(df: pd.DataFrame) -> None:
             "CPI và CPI lõi bình quân lũy kế được đối chiếu trong biểu đồ thứ ba. "
             "Không sử dụng riêng chuỗi CPI để suy ra chính sách lãi suất hoặc xu hướng VN-Index.")
     st.markdown("#### Giá hàng hóa và áp lực chi phí")
-    st.caption("Chưa có chuỗi giá hàng hóa cùng kỳ, đủ nguồn và cập nhật trong kho Vĩ mô Việt Nam. "
-               "Không tự suy ra lạm phát từ biến động một mặt hàng hay giá hàng hóa tại thị trường quốc tế.")
+    from macro_price_pressures import render_price_pressures
+    render_price_pressures()
 
 
 def _monetary(df: pd.DataFrame) -> None:
