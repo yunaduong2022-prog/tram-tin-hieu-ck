@@ -3936,6 +3936,10 @@ def _route_inner():
         st.query_params.clear()
         if "~" in str(_rt):
             _rt_go(*str(_rt).split("~", 1))
+    # MIN_MACRO_MINDMAP_NAVFIX_20261123
+    _mvn_requested_section = st.query_params.get("mvn_section")
+    if _mvn_requested_section in MVN.SECTIONS:
+        st.session_state["_nav_pending"] = ("Vĩ mô", None)
     main, sub = NAV.render_nav()
     # EOD-only source caption; no 15m overlay in any page.
     # No modification to confirmed EOD scanners or backtests.
