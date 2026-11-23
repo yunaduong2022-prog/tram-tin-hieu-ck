@@ -103,9 +103,13 @@ def _src(row: dict | None) -> None:
 def _card(row: dict | None, fallback: str) -> None:
     if row:
         label = str(row["label"])
-        period = f"{row['period']} · đến {pd.Timestamp(row['asof']):%d/%m/%Y}"
         value = value_text(row)
-        note = "⚠ Cần đối chiếu kỳ mới" if stale(row) else "Số liệu theo kỳ công bố"
+        if row["id"] in ("POLICY_RATE", "POLICY_DISCOUNT"):
+            period = f"{row['period']} · hiệu lực {pd.Timestamp(row['asof']):%d/%m/%Y}"
+            note = "Mức theo văn bản; cần kiểm tra hiệu lực mới nhất"
+        else:
+            period = f"{row['period']} · đến {pd.Timestamp(row['asof']):%d/%m/%Y}"
+            note = "⚠ Cần đối chiếu kỳ mới" if stale(row) else "Số liệu theo kỳ công bố"
     else:
         label, value, period, note = fallback, "—", "Chưa xác minh nguồn", "Không suy diễn từ dữ liệu khác"
     st.markdown('<div class="mvn-card">'
@@ -199,10 +203,25 @@ def _growth(df: pd.DataFrame) -> None:
 
 def _monetary(df: pd.DataFrame) -> None:
     _section_heading("Tiền tệ & Thanh khoản", "Tách rõ lãi suất điều hành, thị trường liên ngân hàng, OMO, tín dụng và tỷ giá.")
-    _cards(df, [("POLICY_RATE", "Lãi suất điều hành"), ("INTERBANK_ON", "Liên ngân hàng O/N"),
+    _cards(df, [("POLICY_RATE", "Lãi suất tái cấp vốn"), ("INTERBANK_ON", "Liên ngân hàng O/N"),
                 ("CREDIT_YTD", "Tăng trưởng tín dụng"), ("USDVND", "USD/VND liên ngân hàng")])
-    st.warning("Các thước đo tiền tệ trên **chưa được đưa vào kho macro có nguồn kiểm chứng**. "
-               "Không suy ra 'NHNN bơm/hút tiền' chỉ từ biến động USD/VND hoặc tin tức.")
+    policy = latest(df, "POLICY_RATE")
+    discount = latest(df, "POLICY_DISCOUNT")
+    overnight = latest(df, "INTERBANK_ON")
+    if policy and discount:
+        st.caption("**Theo Quyết định 1123/QĐ-NHNN (hiệu lực 19/06/2023):** "
+                   f"tái cấp vốn {value_text(policy)}; tái chiết khấu {value_text(discount)}. "
+                   "Đây là mức niêm yết theo văn bản đã xác minh, chưa phải khẳng định "
+                   "đã rà soát toàn bộ quyết định thay thế đến hôm nay.")
+    if overnight and stale(overnight):
+        st.warning(f"**Lãi suất liên ngân hàng O/N {value_text(overnight)}** là số liệu ngày "
+                   f"{overnight['asof']:%d/%m/%Y}, đã quá kỳ cập nhật. "
+                   "Không sử dụng như lãi suất hiện tại hoặc tín hiệu giao dịch.")
+    st.info("Kho dữ liệu vĩ mô vẫn **chưa có bản ghi đủ nguồn** cho tăng trưởng tín dụng "
+            "và tỷ giá USD/VND liên ngân hàng. Không tự suy diễn hoặc điền số thay thế.")
+    with st.expander("Nguồn NHNN và ngày áp dụng của các mức lãi suất", expanded=False):
+        _source_table(df, ["POLICY_RATE", "POLICY_DISCOUNT", "INTERBANK_ON"])
+    st.caption("[Tra cứu trực tiếp bảng lãi suất NHNN](https://sbv.gov.vn/vi/l%C3%A3i-su%E1%BA%A5t1)")
     st.markdown("#### Kênh truyền dẫn cần theo dõi")
     st.write("OMO và lãi suất liên ngân hàng → chi phí vốn → tín dụng và định giá; "
              "USD/VND và lợi suất Mỹ → áp lực tỷ giá → không gian chính sách. "
