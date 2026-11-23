@@ -84,7 +84,7 @@ def stale(record: dict | None, now: date | None = None) -> bool:
     now = now or date.today()
     d = pd.Timestamp(record["asof"]).date()
     # Period-based thresholds: annual/quarterly/monthly observations are NOT daily prices.
-    threshold = 115 if record["id"].startswith("GDP") else 55
+    threshold = 7 if record["id"] == "INTERBANK_ON" else (115 if record["id"].startswith("GDP") else 55)
     return (now - d).days > threshold
 
 

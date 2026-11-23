@@ -1,0 +1,54 @@
+name: NHNN interbank O/N — verified daily sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    # VN time: 23:15 (Mon-Fri) and 07:15 (Tue-Sat). GitHub cron is UTC.
+    - cron: '15 16 * * 1-5'
+    - cron: '15 0 * * 2-6'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sbv-interbank-on-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate importer offline
+        run: |
+          python -m unittest discover -s tests -p test_macro_sbv_sync.py -v
+          python -m py_compile macro_sbv_sync.py
+      - name: Fetch and validate latest NHNN official O/N rate
+        run: python macro_sbv_sync.py --csv data/macro_vn.csv
+      - name: Commit verified new date to CSV only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/macro_vn.csv; then
+            echo 'SBV_SYNC_NO_NEW_DATE: no commit or push required'
+            exit 0
+          fi
+          changed=$(git diff --name-only)
+          if [[ "$changed" != 'data/macro_vn.csv' ]]; then
+            echo 'Unexpected changed file; refusing to push' >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/macro_vn.csv
+          git diff --cached --check
+          git commit -m 'SBV O/N verified daily macro snapshot [skip ci]'
+          git push origin HEAD:main
