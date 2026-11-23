@@ -89,7 +89,15 @@ def bridge_rows(prices, sector_metrics, info, factor, *, today):
     market_ok = market_date is not None and 0 <= (today - market_date).days <= MAX_MARKET_AGE_DAYS
     price_ok = 0 <= (today - price_date).days <= MAX_PRICE_AGE_DAYS
     sessions_ok = _number(info.get('sessions')) is not None and _number(info['sessions']) >= MIN_SESSIONS if isinstance(info, dict) else False
-    has_index = bool(info.get('has_index')) if isinstance(info, dict) else False
+    # 'has_index' only means a VN-Index ticker was present somewhere in raw EOD.
+    # The canonical 1-month benchmark may still have fallen back to a proxy.
+    benchmark = info.get('benchmark', {}) if isinstance(info, dict) else {}
+    bench_1m = benchmark.get('1 tháng') if isinstance(benchmark, dict) else None
+    benchmark_source = (bench_1m[1] if isinstance(bench_1m, (tuple, list)) and
+                        len(bench_1m) >= 2 else '')
+    has_index = str(benchmark_source).startswith('VN-Index (')
+    has_proxy = str(benchmark_source).startswith('trung vị rổ cổ phiếu')
+    benchmark_verified = has_index or has_proxy
     records = sector_metrics.to_dict('records') if hasattr(sector_metrics, 'to_dict') else list(sector_metrics or [])
     index = {str(row.get('Nhóm ngành')): row for row in records if isinstance(row, dict)}
     output = []
@@ -100,7 +108,8 @@ def bridge_rows(prices, sector_metrics, info, factor, *, today):
         ret = _number(row.get('Hiệu suất 1 tháng (%)'))
         breadth = _number(row.get('Độ rộng tăng giá (%)'))
         turnover = _number(row.get('GTGD so TB20 (%)'))
-        adequate = bool(market_ok and price_ok and sessions_ok and count is not None and count >= MIN_SECTOR_MEMBERS
+        adequate = bool(market_ok and price_ok and sessions_ok and benchmark_verified
+                        and count is not None and count >= MIN_SECTOR_MEMBERS
                         and rs is not None and ret is not None and breadth is not None and turnover is not None)
         if adequate:
             strength = ('Giá mạnh tương đối' if rs > 0 and breadth >= 55 else
@@ -114,6 +123,7 @@ def bridge_rows(prices, sector_metrics, info, factor, *, today):
             if not price_ok: reasons.append('kỳ giá cũ')
             if not market_ok: reasons.append('giá cổ phiếu cũ/thiếu')
             if not sessions_ok: reasons.append('thiếu phiên')
+            if not benchmark_verified: reasons.append('thiếu nguồn tham chiếu RS')
             if count is None or count < MIN_SECTOR_MEMBERS: reasons.append('ít mã ngành')
             if any(x is None for x in (rs, ret, breadth, turnover)): reasons.append('thiếu thước đo')
             status = 'Thiếu xác nhận: ' + ', '.join(reasons)
@@ -129,7 +139,9 @@ def bridge_rows(prices, sector_metrics, info, factor, *, today):
     return output, {
         'price': observation, 'price_date': price_date, 'market_date': market_date,
         'price_ok': price_ok, 'market_ok': market_ok, 'has_index': has_index,
-        'rs_label': 'RS so VN-Index' if has_index else 'RS so proxy trung vị cổ phiếu',
+        'rs_label': ('RS so VN-Index' if has_index else
+                     'RS so proxy trung vị cổ phiếu' if has_proxy else
+                     'RS chưa xác định nguồn tham chiếu'),
         'reason': None,
     }
 

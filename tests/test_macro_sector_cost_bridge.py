@@ -20,7 +20,8 @@ PRICES = [
 SECTOR = {'Nhóm ngành': 'Dầu khí', 'Số mã có dữ liệu': 5, 'Hiệu suất 1 tháng (%)': 4.0,
           'RS 1 tháng (điểm %) ': 1.5, 'Độ rộng tăng giá (%)': 60,
           'GTGD so TB20 (%)': 135}
-INFO = {'latest_date': date(2026,11,20), 'sessions': 100, 'has_index': False}
+INFO = {'latest_date': date(2026,11,20), 'sessions': 100, 'has_index': False,
+        'benchmark': {'1 tháng': (0.0, 'trung vị rổ cổ phiếu (proxy, không phải VN-Index)')}}
 
 class TestBridge(unittest.TestCase):
     def test_mapping_to_real_universe(self):
@@ -46,8 +47,18 @@ class TestBridge(unittest.TestCase):
         self.assertNotIn('VN-Index',ctx['rs_label'])
         self.assertEqual(next(r for r in rows if r['Ngành']=='Dầu khí')['RS 1 tháng (điểm %)'],1.5)
     def test_actual_index_label_when_available(self):
-        _,ctx=bridge_rows(PRICES,[SECTOR],{**INFO,'has_index':True},'fuel',today=T)
-        self.assertIn('VN-Index',ctx['rs_label'])
+        actual_benchmark = {'1 tháng': (0.8, 'VN-Index (VNINDEX)')}
+        _,ctx=bridge_rows(PRICES,[SECTOR],{**INFO,'has_index':True,'benchmark':actual_benchmark},'fuel',today=T)
+        self.assertEqual(ctx['rs_label'],'RS so VN-Index')
+    def test_index_ticker_present_but_one_month_benchmark_uses_proxy(self):
+        rows,ctx=bridge_rows(PRICES,[SECTOR],{**INFO,'has_index':True},'fuel',today=T)
+        self.assertEqual(ctx['rs_label'],'RS so proxy trung vị cổ phiếu')
+        self.assertEqual(next(r for r in rows if r['Ngành']=='Dầu khí')['RS 1 tháng (điểm %)'],1.5)
+    def test_missing_benchmark_provenance_fails_closed(self):
+        rows,ctx=bridge_rows(PRICES,[SECTOR],{**INFO,'benchmark':{}},'fuel',today=T)
+        self.assertEqual(ctx['rs_label'],'RS chưa xác định nguồn tham chiếu')
+        self.assertIsNone(next(r for r in rows if r['Ngành']=='Dầu khí')['RS 1 tháng (điểm %)'])
+        self.assertIn('thiếu nguồn tham chiếu RS',next(r for r in rows if r['Ngành']=='Dầu khí')['Trạng thái bằng chứng'])
     def test_strength_and_activity_are_distinct(self):
         rows,_=bridge_rows(PRICES,[SECTOR],INFO,'fuel',today=T)
         r=next(x for x in rows if x['Ngành']=='Dầu khí')
