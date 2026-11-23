@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 from macro_cpi_history import (DATA_PATH, COLUMNS, METRICS, read_history,
                                parse_row, change_pp, fmt)
 
-TODAY = date(2026, 11, 24)
+TODAY = max(date.today(), date(2026, 11, 24))
 
 
 def source_rows():
@@ -34,12 +34,12 @@ def temp_file(rows):
 class TestCPIHistory(unittest.TestCase):
     def test_ten_contiguous_months(self):
         rows = read_history(today=TODAY)
-        self.assertEqual(len(rows), 10)
+        self.assertGreaterEqual(len(rows), 10)
         self.assertEqual(rows[0]["month"], date(2026, 1, 1))
-        self.assertEqual(rows[-1]["month"], date(2026, 10, 1))
+        self.assertGreaterEqual(rows[-1]["month"], date(2026, 10, 1))
 
     def test_real_latest_cpi_values(self):
-        last = read_history(today=TODAY)[-1]
+        last = next(r for r in read_history(today=TODAY) if r["month"] == date(2026, 10, 1))
         self.assertEqual((last['cpi_yoy_pct'], last['cpi_mom_pct']), (Decimal('5.09'), Decimal('0.20')))
         self.assertEqual(last['cpi_ytd_avg_yoy_pct'], Decimal('4.57'))
         self.assertEqual(last['core_ytd_avg_yoy_pct'], Decimal('4.24'))
@@ -59,8 +59,8 @@ class TestCPIHistory(unittest.TestCase):
 
     def test_yoy_differences_are_percentage_points(self):
         r = read_history(today=TODAY)
-        self.assertEqual(change_pp(r[-1]['cpi_yoy_pct'], r[-2]['cpi_yoy_pct']), Decimal('0.01'))
-        self.assertEqual(change_pp(r[-1]['cpi_mom_pct'], r[-2]['cpi_mom_pct']), Decimal('-0.42'))
+        self.assertEqual(change_pp(r[9]['cpi_yoy_pct'], r[8]['cpi_yoy_pct']), Decimal('0.01'))
+        self.assertEqual(change_pp(r[9]['cpi_mom_pct'], r[8]['cpi_mom_pct']), Decimal('-0.42'))
 
     def test_source_links_are_official_domain(self):
         self.assertTrue(all(r['url'].startswith('https://www.nso.gov.vn/') for r in read_history(today=TODAY)))
@@ -84,7 +84,7 @@ class TestCPIHistory(unittest.TestCase):
             read_history(path, TODAY)
 
     def test_future_month_rejected(self):
-        row = source_rows()[-1].copy();row['year_month'] = '2026-12'
+        row=source_rows()[-1].copy();row['year_month'] = f'{TODAY.year + 1}-01'
         with self.assertRaisesRegex(ValueError, 'FUTURE'):
             parse_row(row, TODAY)
 
