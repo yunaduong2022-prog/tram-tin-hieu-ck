@@ -37,6 +37,7 @@ ALLOWLIST = (
     'data/intraday_15m.csv',
     'data/hourly_native_1h.csv',
     'data/proprietary_flow.csv',
+    'data/proprietary_vnindex.csv',
     'data/foreign_stock_flow.csv',
     'data/foreign_net_flow.csv',
 )
@@ -146,6 +147,8 @@ def _validate_headers(path, name):
         headers = next(csv.reader(f), [])
     if name == 'data/foreign_stock_flow.csv':
         required = {'trading_date','symbol','net_val','data_source'}
+    elif name == 'data/proprietary_vnindex.csv':
+        required = {'trading_date','index','buy_val','sell_val','buy_vol','sell_vol','net_val','net_vol'}
     elif name == 'data/proprietary_flow.csv':
         required = {'trading_date','symbol','net_val','data_source'}
     elif name == 'data/foreign_net_flow.csv':

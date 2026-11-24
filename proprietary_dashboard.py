@@ -28,6 +28,20 @@ def for_code(code):
     except (OSError,ValueError,KeyError,TypeError,UnicodeDecodeError):
         return pd.DataFrame()
 
+
+def source_label(data):
+    labels = []
+    sources = data["data_source"].astype(str)
+    if sources.str.startswith("CAFEF_").any():
+        labels.append("CafeF")
+    if sources.str.startswith("VNSTOCK").any():
+        labels.append("VNStock/VCI")
+    known = sources.str.startswith(("CAFEF_", "VNSTOCK"))
+    if (~known).any():
+        labels.append("Other source")
+    return " / ".join(labels) or "Unknown"
+
+
 def _money(n):
     if pd.isna(n):return '—'
     return f'{n/1e9:+,.2f}'
@@ -40,7 +54,7 @@ def render_compact(code):
         return
     last=d.iloc[-1]
     st.metric('Ròng phiên gần nhất (tỷ)',_money(last['net_val']))
-    st.caption(f'{last["date"]:%d/%m/%Y} · VNStock/VCI · {len(d)} phiên đã lưu')
+    st.caption(f'{last["date"]:%d/%m/%Y} · {source_label(d.tail(1))} · {len(d)} phiên đã lưu')
     window=d.tail(20)
     if len(window)>=20:
         st.metric('Lũy kế 20 phiên (tỷ)',_money(window['net_val'].sum()))
@@ -61,7 +75,7 @@ def _bar(d):
 def render_detail(code,eod=None):
     d=for_code(code)
     if d.empty:
-        st.info('Chưa có dữ liệu tự doanh cho mã này trên R2. Windows sẽ thu thập luân phiên sau phiên.')
+        st.info('Chưa có dữ liệu tự doanh cho mã này trên R2. Dữ liệu phụ thuộc vào độ phủ nguồn.')
         return
     options=[v for v in (5,10,20,60) if v<=len(d)]
     if not options:options=[len(d)]
@@ -70,7 +84,7 @@ def render_detail(code,eod=None):
         length=st.selectbox('Số phiên',options,index=len(options)-1,key=f'min_prop_len_{code}',format_func=lambda v:f'{v} phiên')
     q=d.tail(length).copy()
     with b:
-        st.caption(f'Nguồn VNStock 5 / VCI · Ngày mới nhất: {q.iloc[-1]["date"]:%d/%m/%Y} · {len(q)} phiên thực có dữ liệu. Không phải realtime.')
+        st.caption(f'Nguồn {source_label(q)} · Ngày mới nhất: {q.iloc[-1]["date"]:%d/%m/%Y} · {len(q)} phiên thực có dữ liệu. Không phải realtime.')
     c1,c2,c3=st.columns(3)
     c1.metric(f'Mua/bán ròng {length} phiên (tỷ)',_money(q['net_val'].sum()))
     c2.metric('Số phiên mua ròng',int(q['net_val'].gt(0).sum()))
@@ -105,4 +119,4 @@ def render_detail(code,eod=None):
                               yaxis=dict(title='Ròng (tỷ)'),yaxis2=dict(title='Giá EOD (nghìn)',overlaying='y',side='right'))
             st.markdown('**So sánh dòng tiền tự doanh với giá EOD**')
             st.plotly_chart(fig,use_container_width=True,key=f'min_prop_vs_price_{code}_{length}')
-    st.caption('Thiếu trường mua/bán được giữ là dấu —. Số âm biểu thị bán ròng. Dữ liệu theo từng mã từ nguồn VCI, không suy ra hoạt động tự doanh toàn thị trường.')
+    st.caption('Thiếu trường mua/bán được giữ là dấu —. Số âm biểu thị bán ròng. Dữ liệu theo từng mã từ nguồn CafeF / VNStock, không suy ra hoạt động tự doanh toàn thị trường.')
