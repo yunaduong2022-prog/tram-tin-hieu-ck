@@ -1,7 +1,7 @@
 # NGHỊCH LÝ CỔ PHIẾU MSN: 3 NĂM LÃI GẤP 4 LẦN NHƯNG GIÁ VẪN "ĐỨNG IM" – CHỜ CÚ BỨT PHÁ NĂM 2027? 
 
-Trên thị trường chứng khoán, có một nghịch lý rất thú vị mang tên Masan (MSN) suốt 3 năm qua.
 Nếu chỉ nhìn vào bảng điện, nhiều người sẽ nghĩ doanh nghiệp này đang giậm chân tại chỗ: suốt từ năm 2024 đến nay, thị giá MSN loanh quanh vùng tích lũy và hiện chỉ ở mức 69.100 đồng/cổ phiếu – gần như không tăng so với 3 năm trước.
+
 Thế nhưng, nhìn vào kết quả kinh doanh thực tế bên trong lại là một câu chuyện hoàn toàn khác:
 • Năm 2024: Lợi nhuận cổ đông công ty mẹ khoảng 2.000 tỷ đồng.
 • Năm 2025: Tăng gấp đôi lên 4.108 tỷ đồng.
