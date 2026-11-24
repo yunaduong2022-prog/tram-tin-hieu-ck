@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from proprietary_dashboard import for_code
+from proprietary_dashboard import for_code, source_label
 
 _DATA = Path('data/proprietary_flow.csv')
 _EOD_COLS = ('Ngày', 'Giá đóng cửa')
@@ -102,7 +102,7 @@ def _f_money(n):
 def render(df, codes, fund_map=None):
     """Dedicated tab alongside Cổ phiếu / Thông tin chung / Biểu đồ."""
     st.markdown('### Giao dịch tự doanh theo cổ phiếu')
-    st.caption('Nguồn VNStock / VCI · Dữ liệu đã lưu sau phiên trên Windows và đồng bộ qua R2. '
+    st.caption('Nguồn CafeF / VNStock VCI · Dữ liệu đã lưu sau phiên trên Windows và đồng bộ qua R2. '
                'Không phải dữ liệu giao dịch trong thời gian thực.')
     if not codes:
         st.info('Chưa có danh sách mã trong dữ liệu EOD.')
@@ -124,7 +124,7 @@ def render(df, codes, fund_map=None):
     flows = for_code(code)
     if flows.empty:
         st.info(f'Chưa có dữ liệu tự doanh hợp lệ cho {code} trong file đã đồng bộ. '
-                'Các mã được thu thập luân phiên sau phiên; không mặc định số 0.')
+                'Dữ liệu phụ thuộc độ phủ nguồn; không mặc định số 0.')
         st.caption('Dữ liệu file R2 có mặt, nhưng chưa có mã được chọn hoặc dữ liệu không đạt kiểm định.')
         return
 
@@ -143,6 +143,7 @@ def render(df, codes, fund_map=None):
                    f'{count} ngày có bản ghi · Đang xem {period} ngày gần nhất có dữ liệu')
 
     q = flows.tail(period)
+    st.caption('Source: ' + source_label(q) + ' | Latest: ' + source_label(q.tail(1)))
     price = _eod_for_code(df, code)
     combo = _merge_price(q, price)
     a, b, c, d = st.columns(4)

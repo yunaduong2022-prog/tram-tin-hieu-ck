@@ -30,7 +30,7 @@ def _load(path: Path, field: str) -> pd.DataFrame:
         # Duplicate dates/symbols are not summed twice.
         d = d.drop_duplicates(["date", "symbol"], keep="last")
         if field == "net_value_vnd" and "source_scope" in d.columns:
-            d = d[d["source_scope"].isin(["FLOW_VERIFIED_FULL", "RANKING_TOP_ONLY"])]
+            d = d[d["source_scope"].isin(["FLOW_VERIFIED_FULL", "RANKING_TOP_ONLY", "SSI_WATCHLIST_SAMPLE"])]
         return d
     except (OSError, ValueError, pd.errors.ParserError, UnicodeError):
         return pd.DataFrame()
@@ -64,6 +64,48 @@ def _summary(df: pd.DataFrame, dates: list, field: str):
             "complete": found == len(dates), "dates": (min(within["date"]), max(within["date"]))}
 
 
+
+def _market_proprietary(path, dates):
+    if not path.is_file() or not dates:
+        return None
+    try:
+        d = pd.read_csv(path, encoding="utf-8-sig")
+        required = {"trading_date", "index", "buy_val", "sell_val",
+                    "buy_vol", "sell_vol", "net_val", "net_vol"}
+        if not required.issubset(d.columns):
+            return None
+        d = d[d["index"].eq("VNINDEX")].copy()
+        d["date"] = pd.to_datetime(d["trading_date"],
+                                   format="%Y-%m-%d", errors="coerce")
+        if d["date"].isna().any() or d["date"].duplicated().any():
+            return None
+        for col in required - {"trading_date", "index"}:
+            d[col] = pd.to_numeric(d[col], errors="coerce")
+            if d[col].isna().any() or d[col].abs().gt(1e16).any():
+                return None
+        for col in ("buy_val", "sell_val", "buy_vol", "sell_vol"):
+            if d[col].lt(0).any():
+                return None
+        if ((d["buy_val"] - d["sell_val"] - d["net_val"])
+                .abs().gt(1)).any():
+            return None
+        if ((d["buy_vol"] - d["sell_vol"] - d["net_vol"])
+                .abs().gt(1)).any():
+            return None
+        q = d[d["date"].isin(dates)]
+        if q.empty:
+            return None
+        return {
+            "found": len(q),
+            "expected": len(dates),
+            "buy": q["buy_val"].sum(),
+            "sell": q["sell_val"].sum(),
+            "net": q["net_val"].sum(),
+        }
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def net_flow_sections(index_dates, tf: str, root: Path | str = "data") -> dict:
     """Return one separate VNINDEX report card; no aggregation over future dates."""
     dates = _expected_sessions(index_dates, tf)
@@ -73,6 +115,34 @@ def net_flow_sections(index_dates, tf: str, root: Path | str = "data") -> dict:
         data = _load(root / filename, field)
         summary = _summary(data, dates, field)
         items.append(dict(tone="", text=name.upper(), subs=[]))
+
+        if filename == "proprietary_flow.csv":
+            report = _market_proprietary(
+                root / "proprietary_vnindex.csv", dates
+            )
+            if report is not None:
+                if report["found"] == report["expected"]:
+                    value = report["net"] / 1e9
+                    items.append(dict(
+                        tone="xanh" if value >= 0 else "do",
+                        text=f"VNINDEX CafeF: {value:+,.2f} t\u1ef7",
+                        subs=[]
+                    ))
+                    items.append(dict(
+                        tone="",
+                        text=f"Mua: {report['buy']/1e9:,.2f} | "
+                             f"B\u00e1n: {report['sell']/1e9:,.2f} t\u1ef7",
+                        subs=[]
+                    ))
+                else:
+                    items.append(dict(
+                        tone="vang",
+                        text=f"CafeF VNINDEX: "
+                             f"{report['found']}/{report['expected']} "
+                             "phi\u00ean, ch\u01b0a \u0111\u1ee7 k\u1ef3.",
+                        subs=[]
+                    ))
+
         if summary is None:
             items.append(dict(tone="vang", text=f"Chưa có dữ liệu {name.lower()} đúng giai đoạn để xếp hạng.", subs=[]))
             continue
