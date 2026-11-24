@@ -26,6 +26,8 @@ def _membership():
 def render():
     st.title('🌐 Dòng tiền khối ngoại')
     st.caption('Nguồn: SSI iBoard / VNStock Insights trên Windows → R2. **Chỉ phản ánh mua/bán RÒNG**, không phải tổng giá trị mua hoặc tổng giá trị bán.')
+    from foreign_market_totals import render as render_totals
+    render_totals()
     if not DATA_PATH.is_file():
         st.warning('Chưa có dữ liệu khối ngoại đồng bộ. Giữ lịch thu thập Windows và đợi phiên hợp lệ; không suy diễn từ OHLCV.')
         return

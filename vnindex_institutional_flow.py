@@ -116,6 +116,25 @@ def net_flow_sections(index_dates, tf: str, root: Path | str = "data") -> dict:
         summary = _summary(data, dates, field)
         items.append(dict(tone="", text=name.upper(), subs=[]))
 
+        if filename == "foreign_net_flow.csv":
+            report = _market_proprietary(
+                root / "foreign_vnindex_flow.csv", dates
+            )
+            if report is not None:
+                expected = PERIODS[tf][1]
+                if report["found"] == expected:
+                    value = report["net"] / 1e9
+                    items.append(dict(
+                        tone="xanh" if value >= 0 else "do",
+                        text=f"VNINDEX CafeF: {value:+,.2f} t\u1ef7",
+                        subs=[]
+                    ))
+                else:
+                    items.append(dict(
+                        tone="vang",
+                        text=f"CafeF VNINDEX: {report['found']}/{expected} phi\u00ean",
+                        subs=[]
+                    ))
         if filename == "proprietary_flow.csv":
             report = _market_proprietary(
                 root / "proprietary_vnindex.csv", dates
