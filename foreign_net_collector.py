@@ -163,7 +163,7 @@ def validate_table(frame):
         raise ValueError('Invalid trading dates')
     if df.duplicated(['trading_date','symbol']).any():
         raise ValueError('Duplicate per date and symbol')
-    if not df['source_scope'].isin(['FLOW_VERIFIED_FULL','RANKING_TOP_ONLY']).all():
+    if not df['source_scope'].isin(['FLOW_VERIFIED_FULL','RANKING_TOP_ONLY','SSI_WATCHLIST_SAMPLE']).all():
         raise ValueError('Unknown coverage')
     if df['observed_at_utc'].isna().any():
         raise ValueError('Missing observation timestamp')
