@@ -31,6 +31,14 @@ def money(x):
 def checked_data(path,mtime_ns,price_path,price_mtime_ns):
     return audit(load_data(path,mtime_ns),read_prices(price_path))
 
+
+def _style_map(frame, func, **kwargs):
+    styler = frame.style
+    if hasattr(styler, "map"):
+        return styler.map(func, **kwargs)
+    return styler.applymap(func, **kwargs)
+
+
 def render(index_dates):
     st.title('🏛️ Dòng tiền tự doanh')
     st.caption('CafeF / VNStock VCI · Dữ liệu cuối phiên qua R2. Tổng VNINDEX từ báo cáo CafeF; xếp hạng từng mã chỉ trong mẫu đã lưu.')
@@ -103,7 +111,7 @@ def render(index_dates):
     if sectors: shown=shown[shown['Nhóm ngành'].isin(sectors)]
     for c in ['buy_val','sell_val']: shown[c]=shown[c]/1e9
     shown=shown.sort_values('net_val',ascending=False)[['symbol','Nhóm ngành','sessions','buy_val','sell_val','Ròng (tỷ)','buy_vol','sell_vol','net_vol']].rename(columns={'symbol':'Mã','sessions':'Số phiên có dữ liệu','buy_val':'Mua (tỷ)','sell_val':'Bán (tỷ)','buy_vol':'KL mua','sell_vol':'KL bán','net_vol':'KL ròng'})
-    st.dataframe(shown.style.applymap(lambda v: 'color: #229970' if v>0 else ('color: #dd5660' if v<0 else ''),subset=['Ròng (tỷ)']),hide_index=True,use_container_width=True,column_config={c:st.column_config.NumberColumn(format='%.2f') for c in ['Mua (tỷ)','Bán (tỷ)','Ròng (tỷ)']})
+    st.dataframe(_style_map(shown, lambda v: 'color: #229970' if v>0 else ('color: #dd5660' if v<0 else ''),subset=['Ròng (tỷ)']),hide_index=True,use_container_width=True,column_config={c:st.column_config.NumberColumn(format='%.2f') for c in ['Mua (tỷ)','Bán (tỷ)','Ròng (tỷ)']})
     st.download_button('Xuất bảng CSV',shown.to_csv(index=False).encode('utf-8-sig'),file_name='proprietary_sample.csv',mime='text/csv')
     st.caption('Xếp hạng và tổng ngành chỉ cộng các bản ghi có sẵn; số phiên mỗi mã có thể khác nhau. Giá trị mua/bán thiếu được giữ trống.')
     st.subheader('Lịch sử từng mã')
