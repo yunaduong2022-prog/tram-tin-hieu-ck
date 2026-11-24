@@ -8,7 +8,7 @@ import plotly.express as px
 DATA_PATH=Path('data/foreign_net_flow.csv')
 
 @st.cache_data(show_spinner=False, max_entries=3)
-def _read_net(_mtime, path):
+def _read_net(mtime_ns, path):
     data=pd.read_csv(path,dtype={'symbol':str,'trading_date':str})
     from foreign_net_collector import validate_table
     data=validate_table(data)
