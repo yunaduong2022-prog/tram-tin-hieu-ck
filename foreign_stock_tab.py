@@ -20,7 +20,7 @@ def read_verified(path=DATA):
     from proprietary_flow_collector import validate
     frame=pd.read_csv(path,encoding='utf-8-sig',dtype={'trading_date':str,'symbol':str},low_memory=False)
     frame=validate(frame)
-    if not frame.data_source.astype(str).str.startswith('VNSTOCK5_VCI_FOREIGN').all():
+    if not frame.data_source.astype(str).str.startswith(('VNSTOCK5_VCI_FOREIGN', 'SSI_IBOARD_PUBLIC_FOREIGN')).all():
         raise ValueError('Wrong foreign-flow source')
     frame['date']=pd.to_datetime(frame.trading_date,format='%Y-%m-%d')
     return frame.sort_values(['symbol','date']).reset_index(drop=True)
@@ -83,7 +83,7 @@ def _rank_snapshot(code):
 
 def render(df,codes,fund_map=None):
     st.markdown('### 🌐 Giao dịch khối ngoại theo cổ phiếu')
-    st.caption('Nguồn VNStock / VCI · Thu thập trên Windows → R2. Theo ngày nguồn công bố; không phải realtime.')
+    st.caption('Nguồn SSI iBoard / VNStock VCI (lịch sử) · Thu thập trên Windows → R2. Theo ngày nguồn công bố; không phải realtime.')
     if not codes:
         st.info('Chưa có danh sách mã EOD.')
         return

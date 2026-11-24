@@ -25,7 +25,7 @@ def _membership():
 
 def render():
     st.title('🌐 Dòng tiền khối ngoại')
-    st.caption('Nguồn: VNStock Insights trên Windows → R2. **Chỉ phản ánh mua/bán RÒNG**, không phải tổng giá trị mua hoặc tổng giá trị bán.')
+    st.caption('Nguồn: SSI iBoard / VNStock Insights trên Windows → R2. **Chỉ phản ánh mua/bán RÒNG**, không phải tổng giá trị mua hoặc tổng giá trị bán.')
     if not DATA_PATH.is_file():
         st.warning('Chưa có dữ liệu khối ngoại đồng bộ. Giữ lịch thu thập Windows và đợi phiên hợp lệ; không suy diễn từ OHLCV.')
         return
@@ -47,6 +47,11 @@ def render():
     with b:
         if full:
             st.success('Theo dõi danh sách mã nguồn trả về (3 sàn, tùy độ phủ)')
+        elif 'SSI_WATCHLIST_SAMPLE' in scopes:
+            st.warning(
+                f'Dữ liệu khối ngoại SSI: {len(selected)} mã có số liệu. '
+                'Độ phủ không đầy đủ; không đại diện toàn thị trường.'
+            )
         else:
             st.warning('Chỉ các mã thuộc TOP mua/bán ròng — KHÔNG đại diện toàn thị trường')
     industry=_membership()
@@ -58,7 +63,7 @@ def render():
     k1.metric('Giá trị ròng trong mẫu',f'{net.sum():+,.1f} tỷ đồng')
     k2.metric('Số mã trong mẫu',f'{len(selected):,}')
     k3.metric('Số mã mua ròng / bán ròng',f'{buy} / {sell}')
-    st.caption('Không hiển thị tổng mua hoặc tổng bán vì nguồn Insights chỉ có giá trị ròng. Không cộng lũy kế dài hạn từ các ngày chưa lưu.')
+    st.caption('Không hiển thị tổng mua hoặc tổng bán vì bảng tổng hợp này chỉ lưu giá trị ròng. Không cộng lũy kế dài hạn từ các ngày chưa lưu.')
     ranked=selected.assign(net_ty=net.values)
     l,r=st.columns(2)
     with l:
