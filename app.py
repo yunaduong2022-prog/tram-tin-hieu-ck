@@ -568,6 +568,16 @@ if data_mode == MODE_EOD and _PREPARED is None:
                  "market":(mkt,mkt_src), "screener":res_df.copy()})
     except (OSError, ValueError, TypeError) as _cache_exc:
         st.caption("Bộ nhớ đệm khởi động không sẵn sàng; tiếp tục tính toán bình thường.")
+# MIN_FUND_RESEARCH_EXCLUDE_20261124
+_RESEARCH_EXCLUDED = frozenset({"CAG", "CPI", "DGT", "HID", "HTN", "POM", "PVE"})
+# Keep held positions in the screener for exit/risk management.
+_RESEARCH_HELD = set(CF.held_codes())
+def _research_filter(table, keep_held=False):
+    if "Mã" not in table.columns:
+        return table
+    excluded = _RESEARCH_EXCLUDED - _RESEARCH_HELD if keep_held else _RESEARCH_EXCLUDED
+    return table.loc[~table["Mã"].astype(str).str.upper().isin(excluded)].copy()
+res_df = _research_filter(res_df, keep_held=True)
 res_df["Nhóm"] = res_df["Mã"].map(lambda c_: ", ".join(MEMBER.get(c_, [])) or "Khác")
 _gt = df.groupby("Mã").tail(20)       # GTGD trung bình 20 phiên (tỷ đồng) = giá (nghìn đồng) x khối lượng / 1 triệu; tail() trả về bản sao nên không đụng frames dùng chung
 res_df["GTGD20"] = res_df["Mã"].map((_gt["Giá đóng cửa"] * _gt["Khối lượng khớp lệnh"] / 1e6).groupby(_gt["Mã"]).mean().round(1))
@@ -1425,7 +1435,10 @@ WB_PER_GROUP = 24
 
 
 def _wb_table() -> pd.DataFrame:
-    return waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb14")  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
+    t = waiting_cached(frames, res_df, WY_KEY + "|" + E.ENGINE_VERSION + "|wb14|fund-exclude-v1")
+    if "Danh sách" in t.columns and "Mã" in t.columns:
+        return t.loc[~(t["Mã"].astype(str).str.upper().isin(_RESEARCH_EXCLUDED) & t["Danh sách"].isin(WB.BUY_GROUPS))].copy()
+    return t  # Chờ mua và Mua ngay dùng chung một bộ tính vùng mua; tăng version để làm mới cache
 
 
 def _meta_files_sig() -> str:
@@ -1711,7 +1724,7 @@ def page_wait_buy():
     # MIN_T2_WAIT_CONFIRM_V1: a separate T+2 watchlist, not a long-horizon buy state.
     try:
         _, t2_wait = _t2_opportunities_cached(
-            frames["D"], latest_date, WY_KEY + "|" + E.ENGINE_VERSION + "|t2opportunities2")
+            frames["D"], latest_date, WY_KEY + "|" + E.ENGINE_VERSION + "|t2opportunities2-fund-exclude-v1")
     except Exception as exc:
         st.warning("CHỜ MUA Trading T+2 chưa khả dụng: " + type(exc).__name__)
         t2_wait = pd.DataFrame(columns=T2BUY.WAIT_COLUMNS)
@@ -1801,6 +1814,7 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
     Giữ nguyên Vùng mua từ/đến, Giá vào, Stop Loss và mục tiêu đã tính bởi waiting_buy.py.
     Chỉ lấy mã có hành động Vào ngay và không có tín hiệu BÁN / CHỐT LỜI."""
     d = t[t["Danh sách"].isin(WB.BUY_GROUPS) & (t["Hành động"] == "Vào ngay") & t["Vùng mua từ"].notna()].copy()
+    d = _research_filter(d)
     if "Hành động bán" in d.columns:
         d = d[~d["Hành động bán"].isin(["BÁN", "CHỐT LỜI"])]
     return WB.sort_group(d, WB.G1)
@@ -1810,7 +1824,8 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data(show_spinner="Đang phân loại MUA NGAY / CHỜ MUA T+2 theo EOD...", max_entries=3)
 def _t2_opportunities_cached(_daily: pd.DataFrame, _asof, key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Key includes actual latest-bar digest; _daily not hashed to avoid rehashing all OHLCV.
-    return T2BUY.candidates_both(_daily, _asof)
+    buy, wait = T2BUY.candidates_both(_daily, _asof)
+    return _research_filter(buy), _research_filter(wait)
 
 
 def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
@@ -1893,7 +1908,7 @@ def page_buy_now():
     d = _buy_now_table(_wb_table())
     try:
         t2, _t2_pending = _t2_opportunities_cached(frames["D"], latest_date,
-                WY_KEY + "|" + E.ENGINE_VERSION + "|t2opportunities2")
+                WY_KEY + "|" + E.ENGINE_VERSION + "|t2opportunities2-fund-exclude-v1")
     except Exception as _t2_error:
         st.warning("Bộ lọc MUA NGAY Trading T+2 chưa khả dụng: " + type(_t2_error).__name__)
         t2 = pd.DataFrame(columns=T2BUY.COLUMNS)
@@ -3413,7 +3428,7 @@ def _chart_metrics(code, info) -> list[dict]:
         _wm = _wb_meta(code)
         _na = lambda v: "-" if v in (None, "", "Chưa có") else v
         chart_metrics += [
-            {"label": "P/E", "value": _na(_wm.get("P/E"))},
+            {"label": "P/E", "value": _na(_wm.get("P/E")), "sub": "Thua lỗ" if str(_wm.get("P/E", "")).startswith("-") else ""},
             {"label": "P/B", "value": _na(_wm.get("P/B"))},
             {"label": "ROE", "value": _na(_wm.get("ROE")), "sub": _roe_rank_note(code), "color": "#25A879"},
             {"label": "Vốn hóa", "value": _na(_wm.get("Vốn hóa")), "sub": _cap_rank_note(code), "color": "#25A879"},
@@ -3818,6 +3833,7 @@ def page_stock_tab(sub):
             _m = pd.read_csv("data/stock_metadata.csv", dtype={"Mã": str})
             if {"Mã", "Vốn hóa TT"}.issubset(_m.columns): cap = dict(zip(_m["Mã"].str.upper(), _m["Vốn hóa TT"]))
         except Exception: pass
+    XH.apply_to_maps(fm, cap)
     apply_manual_overrides(fm, cap)
     for _c, _v in cap.items():
         if pd.notna(_v): fm.setdefault(_c, {})["Vốn hóa TT"] = _v
