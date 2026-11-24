@@ -6,7 +6,7 @@ Ai đầu tư chứng khoán chắc đều biết câu chuyện của VND suốt
 
 Trong khi nhiều cổ phiếu chứng khoán khác thi nhau tăng giá, thì VND lại có một quãng thời gian dài trượt dốc, cứ nhích lên một chút là lại bị bán xuống. Lý do lớn nhất khiến nhiều người ngại ngần với cổ phiếu này chỉ gói gọn trong hai chữ: Trung Nam.
 
-Nói một cách dễ hiểu, VND từng cho nhóm doanh nghiệp Trung Nam vay và nắm giữ lượng lớn trái phiếu của họ. Khi Trung Nam gặp khó khăn về dòng tiền, thị trường lập tức lo sợ VND sẽ bị "chôn vốn", thậm chí có nguy cơ mất trắng hàng nghìn tỷ đồng. Tâm lý lo âu đó giống như một tảng đá đè nặng lên cổ phiếu VND suốt mấy năm trời.
+## Nói một cách dễ hiểu, VND từng cho nhóm doanh nghiệp Trung Nam vay và nắm giữ lượng lớn trái phiếu của họ. Khi Trung Nam gặp khó khăn về dòng tiền, thị trường lập tức lo sợ VND sẽ bị "chôn vốn", thậm chí có nguy cơ mất trắng hàng nghìn tỷ đồng. Tâm lý lo âu đó giống như một tảng đá đè nặng lên cổ phiếu VND suốt mấy năm trời.
 
 Thế nhưng, câu chuyện gần đây đã xoay chiều tích cực hơn hẳn, và đó cũng là lý do giúp giá cổ phiếu VND bật tăng trở lại mạnh mẽ:
 
