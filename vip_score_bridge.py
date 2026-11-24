@@ -69,6 +69,9 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
                            else f'Dữ liệu EOD của mã mới đến {last_date:%d/%m/%Y}; chưa tính TA / Tổng điểm như phiên hiện tại.')}
 
     ta, ta_tags = vip.ta_score(daily)
+    rsi = _finite(daily['RSI'].iloc[-1]) if ta is not None and 'RSI' in daily.columns else None
+    if fa is not None and fa < getattr(vip, 'FA_WEAK', 30):
+        fa_tags = [f'Cơ bản yếu (FA dưới {getattr(vip, "FA_WEAK", 30)})'] + list(fa_tags)
     sys_score = None
     if isinstance(screener, pd.DataFrame) and {'Mã', 'Score'}.issubset(screener.columns):
         match = screener.loc[screener['Mã'].astype(str).str.upper().eq(code), 'Score']
@@ -83,7 +86,7 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
               'Thiếu ' + ', '.join(missing) + '; Tổng điểm nếu có đã được VIP phân bổ lại trọng số.')
     return {'code': code, 'frame': frame, 'fa': fa, 'ta': ta, 'total': total,
             'system': sys_score, 'grade': grade, 'tags_fa': list(fa_tags),
-            'tags_ta': list(ta_tags), 'asof': last_date, 'status': status}
+            'tags_ta': list(ta_tags), 'rsi': rsi, 'asof': last_date, 'status': status}
 
 
 def _display(v):
@@ -92,34 +95,85 @@ def _display(v):
 
 
 def _panel_html(result, *, mode):
+    """Three compact VIP-style columns with a gradient bar and sourced FA/TA tags.
+
+    Only presentation changes: all score values and rank come from VIP routines.
+    Text is escaped because fundamental/technical tags may come from data files.
+    """
     dark = mode == 'live'
-    bg = '#111b2b' if dark else 'var(--card, #162338)'
-    panel = '#0b1422' if dark else 'var(--card2, #1f304a)'
-    fg = '#f1f5f9' if dark else 'var(--txt, #e2e8f0)'
-    muted = '#9bb0c6' if dark else 'var(--muted, #94a3b8)'
-    border = '#29384d' if dark else 'var(--line, #334155)'
-    grade = f" · Hạng {html.escape(str(result['grade']))}" if result.get('grade') else ''
-    cards = [('Điểm cơ bản (FA)', result['fa']), ('Điểm kỹ thuật (TA)', result['ta']),
-             ('Tổng điểm', result['total'])]
-    chunks = []
-    for label, value in cards:
-        suffix = grade if label == 'Tổng điểm' else ''
-        chunks.append(
-            '<div style="min-width:0;padding:10px;border-radius:9px;'
-            f'background:{panel};border:1px solid {border}">'
-            f'<div style="font-size:11px;line-height:1.3;color:{muted}">{html.escape(label)}</div>'
-            f'<div style="color:{fg};font-size:21px;font-weight:800;margin-top:4px">'
-            f'{_display(value)}<span style="font-size:11px;color:{muted}">/100</span></div>'
-            f'<div style="font-size:11px;color:{muted}">{suffix.lstrip(" ·") if suffix else " "}</div></div>'
-        )
-    return (
-        f'<div style="background:{bg};border:1px solid {border};border-radius:12px;'
-        f'padding:12px;margin:8px 0;color:{fg}">'
-        f'<div style="font-size:13px;font-weight:800;margin-bottom:9px">'
-        f'📊 CHẤM ĐIỂM FA · TA · TỔNG ĐIỂM</div>'
-        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px">'
-        + ''.join(chunks) + '</div></div>'
-    )
+    bg = '#102620' if dark else 'var(--card, #102620)'
+    line = '#255249' if dark else 'var(--line, #255249)'
+    text_color = '#edf8f2' if dark else 'var(--txt, #edf8f2)'
+    muted = '#92b4a8' if dark else 'var(--muted, #92b4a8)'
+    green = '#3fd68f'
+    style = """<style>
+    .mvs-vip{border-radius:12px;padding:10px 12px;box-sizing:border-box;margin:10px 0 12px}
+    .mvs-vip .mvs-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0}
+    .mvs-vip .mvs-item{min-width:0;padding:10px 13px 8px;text-align:center;border-right:1px solid #27554b}
+    .mvs-vip .mvs-item:last-child{border-right:0}
+    .mvs-vip .mvs-label{font-size:11px;min-height:29px;font-weight:800;letter-spacing:.15px;text-transform:uppercase;line-height:1.4}
+    .mvs-vip .mvs-score{font-size:27px;font-weight:800;line-height:1.12;font-variant-numeric:tabular-nums}
+    .mvs-vip .mvs-scale{font-size:12px;font-weight:500;opacity:.83}
+    .mvs-vip .mvs-badge{background:#14463a;color:#3fd68f;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:800;margin-left:7px}
+    .mvs-vip .mvs-bar{height:7px;border-radius:20px;background:#25584f;overflow:hidden;margin:8px auto 9px;max-width:190px}
+    .mvs-vip .mvs-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,#ee6979 0%,#e3bf78 45%,#43d69d 100%)}
+    .mvs-vip .mvs-tags{list-style:none;padding:0;margin:0;text-align:left;font-size:11px;line-height:1.5}
+    .mvs-vip .mvs-tags li{margin:3px 0;padding-left:11px;position:relative;overflow-wrap:anywhere}
+    .mvs-vip .mvs-tags li:before{content:'•';position:absolute;left:0;color:#3fd68f}
+    .mvs-vip .mvs-missing{font-size:11px;opacity:.8;min-height:18px}
+    @media(max-width:760px){.mvs-vip .mvs-grid{grid-template-columns:1fr}
+      .mvs-vip .mvs-item{border-right:0;border-bottom:1px solid #27554b;padding:10px 12px}
+      .mvs-vip .mvs-item:last-child{border-bottom:0}
+      .mvs-vip .mvs-label{min-height:0;margin-bottom:7px}}
+    </style>"""
+
+    def score_text(value, *, total=False):
+        n = _finite(value)
+        if n is None:
+            return '<span class="mvs-score">—</span>'
+        score = f'{n:.0f}'
+        tip = html.escape(f'{n:.1f}/100', quote=True)
+        out = f'<span class="mvs-score" title="{tip}">{score}</span>'
+        if not total:
+            out += '<span class="mvs-scale">/100</span>'
+        return out
+
+    def bar(value):
+        n = _finite(value)
+        width = 0 if n is None else max(0.0, min(100.0, n))
+        return f'<div class="mvs-bar"><div class="mvs-fill" style="width:{width:.1f}%"></div></div>'
+
+    def tag_list(tags):
+        if not tags:
+            return '<div class="mvs-missing">Chưa đủ lý do xác minh</div>'
+        return '<ul class="mvs-tags">' + ''.join(
+            f'<li>{html.escape(str(tag))}</li>' for tag in list(tags)[:3]
+        ) + '</ul>'
+
+    fa = tag_list(result.get('tags_fa') or []) if _finite(result.get('fa')) is not None else \
+        '<div class="mvs-missing">Chưa đủ chỉ tiêu FA</div>'
+    technical_tags = []
+    rsi = _finite(result.get('rsi'))
+    if rsi is not None:
+        technical_tags.append(f'RSI {rsi:.1f}')
+    technical_tags.extend(result.get('tags_ta') or [])
+    ta = tag_list(technical_tags) if _finite(result.get('ta')) is not None else \
+        '<div class="mvs-missing">Chưa đủ dữ liệu TA</div>'
+    grade = result.get('grade')
+    grade_html = (f'<span class="mvs-badge" title="Hạng {html.escape(str(grade), quote=True)}">'
+                  f'{html.escape(str(grade))}</span>') if grade and _finite(result.get('total')) is not None else ''
+    cells = []
+    for label, val, detail, is_total in (
+        ('Điểm cơ bản (FA)', result.get('fa'), fa, False),
+        ('Điểm kỹ thuật (TA)', result.get('ta'), ta, False),
+        ('Tổng điểm', result.get('total'), '', True),
+    ):
+        cells.append('<div class="mvs-item">'
+                     f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
+                     f'<div style="color:{text_color}">{score_text(val, total=is_total)}{grade_html if is_total else ""}</div>'
+                     + bar(val) + detail + '</div>')
+    return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
+            '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
 
 
 def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode='stock'):
@@ -134,13 +188,11 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
                                 asof=asof, vip_module=vip)
     st.markdown(_panel_html(result, mode=mode), unsafe_allow_html=True)
     w = vip.weights_of(frame)
-    st.caption(f'Khung {frame}: FA {w[0]:.0%} · TA {w[1]:.0%} · Score hệ thống {w[2]:.0%}. '
-               'Cùng công thức và nguồn chấm điểm với Khuyến nghị khách hàng; TA là khung Ngày EOD, '
-               'khác điểm xu hướng đa khung D/W/M.')
-    if result.get('status'):
+    eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
+    st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
+               'Cùng công thức Khuyến nghị khách hàng; điểm TA lấy nến Ngày EOD.')
+    if result.get('status') and result['status'] != 'Đủ FA, TA và Score hệ thống.':
         st.caption(result['status'])
-    if result.get('asof') is not None:
-        st.caption(f"Phiên EOD của mã: {result['asof']:%d/%m/%Y} · Giá biểu đồ 1H/DNSE có thể thuộc kỳ khác.")
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
         st.write('**FA:** ' + ('; '.join(result['tags_fa']) if result['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))

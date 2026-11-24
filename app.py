@@ -3476,9 +3476,12 @@ def page_stock():
         (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
     tf = c2.selectbox("Khung thời gian", ["1H", "D", "W", "M"], index=1, format_func=TF_LABEL.get)
     # MIN_VIP_SCORE_BRIDGE_CHART_LIVE_20261124
+    # MIN_VIP_SCORE_CARDS_BELOW_CHART_V2_20261124
     from vip_score_bridge import render_vip_scores as _render_vip_scores_chart
-    _render_vip_scores_chart(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
-                             key="vip_scores_stock_chart", mode="stock")
+
+    def _stock_score_panel_below_chart():
+        _render_vip_scores_chart(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
+                                 key="vip_scores_stock_chart", mode="stock")
 
     # Chart-only DNSE mode: leave EOD/VCI scanners, VIP, forecasts, Backtest,
     # index pages, Redis, and R2 workflows untouched. Fail closed on DNSE errors.
@@ -3550,6 +3553,7 @@ def page_stock():
                 range_bar_ui(tf, len(_g), ns="dnse_")
                 CH.inject()
                 DT.inject(code, tf)
+            _stock_score_panel_below_chart()
         with _side:
             # Stock chart uses raw DNSE candles, while the cards below use confirmed EOD.
             # Compact provenance replaces duplicated DNSE prices/MA/RSI/MACD and the long caption.
@@ -3685,6 +3689,7 @@ def page_stock():
                 range_bar_ui('1H', len(hourly_g))
                 CH.inject()
                 DT.inject(code, '1H')
+            _stock_score_panel_below_chart()
         with side_hour:
             st.markdown('**Chỉ báo tham khảo · 1H nguyên gốc**')
             st.metric('Giá đóng nến giờ', f"{close:,.2f}")
@@ -3729,6 +3734,7 @@ def page_stock():
         fig = make_chart({"g": g, "enough": False}, code, tf, safe_layers,
                          None if mobile else metric, mobile=mobile, bars=min(len(g), BARS_SHOWN[tf]))
         st.plotly_chart(fig, config={"displayModeBar": True}, **_STRETCH)
+        _stock_score_panel_below_chart()
         return
     A = {t: analyze_cached(frames, code, t, DATA_KEY) for t in ("M", "W", "D")}
     info = stock_row(code)
@@ -3767,6 +3773,8 @@ def page_stock():
             range_bar_ui(tf, len(a["g"]))           # thanh 5D · 1M · 3M · 6M · 1Y · 2Y · 3Y · Tất cả ngay dưới biểu đồ
             CH.inject()                # đường gióng dọc/ngang + nhãn Thứ, Ngày Tháng Năm và nhãn giá khi rê chuột
             DT.inject(code, tf)        # thanh công cụ vẽ kiểu TradingView (đường, mũi tên, hình, đo giá/ngày, chữ...), lưu theo mã + khung
+
+        _stock_score_panel_below_chart()
 
     with col_side:
         st.markdown(mtf_card(E.mtf_conclusion(A), A, code, info["Giá"], d_chg), unsafe_allow_html=True)
@@ -4160,14 +4168,15 @@ def page_livestream():
         except Exception as exc:
             st.warning(f"Không dựng được biểu đồ tuần: {exc}")
         range_bar_ui("W", _nW, "live_", "2Y")
+        # MIN_VIP_SCORE_BRIDGE_CHART_LIVE_20261124
+        # MIN_VIP_SCORE_CARDS_BELOW_CHART_V2_20261124
+        from vip_score_bridge import render_vip_scores as _render_vip_scores_live
+        _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
+                                key="vip_scores_livestream", mode="live")
         st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
         LTP.render(code, A, latest_date)
 
     with right:
-        # MIN_VIP_SCORE_BRIDGE_CHART_LIVE_20261124
-        from vip_score_bridge import render_vip_scores as _render_vip_scores_live
-        _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
-                                key="vip_scores_livestream", mode="live")
         # MA and D/W/M are displayed together, but their scores are NOT mixed.
         # MAV.trend_state is the same rule used by the MA Structure tab.
         verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
