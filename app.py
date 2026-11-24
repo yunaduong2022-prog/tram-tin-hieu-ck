@@ -3994,6 +3994,9 @@ def _route_inner():
         return CG.render(raw, DATA_KEY, vn30=VN30_LIST, on_open=_cap_open, openable=set(res_df["Mã"]))
     if main == "Thị trường" and sub == "Dòng tiền khối ngoại":
         return FF.render()
+    if main == "Thị trường" and sub == "Dòng tiền tự doanh":
+        import proprietary_market_dashboard as PMD
+        return PMD.render_from_index()
     if main == "Thị trường" and sub == "Nhóm ngành":
         _live = data_mode == MODE_LIVE          # giá trực tiếp: đổi khoá cache theo phút để số liệu nhóm luôn mới
         return NNH.render(raw, mkt, WL.GROUPS, DATA_KEY + (pd.Timestamp.now().strftime("|%H%M") if _live else ""), live=_live, asof=f"{latest_date:%d/%m/%Y}")
