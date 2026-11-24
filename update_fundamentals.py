@@ -394,12 +394,19 @@ def main(argv=None) -> int:
     roes = [abs(v[1]) for v in fresh.values() if v[1] is not None]
     scale = 100.0 if roes and float(pd.Series(roes).median()) < 1.5 else 1.0
     for s, (pb, roe, pe, pb3, pe3) in fresh.items():
-        cache.loc[s, "P/B"] = pb if pb is not None and 0 < pb < 200 else float("nan")
-        cache.loc[s, "ROE"] = roe * scale if roe is not None else float("nan")
-        cache.loc[s, "P/B TB 3N"] = pb3 if pb3 is not None else float("nan")
-        cache.loc[s, "P/E TB 3N"] = pe3 if pe3 is not None else float("nan")
-        cache.loc[s, "P/E"] = pe if pe is not None and 0 < pe < 1000 else float("nan")
-        cache.loc[s, "Cập nhật"] = today.strftime(DATE_FMT)
+        candidates = {"P/B": pb, "ROE": roe * scale if roe is not None else None,
+                      "P/B TB 3N": pb3, "P/E TB 3N": pe3, "P/E": pe}
+        updated = False
+        for col, val in candidates.items():
+            if val is None or pd.isna(val):
+                continue
+            lo, hi = FG.VALID[col]
+            valid = lo <= val <= hi if col == "ROE" else lo < val <= hi
+            if valid:
+                cache.loc[s, col] = val
+                updated = True
+        if updated:
+            cache.loc[s, "Cập nhật"] = today.strftime(DATE_FMT)
 
     out = cache.reset_index().rename(columns={"index": "Mã"})[COLS]
     out, _fg_warns = FG.sanitize(out)
