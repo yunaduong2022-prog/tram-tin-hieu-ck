@@ -3475,6 +3475,11 @@ def page_stock():
     if _sm:
         (st.toast if _sm[0] == "ok" else st.error)(_sm[1])
     tf = c2.selectbox("Khung thời gian", ["1H", "D", "W", "M"], index=1, format_func=TF_LABEL.get)
+    # MIN_VIP_SCORE_BRIDGE_CHART_LIVE_20261124
+    from vip_score_bridge import render_vip_scores as _render_vip_scores_chart
+    _render_vip_scores_chart(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
+                             key="vip_scores_stock_chart", mode="stock")
+
     # Chart-only DNSE mode: leave EOD/VCI scanners, VIP, forecasts, Backtest,
     # index pages, Redis, and R2 workflows untouched. Fail closed on DNSE errors.
     if DC.enabled(st.secrets):
@@ -4159,6 +4164,10 @@ def page_livestream():
         LTP.render(code, A, latest_date)
 
     with right:
+        # MIN_VIP_SCORE_BRIDGE_CHART_LIVE_20261124
+        from vip_score_bridge import render_vip_scores as _render_vip_scores_live
+        _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
+                                key="vip_scores_livestream", mode="live")
         # MA and D/W/M are displayed together, but their scores are NOT mixed.
         # MAV.trend_state is the same rule used by the MA Structure tab.
         verdict = (conclusion.get("verdict", "ĐANG ĐÁNH GIÁ") if isinstance(conclusion, dict) else "ĐANG ĐÁNH GIÁ")
