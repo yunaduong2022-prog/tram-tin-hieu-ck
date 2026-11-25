@@ -309,6 +309,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
     research_rows = None
     research = None
     ranks = {}
+    pb_detail = None
     display = dict(result)
     if bank is not None and mode == 'stock':
         import bank_web_review
@@ -326,6 +327,11 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             points['PB']=research.get('Điểm P/B /15')
             ranks=bank_metric_ranks(research_rows,research,bank_web_review.current_prices(frames_d,asof),bank_web_review.score)
             display['tags_fa']=bank_fa_notes(values,points,estimated=True,ranks=ranks)
+            import bank_pb_compare
+            pb_note, pb_detail = bank_pb_compare.chart_notes(
+                research_rows, research, bank_web_review.current_prices(frames_d,asof), bank_web_review.score)
+            if pb_note:
+                display['tags_fa'][-1]=display['tags_fa'][-1].split(' | TOP ',1)[0]+' | '+pb_note
             display['bank_fa_notes']=True
         elif result['fa'] is not None:
             display['tags_fa']=bank_fa_notes(bank['values'],bank['points'])
@@ -336,6 +342,8 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         total, note = bank_display_total(display, vip, frame)
         display.update(total=total, grade=None, total_label='Tổng điểm tham khảo', status=note)
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
+    if pb_detail:
+        st.caption(pb_detail)
     if personal_bank:
         st.caption('Điểm cá nhân theo dữ liệu hiện có · Cảnh báo rủi ro không chặn tính điểm · Không tự thay đổi khuyến nghị VIP.')
         if research is not None and result['fa'] is None:
