@@ -246,6 +246,7 @@ def _panel_html(result, *, mode):
     </style>"""
 
     is_bds = str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS
+    is_ck = str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS
 
     def score_text(value, *, total=False, scale=100, exact=False):
         n = _finite(value)
@@ -274,7 +275,7 @@ def _panel_html(result, *, mode):
         '<div class="mvs-missing">Chưa đủ chỉ tiêu FA</div>'
     if result.get('bank') is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
-    elif is_bds and _finite(result.get('fa')) is not None:
+    elif (is_bds or is_ck) and _finite(result.get('fa')) is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=13)
     technical_tags = []
     rsi = _finite(result.get('rsi'))
@@ -296,7 +297,7 @@ def _panel_html(result, *, mode):
         cell_badge = grade_html if is_total else component_grade_badge(val, scale=scale, css_class="mvs-badge")
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
-                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=is_bds and not cells)}{cell_badge}</div>'
+                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=(is_bds or is_ck) and not cells)}{cell_badge}</div>'
                      + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
     return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
             '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
@@ -396,7 +397,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             if bank is not None:
                 import bank_web_review
                 bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
-    elif not str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS:
+    elif str(result.get('code','')).upper() not in (__import__('bds_fa').SYMBOLS | __import__('ck_fa').SYMBOLS):
         w = vip.weights_of(frame)
         eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
         st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
@@ -411,6 +412,9 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         if str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS:
             import bds_fa_eod
             st.write(bds_fa_eod.detail(result['code']))
+        elif str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS:
+            import ck_fa
+            st.write(ck_fa.detail(result['code']))
         st.write('**FA:** ' + ('; '.join(display['tags_fa']) if display['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
         st.write('**Điểm hệ thống:** ' + (_display(result['system']) + '/100' if result['system'] is not None else '—') +
