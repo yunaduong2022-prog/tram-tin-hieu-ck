@@ -201,10 +201,10 @@ def bank_fa_notes(values, points, *, estimated=False, ranks=None):
         info=(ranks or {}).get(k)
         suffix=''
         if info is not None:
-            direction='thấp thứ' if info['low'] else 'thứ'
-            suffix=f" · {direction} {info['rank']}/{info['count']} ngành Ngân hàng"
-            if info['rank']<=5:
-                suffix+=' · TOP 5'+(' thấp nhất' if info['low'] else '')
+            direction=' thấp nhất' if info['low'] else ''
+            suffix=f" | TOP {info['rank']}{direction} Ngành Ngân hàng"
+            if info['count'] != 28:
+                suffix+=f" ({info['count']} mã có dữ liệu)"
         notes.append(f'{label} {amount} – {rating}'+suffix)
     return notes
 
@@ -262,7 +262,7 @@ def _panel_html(result, *, mode):
         if not tags:
             return '<div class="mvs-missing">Chưa đủ lý do xác minh</div>'
         return '<ul class="mvs-tags">' + ''.join(
-            (f'<li>{html.escape(str(tag)).replace(" · TOP 5", " · <strong>TOP 5</strong>")}</li>' if limit==6 else f'<li>{html.escape(str(tag))}</li>') for tag in list(tags)[:limit]
+            f'<li>{html.escape(str(tag))}</li>' for tag in list(tags)[:limit]
         ) + '</ul>'
 
     fa = tag_list(result.get('tags_fa') or []) if _finite(result.get('fa')) is not None else \
