@@ -487,6 +487,10 @@ def fa_score_for_symbol(code, fd=None, *, price_k=None, price_date=None, asof=No
     import bank_fa
     code = str(code or '').strip().upper()
     bank = bank_fa.for_symbol(code,price_k=price_k,price_date=price_date,asof=asof) if code in bank_fa.BANKS else None
+    import bds_fa
+    if bank is None and code in bds_fa.SYMBOLS:
+        score, tags = bds_fa.for_symbol(code)
+        return score, tags, None
     if bank is None:
         score, tags = fa_score_fd(fd)
         return score, tags, None
@@ -814,6 +818,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             "Điểm bán": sell, "sell_auto": parse_price(p["Điểm bán"]) is None,
             "FA": fa, "FA tags": fa_tags, "TA": ta, "TA tags": ta_tags,
             "_fa_scale": fa_scale, "_bank_personal": bank_personal, "_bank_note": bank_note,
+            "_bds_fa": code in __import__("bds_fa").SYMBOLS,
             "RSI": _f(g["RSI"].iat[-1]) if "RSI" in g.columns else None,
             "Khuyến nghị": rec, "Ngoại": net5,
             "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Ngày mua": p.get("Ngày mua", ""), "Luận điểm": p.get("Luận điểm", ""),
@@ -1203,7 +1208,8 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     if _ok(r["FA"]):
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
-        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:6 if personal else 3])
+        fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if r.get('_bds_fa') else int(r['FA']))
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
@@ -1269,7 +1275,8 @@ def _score_cells(r) -> tuple[str, str, str, str]:
     if _ok(r["FA"]):
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
-        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:6 if personal else 3])
+        fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if r.get('_bds_fa') else int(r['FA']))
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
