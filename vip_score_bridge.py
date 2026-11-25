@@ -130,15 +130,15 @@ def _panel_html(result, *, mode):
       .mvs-vip .mvs-label{min-height:0;margin-bottom:7px}}
     </style>"""
 
-    def score_text(value, *, total=False):
+    def score_text(value, *, total=False, scale=100):
         n = _finite(value)
         if n is None:
             return '<span class="mvs-score">—</span>'
         score = f'{n:.0f}'
-        tip = html.escape(f'{n:.1f}/100', quote=True)
+        tip = html.escape(f'{n:.1f}/{scale}', quote=True)
         out = f'<span class="mvs-score" title="{tip}">{score}</span>'
         if not total:
-            out += '<span class="mvs-scale">/100</span>'
+            out += f'<span class="mvs-scale">/{scale}</span>'
         return out
 
     def bar(value):
@@ -169,14 +169,15 @@ def _panel_html(result, *, mode):
                   f'{html.escape(str(grade))}</span>') if grade and _finite(result.get('total')) is not None else ''
     cells = []
     for label, val, detail, is_total in (
-        ('Điểm cơ bản (FA)', result.get('fa'), fa, False),
+        (result.get('fa_label','Điểm cơ bản (FA)'), result.get('fa'), fa, False),
         ('Điểm kỹ thuật (TA)', result.get('ta'), ta, False),
         ('Tổng điểm', result.get('total'), '', True),
     ):
+        scale = result.get('fa_scale',100) if not cells else 100
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
-                     f'<div style="color:{text_color}">{score_text(val, total=is_total)}{grade_html if is_total else ""}</div>'
-                     + bar(val) + detail + '</div>')
+                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale)}{grade_html if is_total else ""}</div>'
+                     + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
     return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
             '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
 
@@ -191,7 +192,27 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
                          key=key + '_frame', help='Đối chiếu đúng khung Trung hạn hoặc Dài hạn trong Khuyến nghị khách hàng.')
     result = compute_vip_scores(code, frames_d, screener, fundamentals, frame=frame,
                                 asof=asof, vip_module=vip)
-    st.markdown(_panel_html(result, mode=mode), unsafe_allow_html=True)
+    # Presentation-only estimate; never mutate official result or VIP recommendation.
+    bank = result.get('bank')
+    research_rows = None
+    research = None
+    display = dict(result)
+    if bank is not None and mode == 'stock':
+        import bank_web_review
+        research_rows = bank_web_review.resolve_rows(st,key)
+        research = bank_web_review.chart_review(research_rows,result['code'],frames_d,asof)
+        if result['fa'] is None and research is not None:
+            fa_est=research['FA tham khảo /100']
+            if fa_est is not None:
+                display.update(fa=fa_est,fa_label='FA ước tính',fa_scale=100)
+            elif research['Tài chính /85'] is not None:
+                display.update(fa=research['Tài chính /85'],fa_label='FA tài chính tham khảo',fa_scale=85)
+            display['tags_fa']=[f"BCTC {research['Kỳ']} · {research['Rủi ro']}",
+                f"P/B ước tính {research['P/B ứng viên']:.2f}x" if research['P/B ứng viên'] is not None else 'Chưa có P/B phiên mới',
+                research['Trạng thái']]
+    st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
+    if research is not None and result['fa'] is None:
+        st.caption('FA ước tính từ dữ liệu quý; tổng điểm và VIP chính thức không dùng điểm này.')
     w = vip.weights_of(frame)
     eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
     st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
@@ -199,7 +220,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
     if result.get('status') and result['status'] != 'Đủ FA, TA và Score hệ thống.':
         st.caption(result['status'])
     bank = result.get('bank')
-    if bank is not None:
+    if bank is not None and (research is None or result['fa'] is not None):
         import bank_fa
         st.caption(f"BANK FA · Độ phủ {bank['coverage']}% · {bank['status']} · Kỳ: {bank['period'] or 'Chưa xác minh'}")
         with st.expander('Chi tiết 6 chỉ tiêu ngân hàng', expanded=False):
@@ -212,7 +233,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
                 st.caption('; '.join(bank['tags']))
     if bank is not None and mode == 'stock':
         import bank_web_review
-        bank_web_review.render(frames_d, asof, symbol=result['code'], key=key)
+        bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
         st.write('**FA:** ' + ('; '.join(result['tags_fa']) if result['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
