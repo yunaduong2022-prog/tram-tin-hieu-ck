@@ -1446,7 +1446,7 @@ def _wb_table() -> pd.DataFrame:
 def _meta_files_sig() -> str:
     """Dấu thời gian sửa file các nguồn P/B, ROE, Vốn hóa: đổi file nhập tay là cache tự làm mới (trước đây cache chỉ đổi khi có giá mới)."""
     sig = []
-    for f in ("data/nhap_tay.csv", "data/xep_hang_nganh.csv", "data/fundamentals.csv", "data/stock_metadata.csv", "data/thong_tin_chung.csv", "data/shares_outstanding.csv"):
+    for f in ("data/nhap_tay.csv", "data/xep_hang_nganh.csv", "data/fundamentals.csv", "data/stock_metadata.csv", "data/thong_tin_chung.csv", "data/shares_outstanding.csv", "data/company_directory.csv"):
         try:
             sig.append(str(int(os.path.getmtime(f))))
         except OSError:
@@ -1478,6 +1478,36 @@ def _wb_meta_maps_cached(key: str) -> tuple[dict, dict]:
     fund_map = FG.load_fund_map()   # đã chặn số mặc định / ngoài miền (fund_guard.py)
     XH.apply_to_maps(fund_map, cap_map)   # P/E, P/B, ROE, EPS, giá trị sổ sách, xếp hạng, vốn hóa theo bảng xếp hạng ngành (data/xep_hang_nganh.csv), chỉ điền ô còn thiếu
     apply_manual_overrides(fund_map, cap_map)   # ô "Vốn hóa TT" trong nhap_tay.csv (nếu có điền) vẫn ưu tiên hơn số tự tính
+    # MIN_COMPANY_DIRECTORY_FALLBACK_V2
+    try:
+        _directory = pd.read_csv(
+            "data/company_directory.csv",
+            dtype=str,
+            keep_default_na=False,
+            encoding="utf-8-sig"
+        )
+        _name_field = "T\u00ean c\u00f4ng ty"
+
+        for _, _record in _directory.iterrows():
+            _code = str(_record["symbol"]).strip().upper()
+            _name = str(_record["company_name"]).strip()
+
+            if not _code or not _name:
+                continue
+
+            _fd = fund_map.setdefault(_code, {})
+            _old_name = _fd.get(_name_field)
+
+            if (
+                not isinstance(_old_name, str)
+                or _old_name.strip().lower()
+                in ("", "-", "nan", "none")
+            ):
+                _fd[_name_field] = _name
+
+    except (OSError, ValueError, KeyError):
+        pass
+
     return cap_map, fund_map
 
 
