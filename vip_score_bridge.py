@@ -275,7 +275,7 @@ def _panel_html(result, *, mode):
     if result.get('bank') is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
     elif is_bds and _finite(result.get('fa')) is not None:
-        fa = tag_list(result.get('tags_fa') or [], limit=12)
+        fa = tag_list(result.get('tags_fa') or [], limit=13)
     technical_tags = []
     rsi = _finite(result.get('rsi'))
     if rsi is not None:
@@ -408,6 +408,9 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             st.caption('So sánh cùng kỳ BCTC trong 28 ngân hàng theo dõi; P/B cùng phiên EOD. NPL và P/B xếp từ thấp đến cao; các chỉ tiêu khác từ cao đến thấp. Đồng hạng nếu giá trị gốc bằng nhau. P/B thấp không đồng nghĩa cổ phiếu tốt.')
             st.dataframe(pd.DataFrame(bank_rank_table(ranks)),hide_index=True,use_container_width=True)
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
+        if str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS:
+            import bds_fa_eod
+            st.write(bds_fa_eod.detail(result['code']))
         st.write('**FA:** ' + ('; '.join(display['tags_fa']) if display['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
         st.write('**Điểm hệ thống:** ' + (_display(result['system']) + '/100' if result['system'] is not None else '—') +

@@ -489,7 +489,8 @@ def fa_score_for_symbol(code, fd=None, *, price_k=None, price_date=None, asof=No
     bank = bank_fa.for_symbol(code,price_k=price_k,price_date=price_date,asof=asof) if code in bank_fa.BANKS else None
     import bds_fa
     if bank is None and code in bds_fa.SYMBOLS:
-        score, tags = bds_fa.for_symbol(code)
+        from bds_fa_eod import for_symbol as bds_eod_for_symbol
+        score, tags = bds_eod_for_symbol(code)
         return score, tags, None
     if bank is None:
         score, tags = fa_score_fd(fd)
@@ -1237,7 +1238,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if r.get('_bds_fa') else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:13 if r.get("_bds_fa") else 6 if personal else 3])
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
@@ -1304,7 +1305,7 @@ def _score_cells(r) -> tuple[str, str, str, str]:
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if r.get('_bds_fa') else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:13 if r.get("_bds_fa") else 6 if personal else 3])
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
