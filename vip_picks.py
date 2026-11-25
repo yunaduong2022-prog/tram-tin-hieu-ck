@@ -482,11 +482,11 @@ def fa_score_fd(fd: dict | None) -> tuple[int | None, list[str]]:
     return fa_score(fd.get("P/E"), fd.get("ROE"), fd.get("P/B"))
 
 
-def fa_score_for_symbol(code, fd=None):
+def fa_score_for_symbol(code, fd=None, *, price_k=None, price_date=None, asof=None):
     """Shared symbol-aware FA result: score, tags and bank assessment."""
     import bank_fa
     code = str(code or '').strip().upper()
-    bank = bank_fa.for_symbol(code) if code in bank_fa.BANKS else None
+    bank = bank_fa.for_symbol(code,price_k=price_k,price_date=price_date,asof=asof) if code in bank_fa.BANKS else None
     if bank is None:
         score, tags = fa_score_fd(fd)
         return score, tags, None
@@ -761,7 +761,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         mid = (buy[0] + buy[1]) / 2 if (status == "Đang nắm giữ" and buy and not buy_auto) else None
         entry = (fill or mid) if status == "Đang nắm giữ" else None      # chỉ tính lợi nhuận khi đã vào lệnh; ưu tiên Giá khớp, không có thì giữa vùng Điểm mua do Admin nhập
         fd = fund_map.get(code, {}) or {}
-        fa, fa_tags, bank_eval = fa_score_for_symbol(code, fd)
+        fa, fa_tags, bank_eval = fa_score_for_symbol(code, fd, price_k=close, price_date=g['Ngày'].iat[-1], asof=frames_d['Ngày'].max())
         if fa is not None and fa < FA_WEAK:
             fa_tags = [f"Cơ bản yếu (FA dưới {FA_WEAK})"] + list(fa_tags)
         ta, ta_tags = ta_score(g)

@@ -244,13 +244,13 @@ def table_html(d: pd.DataFrame, layout: list[str]) -> str:
     return f'<div class="bk-wrap"><table class="bk-tb"><thead><tr>{th}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
-def render_section(sector: str | None) -> None:
+def render_section(sector: str | None, frames_d=None, asof=None) -> None:
     """Gọi ở cuối trang Xếp hạng cổ phiếu; chỉ vẽ khi ngành đang chọn có số liệu trong data/xep_hang_nganh.csv."""
     if not sector:
         return
     if sector == "Ngân hàng":
         import bank_fa
-        bank_fa.render()
+        bank_fa.render(frames_d, asof)
     d = load()
     if _ERR:
         st.warning(f"Không đọc được {PATH}: {_ERR}. Kiểm tra dòng tiêu đề có các cột Ngành, Mã, ... (mẫu trong file gốc).")
