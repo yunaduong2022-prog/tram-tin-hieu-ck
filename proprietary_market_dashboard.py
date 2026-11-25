@@ -85,15 +85,15 @@ def render(index_dates):
             st.dataframe(flagged[['trading_date','symbol','buy_vol','buy_val','sell_vol','sell_val','close','buy_ratio','sell_ratio','quality_reason']],hide_index=True,use_container_width=True)
     q=data[data.date.isin(dates)].copy()
     if q.empty: st.info('Chưa có bản ghi từng mã trong kỳ đã chọn.'); return
-    st.subheader('Dòng tiền từng mã trong mẫu')
+    st.subheader('Dòng tiền tự doanh theo mã')
     st.warning(f'{q.symbol.nunique()} mã · {q.date.nunique()}/{n} phiên có bản ghi · {source_label(q)}. Không đại diện toàn thị trường; thiếu bản ghi không phải bằng 0.')
     ranked=aggregate(q); ranked['Nhóm ngành']=ranked.symbol.map(_membership()).fillna('Khác'); ranked['Ròng (tỷ)']=ranked.net_val/1e9
     a,b,c=st.columns(3)
-    a.metric('Ròng các bản ghi trong mẫu',money(q.net_val.sum())); b.metric('Số mã trong mẫu',len(ranked)); c.metric('Mã mua / bán ròng',f'{ranked.net_val.gt(0).sum()} / {ranked.net_val.lt(0).sum()}')
+    a.metric('Giá trị ròng đã ghi nhận',money(q.net_val.sum())); b.metric('Số mã có dữ liệu',len(ranked)); c.metric('Mã mua / bán ròng',f'{ranked.net_val.gt(0).sum()} / {ranked.net_val.lt(0).sum()}')
     l,r=st.columns(2)
     for col,positive,label,color in [(l,True,'Top 10 mua ròng','#229970'),(r,False,'Top 10 bán ròng','#dd5660')]:
         with col:
-            st.markdown('**'+label+' (trong mẫu)**')
+            st.markdown('**'+label+'**')
             d=ranked[ranked.net_val.gt(0) if positive else ranked.net_val.lt(0)].sort_values('net_val',ascending=not positive).head(10).iloc[::-1]
             if d.empty: st.info('Không có mã phù hợp.')
             else:
@@ -101,10 +101,11 @@ def render(index_dates):
                 fig.update_traces(textposition='outside',cliponaxis=False)
                 fig.update_layout(margin=dict(l=45,r=65,t=15,b=25))
                 st.plotly_chart(fig,use_container_width=True)
-    st.subheader('Dòng tiền theo ngành trong mẫu')
-    g=ranked.groupby('Nhóm ngành',as_index=False)['Ròng (tỷ)'].sum().sort_values('Ròng (tỷ)'); g['Chiều']=g['Ròng (tỷ)'].ge(0).map({True:'Mua ròng',False:'Bán ròng'})
-    st.plotly_chart(px.bar(g,x='Ròng (tỷ)',y='Nhóm ngành',orientation='h',color='Chiều',color_discrete_map={'Mua ròng':'#229970','Bán ròng':'#dd5660'}),use_container_width=True)
-    st.subheader('Bảng chi tiết trong mẫu')
+    st.subheader('Dòng tiền tự doanh theo ngành')
+    from flow_sector_chart import sector_figure
+    st.plotly_chart(sector_figure(ranked,'Ròng (tỷ)',_membership()),use_container_width=True)
+    st.caption('Số mã có dữ liệu / tổng mã trong kho EOD theo phân ngành nội bộ. Không đại diện toàn bộ ngành niêm yết.')
+    st.subheader('Bảng chi tiết')
     search=st.text_input('Tìm mã',key='prop_market_search').strip().upper(); sectors=st.multiselect('Nhóm ngành',sorted(ranked['Nhóm ngành'].unique()),key='prop_market_sectors')
     shown=ranked.copy()
     if search: shown=shown[shown.symbol.str.contains(search,regex=False)]

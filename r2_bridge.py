@@ -363,6 +363,16 @@ def mirror(*, s3, conf, root=ROOT):
                 local = root / name
                 if name in ('data/eod_prices.csv', 'data/index_prices.csv') and local.is_file():
                     staged = _preserve_newer_local_eod(local, staged, temp)
+                if name == 'data/fundamentals.csv' and local.is_file():
+                    from fundamental_merge import merge
+                    merged = Path(temp) / 'fundamentals_merged.csv'
+                    try:
+                        merge(local, staged).to_csv(merged,index=False,encoding='utf-8-sig')
+                    except (OSError, ValueError, KeyError, TypeError):
+                        import warnings
+                        warnings.warn('Fundamental merge rejected; retaining local file.', RuntimeWarning)
+                        continue
+                    staged = merged
                 local.parent.mkdir(parents=True, exist_ok=True)
                 previous = backup_dir / Path(name).name
                 existed = local.is_file()
