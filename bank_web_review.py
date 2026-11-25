@@ -104,7 +104,7 @@ def fixed_rows(config, today=None):
     return parse(base64.b64decode(encoded,validate=True),today=today)
 
 
-def fixed_ui(st,key):
+def fixed_ui(st,key,*,compact=False):
     # Authentication belongs to Streamlit private sharing, not the bank panel.
     try:
         config=st.secrets.get('bank_fixed_v2')
@@ -117,13 +117,15 @@ def fixed_ui(st,key):
     except (ValueError,TypeError,KeyError,UnicodeError,csv.Error):
         st.error('BANK FA: cấu hình hoặc dữ liệu quý không hợp lệ. Kiểm tra Secrets.')
         return True,None
-    st.caption('Dữ liệu ngân hàng cố định theo quý · FA ước tính · Dùng cho phân tích cá nhân; không tự thay đổi khuyến nghị VIP.')
+    if not compact:
+        st.caption('Dữ liệu ngân hàng cố định theo quý · FA ước tính · Dùng cho phân tích cá nhân; không tự thay đổi khuyến nghị VIP.')
     return True,rows
 
 
-def resolve_rows(st,key):
-    st.markdown('**BANK FA · Dữ liệu quý (ước tính)**')
-    configured, rows = fixed_ui(st,key)
+def resolve_rows(st,key,*,compact=False):
+    if not compact:
+        st.markdown('**BANK FA · Dữ liệu quý (ước tính)**')
+    configured, rows = fixed_ui(st,key,compact=compact)
     if configured and rows is None:
         return None
     if not configured:

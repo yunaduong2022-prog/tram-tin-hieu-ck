@@ -354,41 +354,50 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
     display = dict(result)
     if bank is not None:
         import bank_web_review
-        research_rows = bank_web_review.resolve_rows(st,key)
+        research_rows = bank_web_review.resolve_rows(st,key,compact=True)
         display, research, ranks, pb_detail, personal_bank = bank_shared_display(
             result, research_rows, bank_web_review.current_prices(frames_d,asof), vip, frame)
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
-    if pb_detail:
-        st.caption(pb_detail)
-    if personal_bank:
-        st.caption('Điểm cá nhân theo dữ liệu hiện có · Cảnh báo rủi ro không chặn tính điểm · Không tự thay đổi khuyến nghị VIP.')
-        if research is not None and result['fa'] is None:
-            st.caption(f"FA ước tính · BCTC {research['Kỳ']} · {research['Trạng thái']}")
-            if research['Rủi ro']=='Cảnh báo':
-                st.warning('Cảnh báo rủi ro tài chính theo ngưỡng BANK FA.')
-            if display.get('fa_scale')==85:
-                st.caption('Thiếu P/B: hiện điểm tài chính trên thang 85.')
-    w = vip.weights_of(frame)
-    eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
-    st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
-               'Cùng công thức Khuyến nghị khách hàng; điểm TA lấy nến Ngày EOD.')
-    if display.get('status'):
-        st.caption(display['status'])
-    bank = result.get('bank')
-    if bank is not None and (research is None or result['fa'] is not None):
-        import bank_fa
-        st.caption(f"BANK FA · Độ phủ {bank['coverage']}% · {bank['status']} · Kỳ: {bank['period'] or 'Chưa xác minh'}")
-        with st.expander('Chi tiết 6 chỉ tiêu ngân hàng', expanded=False):
-            st.dataframe(pd.DataFrame([{'Chỉ tiêu': k, 'Giá trị': bank['values'][k],
-                'Điểm': bank['points'].get(k), 'Tối đa': w} for k,w in bank_fa.WEIGHTS.items()]),
-                hide_index=True, use_container_width=True)
-            st.caption(f"P/B theo phiên: {bank['price_date'] or '—'} · BVPS: {bank['bvps'] if bank['bvps'] is not None else '—'} VND")
-            st.write('Nguồn: ' + (bank['source'] or 'Chưa xác minh'))
-            if bank['tags']:
-                st.caption('; '.join(bank['tags']))
+    if personal_bank and research is not None and result['fa'] is None:
+        if research['Rủi ro']=='Cảnh báo':
+            st.warning('Cảnh báo rủi ro tài chính theo ngưỡng BANK FA.')
+        if display.get('fa_scale')==85:
+            st.warning('Thiếu P/B: điểm tài chính trên thang 85.')
     if bank is not None:
-        import bank_web_review
-        bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
+        with st.expander('Chi tiết dữ liệu và cách chấm điểm ngân hàng', expanded=False):
+            if pb_detail:
+                st.caption(pb_detail)
+            if personal_bank:
+                st.caption('Điểm cá nhân theo dữ liệu hiện có · Cảnh báo rủi ro không chặn tính điểm · Không tự thay đổi khuyến nghị VIP.')
+                if research is not None and result['fa'] is None:
+                    st.caption(f"FA ước tính · BCTC {research['Kỳ']} · {research['Trạng thái']}")
+            w = vip.weights_of(frame)
+            eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
+            st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
+                       'Cùng công thức Khuyến nghị khách hàng; điểm TA lấy nến Ngày EOD.')
+            if display.get('status'):
+                st.caption(display['status'])
+            bank = result.get('bank')
+            if bank is not None and (research is None or result['fa'] is not None):
+                import bank_fa
+                st.caption(f"BANK FA · Độ phủ {bank['coverage']}% · {bank['status']} · Kỳ: {bank['period'] or 'Chưa xác minh'}")
+                st.dataframe(pd.DataFrame([{'Chỉ tiêu': k, 'Giá trị': bank['values'][k],
+                    'Điểm': bank['points'].get(k), 'Tối đa': w} for k,w in bank_fa.WEIGHTS.items()]),
+                    hide_index=True, use_container_width=True)
+                st.caption(f"P/B theo phiên: {bank['price_date'] or '—'} · BVPS: {bank['bvps'] if bank['bvps'] is not None else '—'} VND")
+                st.write('Nguồn: ' + (bank['source'] or 'Chưa xác minh'))
+                if bank['tags']:
+                    st.caption('; '.join(bank['tags']))
+            if bank is not None:
+                import bank_web_review
+                bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
+    else:
+        w = vip.weights_of(frame)
+        eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
+        st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
+                   'Cùng công thức Khuyến nghị khách hàng; điểm TA lấy nến Ngày EOD.')
+        if display.get('status'):
+            st.caption(display['status'])
     if ranks:
         with st.expander('Top 5 ngân hàng theo từng chỉ tiêu FA', expanded=False):
             st.caption('So sánh cùng kỳ BCTC trong 28 ngân hàng theo dõi; P/B cùng phiên EOD. NPL và P/B xếp từ thấp đến cao; các chỉ tiêu khác từ cao đến thấp. Đồng hạng nếu giá trị gốc bằng nhau. P/B thấp không đồng nghĩa cổ phiếu tốt.')
