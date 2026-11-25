@@ -1,30 +1,33 @@
 
 import pandas as pd
+import market_calendar as MC
 
 def expected_eod(now=None):
-    if now is None:
-        now = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh")
+    return MC.expected_session(
+        now,
+        cutoff=(15, 30)
+    )
 
-    now = pd.Timestamp(now)
+def stale(latest, now=None):
+    try:
+        if pd.isna(latest):
+            return True
 
-    if now.tzinfo is not None:
-        now = now.tz_convert(
-            "Asia/Ho_Chi_Minh"
-        ).tz_localize(None)
+        day = MC.local_timestamp(latest).normalize()
+        current = MC.local_timestamp(now)
+        expected = expected_eod(current)
 
-    day = now.normalize()
+        # Fail closed when an annual calendar is unverified.
+        if not MC.calendar_verified(current):
+            return True
 
-    if day.dayofweek >= 5 or (
-        now.hour,now.minute
-    ) < (15,30):
-        day -= pd.Timedelta(days=1)
+        if not MC.calendar_verified(expected):
+            return True
 
-    while day.dayofweek >= 5:
-        day -= pd.Timedelta(days=1)
+        if not MC.is_trading_day(day):
+            return True
 
-    return day
+        return day != expected
 
-def stale(latest,now=None):
-    if pd.isna(latest):
+    except (TypeError, ValueError, OverflowError):
         return True
-    return pd.Timestamp(latest).normalize() < expected_eod(now)
