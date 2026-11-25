@@ -123,7 +123,59 @@ def _display(v):
     return '—' if n is None else f'{n:.1f}'
 
 
-def bank_fa_notes(values, points, *, estimated=False):
+def bank_metric_ranks(rows, current, prices, score_fn):
+    """Compare raw metrics for the selected bank against comparable peers.
+
+    Financial ratios: same quarter. P/B: same quarter and same valid EOD.
+    Competition ranks (1, 2, 2, 4) use unrounded values; include cutoff ties.
+    """
+    if not rows or not current:
+        return {}
+    code=current.get('Mã')
+    period=current.get('Kỳ')
+    if not code or not period:
+        return {}
+    peers=[score_fn(row,*prices.get(symbol,(None,None,False)))
+           for symbol,row in rows.items() if row.get('period_end')==period]
+    out={}
+    for k in ('ROE','NIM','CASA','NPL','LLR','PB'):
+        field='P/B ứng viên' if k=='PB' else k
+        point_field='Điểm P/B /15' if k=='PB' else k+' điểm'
+        v=_finite(current.get(field))
+        if v is None or _finite(current.get(point_field)) is None:
+            continue
+        if k=='PB' and not current.get('Phiên giá'):
+            continue
+        comparable=[]
+        for p in peers:
+            value=_finite(p.get(field))
+            if value is None or _finite(p.get(point_field)) is None:
+                continue
+            if k=='PB' and p.get('Phiên giá')!=current.get('Phiên giá'):
+                continue
+            comparable.append((p['Mã'],value))
+        if not any(s==code and value==v for s,value in comparable):
+            continue
+        low=k in ('NPL','PB')
+        comparable.sort(key=lambda item: (item[1] if low else -item[1],item[0]))
+        def rank(value):
+            return 1+sum(1 for _,other in comparable if (other<value if low else other>value))
+        out[k]={'rank':rank(v),'count':len(comparable),'low':low,
+                'top':[(s,value,rank(value)) for s,value in comparable if rank(value)<=5]}
+    return out
+
+
+def bank_rank_table(ranks):
+    """Small table for the leaders of each comparable metric."""
+    result=[]
+    for k,info in ranks.items():
+        label={'PB':'P/B thấp (ước tính)','NPL':'NPL thấp'}.get(k,k+' cao')
+        leaders=' · '.join(f"#{r} {s} ({v:.2f}{'x' if k=='PB' else '%'})" for s,v,r in info['top'])
+        result.append({'Chỉ tiêu':label,'Top 5 theo chỉ tiêu':leaders,'Số mã so sánh':info['count']})
+    return result
+
+
+def bank_fa_notes(values, points, *, estimated=False, ranks=None):
     """Describe the existing rubric, not an independent valuation or score."""
     levels = {
         'ROE': {20:'Rất tốt',17:'Tốt',14:'Khá',10:'Trung bình',5:'Thấp',0:'Rất thấp'},
@@ -146,7 +198,14 @@ def bank_fa_notes(values, points, *, estimated=False):
         amount=f'{v:.2f}'.replace('.',',')+('x' if k=='PB' else '%')
         rating=levels[k].get(p,'Theo thang điểm FA')
         if k=='PB': rating='Điểm định giá '+rating.lower()
-        notes.append(f'{label} {amount} – {rating}')
+        info=(ranks or {}).get(k)
+        suffix=''
+        if info is not None:
+            direction='thấp thứ' if info['low'] else 'thứ'
+            suffix=f" · {direction} {info['rank']}/{info['count']} ngành Ngân hàng"
+            if info['rank']<=5:
+                suffix+=' · TOP 5'+(' thấp nhất' if info['low'] else '')
+        notes.append(f'{label} {amount} – {rating}'+suffix)
     return notes
 
 
@@ -203,7 +262,7 @@ def _panel_html(result, *, mode):
         if not tags:
             return '<div class="mvs-missing">Chưa đủ lý do xác minh</div>'
         return '<ul class="mvs-tags">' + ''.join(
-            f'<li>{html.escape(str(tag))}</li>' for tag in list(tags)[:limit]
+            (f'<li>{html.escape(str(tag)).replace(" · TOP 5", " · <strong>TOP 5</strong>")}</li>' if limit==6 else f'<li>{html.escape(str(tag))}</li>') for tag in list(tags)[:limit]
         ) + '</ul>'
 
     fa = tag_list(result.get('tags_fa') or []) if _finite(result.get('fa')) is not None else \
@@ -249,6 +308,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
     bank = result.get('bank')
     research_rows = None
     research = None
+    ranks = {}
     display = dict(result)
     if bank is not None and mode == 'stock':
         import bank_web_review
@@ -264,7 +324,8 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             points={k:research.get(k+' điểm') for k in values}
             values['PB']=research.get('P/B ứng viên')
             points['PB']=research.get('Điểm P/B /15')
-            display['tags_fa']=bank_fa_notes(values,points,estimated=True)
+            ranks=bank_metric_ranks(research_rows,research,bank_web_review.current_prices(frames_d,asof),bank_web_review.score)
+            display['tags_fa']=bank_fa_notes(values,points,estimated=True,ranks=ranks)
             display['bank_fa_notes']=True
         elif result['fa'] is not None:
             display['tags_fa']=bank_fa_notes(bank['values'],bank['points'])
@@ -304,6 +365,10 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
     if bank is not None and mode == 'stock':
         import bank_web_review
         bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
+    if ranks:
+        with st.expander('Top 5 ngân hàng theo từng chỉ tiêu FA', expanded=False):
+            st.caption('So sánh cùng kỳ BCTC trong 28 ngân hàng theo dõi; P/B cùng phiên EOD. NPL và P/B xếp từ thấp đến cao; các chỉ tiêu khác từ cao đến thấp. Đồng hạng nếu giá trị gốc bằng nhau. P/B thấp không đồng nghĩa cổ phiếu tốt.')
+            st.dataframe(pd.DataFrame(bank_rank_table(ranks)),hide_index=True,use_container_width=True)
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
         st.write('**FA:** ' + ('; '.join(display['tags_fa']) if display['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
