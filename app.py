@@ -2049,7 +2049,7 @@ def page_sector_ranking(mode: str = "rank"):
 
     SR.render(raw, DATA_KEY, res_df, t, WL.GROUPS, fund_map, _card, mkt, mode=mode)
     if mode == "rank":
-        XH.render_section(st.session_state.get("sr_sector"))   # bảng xếp hạng cơ bản của ngành đang chọn (Ngân hàng, Hàng công nghiệp...), nếu có số liệu
+        XH.render_section(st.session_state.get("sr_sector"), frames["D"], latest_date)   # bảng xếp hạng cơ bản của ngành đang chọn (Ngân hàng, Hàng công nghiệp...), nếu có số liệu
 
 
 def _wl_card(r, u, ver):

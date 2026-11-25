@@ -56,8 +56,9 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
                 'asof': None, 'status': 'Chỉ chấm điểm cổ phiếu, không chấm chỉ số.'}
 
     fdict = (fundamentals or {}).get(code, {}) if isinstance(fundamentals, dict) else {}
-    fa, fa_tags, bank = vip.fa_score_for_symbol(code, fdict or {})
     daily, last_date = _daily_for(code, frames_d)
+    close = daily['Giá đóng cửa'].iat[-1] if not daily.empty and 'Giá đóng cửa' in daily.columns else None
+    fa, fa_tags, bank = vip.fa_score_for_symbol(code, fdict or {}, price_k=close, price_date=last_date, asof=asof)
     check_date = pd.to_datetime(asof, errors='coerce') if asof is not None else None
     stale = (last_date is not None and pd.notna(check_date) and
              last_date != check_date.normalize())
@@ -205,6 +206,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             st.dataframe(pd.DataFrame([{'Chỉ tiêu': k, 'Giá trị': bank['values'][k],
                 'Điểm': bank['points'].get(k), 'Tối đa': w} for k,w in bank_fa.WEIGHTS.items()]),
                 hide_index=True, use_container_width=True)
+            st.caption(f"P/B theo phiên: {bank['price_date'] or '—'} · BVPS: {bank['bvps'] if bank['bvps'] is not None else '—'} VND")
             st.write('Nguồn: ' + (bank['source'] or 'Chưa xác minh'))
             if bank['tags']:
                 st.caption('; '.join(bank['tags']))
