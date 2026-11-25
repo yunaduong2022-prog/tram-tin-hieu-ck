@@ -65,7 +65,9 @@ def _bar_chart(flows):
     fig = go.Figure(go.Bar(
         x=ordered['date'], y=net,
         marker_color=['#26B788' if v >= 0 else '#E15B6A' for v in net],
+        text=net.map(lambda v:f'{v:+,.2f}'), textposition='outside', cliponaxis=False,
         name='Tự doanh ròng (tỷ)'))
+    fig.update_xaxes(tickformat='%d/%m',automargin=True)
     fig.add_hline(y=0, line_color='rgba(180,190,190,.45)', line_width=1)
     fig.update_layout(template='plotly_dark', height=340,
                       paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
