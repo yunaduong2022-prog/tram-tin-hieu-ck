@@ -718,7 +718,8 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         close = float(g["Giá đóng cửa"].iat[-1])
         prev = float(g["Giá đóng cửa"].iat[-2]) if len(g) > 1 else np.nan
         wbrow = wbmap.get(code, {})
-        sysv = _system_levels(code, ctx_fn, wbrow)
+        stale = frames_d.empty or pd.Timestamp(g["Ngày"].iat[-1]).normalize() != pd.Timestamp(frames_d["Ngày"].max()).normalize()
+        sysv = dict(buy=None, target=None, stop=None, sell=None) if stale else _system_levels(code, ctx_fn, wbrow)
 
         def pick(user_txt, kind):
             """(giá trị người dùng nhập, tự động?)"""
@@ -748,7 +749,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         sys_pts = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
         total = total_score(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"))
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
-        rec = recommend(close, buy, stop, sell, wbreason, status)
+        rec = ("DỮ LIỆU QUÁ HẠN", "gray", "Không phát sinh khuyến nghị mới") if stale else recommend(close, buy, stop, sell, wbreason, status)
         name, sector = meta_fn(code) if meta_fn else ("", "")
         net5, exch = fgn.get(code, (None, ""))
         rows.append({

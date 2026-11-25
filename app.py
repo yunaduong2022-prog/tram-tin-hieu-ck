@@ -641,6 +641,8 @@ def _action_ctx(code):
         c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce")
         if c.empty:
             return None
+        if pd.Timestamp(g["Ngày"].iloc[-1]).normalize() != pd.Timestamp(latest_date).normalize():
+            return None  # MIN stale EOD action guard
         ma = {n: (float(c.rolling(n).mean().iloc[-1]) if len(c) >= n else None) for n in (20, 50, 200)}
         w = _wb_rows(WY_KEY + "|" + E.ENGINE_VERSION + "|wb14").get(code, {})
         state, reason = str(w.get("Trạng thái", "")), str(w.get("Lý do", ""))
