@@ -743,15 +743,19 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         mid = (buy[0] + buy[1]) / 2 if (status == "Đang nắm giữ" and buy and not buy_auto) else None
         entry = (fill or mid) if status == "Đang nắm giữ" else None      # chỉ tính lợi nhuận khi đã vào lệnh; ưu tiên Giá khớp, không có thì giữa vùng Điểm mua do Admin nhập
         fd = fund_map.get(code, {}) or {}
-        fa, fa_tags = fa_score_fd(fd)
+        import bank_fa
+        bank_eval = bank_fa.for_symbol(code) if code in bank_fa.BANKS else None
+        fa, fa_tags = (bank_eval["score"], bank_eval["tags"]) if bank_eval is not None else fa_score_fd(fd)
         if fa is not None and fa < FA_WEAK:
             fa_tags = [f"Cơ bản yếu (FA dưới {FA_WEAK})"] + list(fa_tags)
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
         sys_pts = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
-        total = total_score(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"))
+        total = None if bank_eval is not None and (fa is None or bank_eval["risk"]) else total_score(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"))
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
         rec = ("DỮ LIỆU QUÁ HẠN", "gray", "Không phát sinh khuyến nghị mới") if stale else recommend(close, buy, stop, sell, wbreason, status)
+        if bank_eval is not None and status != "Đang nắm giữ" and not stale and (fa is None or bank_eval["risk"]):
+            rec = ("CHỜ XÁC MINH FA", "gray", "; ".join(bank_eval["tags"]) or "Kiểm tra FA ngân hàng")
         name, sector = meta_fn(code) if meta_fn else ("", "")
         net5, exch = fgn.get(code, (None, ""))
         rows.append({

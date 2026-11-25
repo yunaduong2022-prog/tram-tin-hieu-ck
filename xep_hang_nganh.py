@@ -248,6 +248,9 @@ def render_section(sector: str | None) -> None:
     """Gọi ở cuối trang Xếp hạng cổ phiếu; chỉ vẽ khi ngành đang chọn có số liệu trong data/xep_hang_nganh.csv."""
     if not sector:
         return
+    if sector == "Ngân hàng":
+        import bank_fa
+        bank_fa.render()
     d = load()
     if _ERR:
         st.warning(f"Không đọc được {PATH}: {_ERR}. Kiểm tra dòng tiêu đề có các cột Ngành, Mã, ... (mẫu trong file gốc).")
@@ -255,6 +258,10 @@ def render_section(sector: str | None) -> None:
     if d.empty:
         return
     d = d[d["Ngành"] == sector].sort_values("STT", na_position="last")
+    if sector == "Ngân hàng":
+        import bank_fa
+        d = d[d["Mã"].isin(bank_fa.BANKS)]
+        st.caption("Bảng nguồn cũ chưa xác minh kỳ và ngày; không dùng để chấm BANK FA.")
     if d.empty:
         return
     kỳ = str(d["Kỳ"].dropna().iat[0]) if "Kỳ" in d.columns and d["Kỳ"].notna().any() else ""
