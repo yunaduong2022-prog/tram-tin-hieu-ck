@@ -3,7 +3,7 @@
   "latest_date": "2026-11-23",
   "symbols": 496,
   "symbols_on_latest_date": 427,
-  "rows": 565555,
+  "rows": 566637,
   "sources": {
     "SSI_IBOARD_PUBLIC": 232
   },
@@ -50,5 +50,7 @@
   "skipped": 38,
   "adjusted": [],
   "stopped": null,
-  "expansion_status": "HISTORY_IMPORTED_SIGNAL_REVIEW_PENDING"
+  "expansion_status": "HISTORY_IMPORTED_SIGNAL_REVIEW_PENDING",
+  "legacy_r2_rows_restored": 1082,
+  "history_merge_date": "2026-11-25"
 }
