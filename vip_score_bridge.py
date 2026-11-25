@@ -123,6 +123,33 @@ def _display(v):
     return '—' if n is None else f'{n:.1f}'
 
 
+def bank_fa_notes(values, points, *, estimated=False):
+    """Describe the existing rubric, not an independent valuation or score."""
+    levels = {
+        'ROE': {20:'Rất tốt',17:'Tốt',14:'Khá',10:'Trung bình',5:'Thấp',0:'Rất thấp'},
+        'NIM': {15:'Rất tốt',12:'Tốt',9:'Khá',5:'Thấp',0:'Rất thấp'},
+        'CASA': {10:'Rất tốt',8:'Tốt',6:'Khá',4:'Trung bình',2:'Thấp',0:'Rất thấp'},
+        'NPL': {20:'Rất thấp',17:'Thấp',14:'Khá thấp',8:'Cần theo dõi',3:'Cao',0:'Rất cao'},
+        'LLR': {20:'Rất tốt',17:'Tốt',14:'Khá',8:'Trung bình',4:'Thấp',0:'Rất thấp'},
+        'PB': {15:'Rất tốt',13:'Tốt',11:'Khá',8:'Trung bình',5:'Thấp',2:'Rất thấp',0:'Rất thấp'},
+    }
+    notes=[]
+    for k in ('ROE','NIM','CASA','NPL','LLR','PB'):
+        v=_finite(values.get(k))
+        p=points.get(k)
+        label={'NPL':'NPL (nợ xấu)','LLR':'LLR (bao phủ nợ xấu)','PB':'P/B'}.get(k,k)
+        if k=='PB' and estimated:
+            label+=' ước tính'
+        if v is None or p is None:
+            notes.append(f'{label}: Chưa có dữ liệu')
+            continue
+        amount=f'{v:.2f}'.replace('.',',')+('x' if k=='PB' else '%')
+        rating=levels[k].get(p,'Theo thang điểm FA')
+        if k=='PB': rating='Điểm định giá '+rating.lower()
+        notes.append(f'{label} {amount} – {rating}')
+    return notes
+
+
 def _panel_html(result, *, mode):
     """Three compact VIP-style columns with a gradient bar and sourced FA/TA tags.
 
@@ -172,17 +199,17 @@ def _panel_html(result, *, mode):
         width = 0 if n is None else max(0.0, min(100.0, n))
         return f'<div class="mvs-bar"><div class="mvs-fill" style="width:{width:.1f}%"></div></div>'
 
-    def tag_list(tags):
+    def tag_list(tags, limit=3):
         if not tags:
             return '<div class="mvs-missing">Chưa đủ lý do xác minh</div>'
         return '<ul class="mvs-tags">' + ''.join(
-            f'<li>{html.escape(str(tag))}</li>' for tag in list(tags)[:3]
+            f'<li>{html.escape(str(tag))}</li>' for tag in list(tags)[:limit]
         ) + '</ul>'
 
     fa = tag_list(result.get('tags_fa') or []) if _finite(result.get('fa')) is not None else \
         '<div class="mvs-missing">Chưa đủ chỉ tiêu FA</div>'
     if result.get('bank') is not None:
-        fa = tag_list(result.get('tags_fa') or [])
+        fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
     technical_tags = []
     rsi = _finite(result.get('rsi'))
     if rsi is not None:
@@ -230,12 +257,18 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         if result['fa'] is None and research is not None:
             fa_est=research['FA tham khảo /100']
             if fa_est is not None:
-                display.update(fa=fa_est,fa_label='FA ước tính',fa_scale=100)
+                display.update(fa=fa_est,fa_label='Điểm cơ bản (FA)',fa_scale=100)
             elif research['Tài chính /85'] is not None:
-                display.update(fa=research['Tài chính /85'],fa_label='FA tài chính tham khảo',fa_scale=85)
-            display['tags_fa']=[f"BCTC {research['Kỳ']} · {research['Rủi ro']}",
-                f"P/B ước tính {research['P/B ứng viên']:.2f}x" if research['P/B ứng viên'] is not None else 'Chưa có P/B phiên mới',
-                research['Trạng thái']]
+                display.update(fa=research['Tài chính /85'],fa_label='Điểm cơ bản (FA)',fa_scale=85)
+            values={k:research.get(k) for k in ('ROE','NIM','CASA','NPL','LLR')}
+            points={k:research.get(k+' điểm') for k in values}
+            values['PB']=research.get('P/B ứng viên')
+            points['PB']=research.get('Điểm P/B /15')
+            display['tags_fa']=bank_fa_notes(values,points,estimated=True)
+            display['bank_fa_notes']=True
+        elif result['fa'] is not None:
+            display['tags_fa']=bank_fa_notes(bank['values'],bank['points'])
+            display['bank_fa_notes']=True
     # Private chart: quality warnings do not veto the research total.
     personal_bank = bank is not None and mode == 'stock' and display.get('fa') is not None
     if personal_bank:
@@ -244,6 +277,12 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
     if personal_bank:
         st.caption('Điểm cá nhân theo dữ liệu hiện có · Cảnh báo rủi ro không chặn tính điểm · Không tự thay đổi khuyến nghị VIP.')
+        if research is not None and result['fa'] is None:
+            st.caption(f"FA ước tính · BCTC {research['Kỳ']} · {research['Trạng thái']}")
+            if research['Rủi ro']=='Cảnh báo':
+                st.warning('Cảnh báo rủi ro tài chính theo ngưỡng BANK FA.')
+            if display.get('fa_scale')==85:
+                st.caption('Thiếu P/B: hiện điểm tài chính trên thang 85.')
     w = vip.weights_of(frame)
     eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
     st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
