@@ -460,6 +460,11 @@ except Exception as e:
 df = frames["D"]
 latest_date = df["Ngày"].max()
 
+# MIN_GLOBAL_EOD_GUARD_V1
+import market_eod_guard as MEG
+_MARKET_EOD_STALE = MEG.stale(latest_date)
+
+
 # TRAM_CK_READONLY_SCL_CLOUD_DIAG_V1
 if str(st.query_params.get("diag_scl", "")) == "1":
     import csv as _diag_csv
@@ -635,6 +640,9 @@ def _action_ctx(code):
     """Ngữ cảnh (dict) của khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ: gom các tag của thẻ (MA, trạng thái, Dự báo, phân kỳ RSI, Wyckoff,
     hỗ trợ - kháng cự) thành hành động cho 3 vị thế: có cổ phiếu / cầm tiền mặt / đang margin. Quy tắc nằm ở action_summary.py.
     Hàm này chỉ dựng ctx để AS.html / AS.plan dùng chung; trả None nếu chưa có giá."""
+
+    if _MARKET_EOD_STALE:
+        return None
     try:
         code = str(code)
         g = df[df["Mã"] == code].sort_values("Ngày")
@@ -699,6 +707,12 @@ def short_sessions_note(sess: pd.Series, min_sessions: int = MIN_SESSIONS_WARN) 
 
 
 def header():
+    if _MARKET_EOD_STALE:
+        st.warning(
+            f"EOD ch\u01b0a c\u1eadp nh\u1eadt: {latest_date:%d/%m/%Y}. "
+            f"Phi\u00ean d\u1ef1 ki\u1ebfn: {MEG.expected_eod():%d/%m/%Y}. "
+            "Ch\u1ec9 d\u00f9ng nghi\u00ean c\u1ee9u l\u1ecbch s\u1eed."
+        )
     st.caption(f"Dữ liệu đến ngày **{latest_date:%d/%m/%Y}** · {df['Mã'].nunique()} mã · "
                f"trung vị {int(_sess.median()):,} phiên/mã · RS so với {mkt_src}")
     _lv, _msg = short_sessions_note(_sess)
@@ -1750,6 +1764,13 @@ def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
 def page_wait_buy():
     st.title("🛒 Chờ mua")
     header()
+
+    if _MARKET_EOD_STALE:
+        st.warning(
+            "T\u1ea1m ng\u1eebng t\u00edn hi\u1ec7u mua. "
+            "C\u1ea7n c\u1eadp nh\u1eadt EOD phi\u00ean m\u1edbi."
+        )
+        return
     st.caption("Danh sách theo dõi & khuyến nghị cho các cơ hội mua trong tuần. Độc lập với mục Lọc tất cả CP và Backtest. "
                "Chỉ gồm mã có xu hướng đủ khỏe; mã đang phục hồi nằm ở mục **Đang phục hồi**; mã tăng quá đà, suy yếu hoặc không có điểm mua nằm ở mục **Danh sách cảnh báo**.")
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
@@ -1856,7 +1877,12 @@ def _buy_now_table(t: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data(show_spinner="Đang phân loại MUA NGAY / CHỜ MUA T+2 theo EOD...", max_entries=3)
 def _t2_opportunities_cached(_daily: pd.DataFrame, _asof, key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Key includes actual latest-bar digest; _daily not hashed to avoid rehashing all OHLCV.
-    buy, wait = T2BUY.candidates_both(_daily, _asof)
+    import min_t2_disk_cache as T2DISK
+    prepared = T2DISK.load(_daily, _asof)
+    if prepared is None:
+        buy, wait = T2BUY.candidates_both(_daily, _asof)
+    else:
+        buy, wait = prepared
     return _research_filter(buy), _research_filter(wait)
 
 
@@ -1932,6 +1958,13 @@ def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
 def page_buy_now():
     st.title("⚡ Mua ngay")
     header()
+
+    if _MARKET_EOD_STALE:
+        st.warning(
+            "T\u1ea1m ng\u1eebng t\u00edn hi\u1ec7u mua. "
+            "C\u1ea7n c\u1eadp nh\u1eadt EOD phi\u00ean m\u1edbi."
+        )
+        return
     st.caption("Tín hiệu theo giá EOD cuối phiên, KHÔNG phải báo giá realtime. Gồm mã đã xác nhận mua trong vùng tối ưu, "
                "hoặc mã ngoài vùng tối ưu nhưng TP1 còn ≥10%, R:R tại EOD ≥2,5, rủi ro ≤8%, có xác nhận kỹ thuật ngày/tuần "
                "và đủ thanh khoản. Mã có tín hiệu BÁN / CHỐT LỜI, phân kỳ RSI xấu hoặc cản gần không đạt bị loại. "
@@ -3532,7 +3565,7 @@ def page_stock():
 
     # Chart-only DNSE mode: leave EOD/VCI scanners, VIP, forecasts, Backtest,
     # index pages, Redis, and R2 workflows untouched. Fail closed on DNSE errors.
-    if DC.enabled(st.secrets):
+    if tf not in ("D", "W", "M") and DC.enabled(st.secrets):
         _cfg = st.secrets.get("dnse_chart", {})
         try:
             _candles = _dnse_chart_cached(code, tf, str(_cfg.get("api_key", "")),

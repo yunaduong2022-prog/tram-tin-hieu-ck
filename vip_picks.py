@@ -718,7 +718,9 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         close = float(g["Giá đóng cửa"].iat[-1])
         prev = float(g["Giá đóng cửa"].iat[-2]) if len(g) > 1 else np.nan
         wbrow = wbmap.get(code, {})
+        from market_eod_guard import stale as market_stale
         stale = frames_d.empty or pd.Timestamp(g["Ngày"].iat[-1]).normalize() != pd.Timestamp(frames_d["Ngày"].max()).normalize()
+        stale = stale or market_stale(frames_d["Ngày"].max())
         sysv = dict(buy=None, target=None, stop=None, sell=None) if stale else _system_levels(code, ctx_fn, wbrow)
 
         def pick(user_txt, kind):
