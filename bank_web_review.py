@@ -1,4 +1,4 @@
-"""Session-only bank research. No official inputs, global cache, writes or VIP side effects."""
+"""Bank research: fixed server configuration or session upload. No official inputs, global cache, writes or VIP side effects."""
 import csv, io, math, hashlib
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -77,25 +77,96 @@ def current_prices(frames_d,asof):
         out[s]=(float(nums.iloc[0]),day.date(),True)
     return out
 
+# BANK_FIXED_V2: configured dataset stays server-side; never cache private rows globally.
+def fixed_rows(config, password=None, today=None):
+    import base64, hmac
+    mode=config.get('mode','owner')
+    if mode not in ('owner','public'):
+        raise ValueError('Sai chế độ BANK FIXED')
+    if mode=='public':
+        if config.get('distribution_rights_confirmed') is not True:
+            raise ValueError('Chưa xác nhận quyền công bố dữ liệu')
+    else:
+        expected=config.get('owner_password','')
+        if not isinstance(expected,str) or len(expected)<16:
+            raise ValueError('Thiếu mật khẩu chủ website hợp lệ')
+        if not isinstance(password,str) or not hmac.compare_digest(password.encode('utf-8'),expected.encode('utf-8')):
+            return None
+    encoded=config.get('csv_b64','')
+    if not isinstance(encoded,str) or len(encoded)>172000:
+        raise ValueError('Dữ liệu BANK FIXED không hợp lệ')
+    return parse(base64.b64decode(encoded,validate=True),today=today)
+
+
+def fixed_ui(st,key):
+    # Missing configuration preserves existing session-only workflow.
+    try:
+        config=st.secrets.get('bank_fixed_v2')
+    except (FileNotFoundError, KeyError):
+        return False,None
+    if config is None:
+        return False,None
+    try:
+        mode=config.get('mode','owner')
+        password=None
+        if mode=='owner':
+            epoch=st.session_state.get('bank_fixed_v2_epoch',0)
+            with st.form(f'bank_fixed_login_{key}_{epoch}'):
+                password=st.text_input('Mật khẩu dữ liệu ngân hàng',type='password',key=f'bank_fixed_password_{key}_{epoch}')
+                st.form_submit_button('Mở bảng điểm')
+            # Keep only the credential fingerprint in this user's session.
+            import hmac
+            expected=config.get('owner_password','')
+            if not isinstance(expected,str) or len(expected)<16:
+                raise ValueError('Thiếu mật khẩu chủ website hợp lệ')
+            fingerprint=hashlib.sha256(expected.encode('utf-8')).hexdigest()
+            auth_key='bank_fixed_v2_auth'
+            if st.session_state.get(auth_key)==fingerprint:
+                password=expected
+            elif isinstance(password,str) and hmac.compare_digest(password.encode('utf-8'),expected.encode('utf-8')):
+                st.session_state[auth_key]=fingerprint
+            else:
+                st.info('Dữ liệu cố định dành cho chủ website. Đăng nhập để xem.')
+                return True,None
+            if st.button('Khóa dữ liệu ngân hàng',key=f'bank_fixed_logout_{key}'):
+                st.session_state.pop(auth_key,None)
+                # Rotate widget keys so a stale password does not immediately re-authenticate.
+                st.session_state['bank_fixed_v2_epoch']=st.session_state.get('bank_fixed_v2_epoch',0)+1
+                st.rerun()
+        rows=fixed_rows(config,password)
+    except (ValueError,TypeError,KeyError,UnicodeError,csv.Error):
+        st.error('Cấu hình BANK FIXED không hợp lệ hoặc dữ liệu chưa đủ quyền công bố. Kiểm tra Secrets.')
+        return True,None
+    if rows is None:
+        st.info('Chưa mở khóa dữ liệu ngân hàng.')
+        return True,None
+    st.caption('Dữ liệu ngân hàng cố định theo quý · '+('Chế độ chủ website' if mode=='owner' else 'Chế độ công khai đã xác nhận quyền')+' · Không dùng cho VIP/FA chính thức.')
+    return True,rows
+
+
 def render(frames_d,asof,*,symbol=None,key='rank'):
     import streamlit as st
     import pandas as pd
-    st.markdown('**BANK FA V5 · Dữ liệu nghiên cứu riêng**')
-    st.caption('Nạp CSV cá nhân vào phiên đang dùng. Không lưu vào GitHub/R2, không dùng cho FA chính thức, tổng điểm hoặc VIP. NIM và BVPS chưa xác minh độc lập; P/B chỉ tính khi EOD mới và cơ sở vốn tại kỳ khớp.')
-    epoch=st.session_state.get(EPOCH,0)
-    with st.expander('Nạp / xóa dữ liệu ngân hàng',expanded=STATE not in st.session_state):
-        uploaded=st.file_uploader('Chọn BANK_REVIEW_28.csv',type=['csv'],key=f'bank_review_upload_{key}_{epoch}')
-        if uploaded is not None:
-            raw=uploaded.getvalue(); sig=hashlib.sha256(raw).hexdigest()
-            if st.session_state.get(HASH)!=sig:
-                try:
-                    rows=parse(raw);st.session_state[STATE]=rows;st.session_state[HASH]=sig
-                except (ValueError,UnicodeError,TypeError,KeyError,csv.Error) as err:
-                    st.error('Không nhập được: '+str(err));return
-        if STATE in st.session_state:
-            if st.button('Xóa dữ liệu khỏi phiên',key=f'bank_review_clear_{key}_{epoch}'):
-                st.session_state.pop(STATE,None);st.session_state.pop(HASH,None);st.session_state[EPOCH]=epoch+1;st.rerun()
-    rows=st.session_state.get(STATE)
+    st.markdown('**BANK FA V5 · Dữ liệu nghiên cứu ngân hàng**')
+    configured, rows = fixed_ui(st,key)
+    if configured and rows is None:
+        return
+    if not configured:
+        st.caption('Nạp CSV cá nhân vào phiên đang dùng. Không lưu vào GitHub/R2, không dùng cho FA chính thức, tổng điểm hoặc VIP. NIM và BVPS chưa xác minh độc lập; P/B chỉ tính khi EOD mới và cơ sở vốn tại kỳ khớp.')
+        epoch=st.session_state.get(EPOCH,0)
+        with st.expander('Nạp / xóa dữ liệu ngân hàng',expanded=STATE not in st.session_state):
+            uploaded=st.file_uploader('Chọn BANK_REVIEW_28.csv',type=['csv'],key=f'bank_review_upload_{key}_{epoch}')
+            if uploaded is not None:
+                raw=uploaded.getvalue(); sig=hashlib.sha256(raw).hexdigest()
+                if st.session_state.get(HASH)!=sig:
+                    try:
+                        rows=parse(raw);st.session_state[STATE]=rows;st.session_state[HASH]=sig
+                    except (ValueError,UnicodeError,TypeError,KeyError,csv.Error) as err:
+                        st.error('Không nhập được: '+str(err));return
+            if STATE in st.session_state:
+                if st.button('Xóa dữ liệu khỏi phiên',key=f'bank_review_clear_{key}_{epoch}'):
+                    st.session_state.pop(STATE,None);st.session_state.pop(HASH,None);st.session_state[EPOCH]=epoch+1;st.rerun()
+        rows=st.session_state.get(STATE)
     if not rows:
         st.info('Chưa nạp dữ liệu nghiên cứu. Bảng FA chính thức giữ nguyên.');return
     prices=current_prices(frames_d,asof)
