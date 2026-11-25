@@ -604,6 +604,34 @@ def grade_of(pct: float) -> str:
     return next(g for lo, g in GRADES if pct >= lo)
 
 
+def component_grade_badge(value, *, scale=100, css_class='tp-grade', grade=None):
+    """Display-only grade. A partial FA (/85) is not a full A-D grade."""
+    import math
+    from html import escape
+    if scale != 100:
+        return ''
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if not math.isfinite(n) or not 0 <= n <= 100:
+        return ''
+    if grade is None:
+        grade = grade_of(n)
+    if not grade:
+        return ''
+    g = escape(str(grade), quote=True)
+    cls = escape(css_class, quote=True)
+    colors = {'A': ('#14573d','#6be7aa'), 'B': ('#254c2d','#a3df86'),
+              'C': ('#62490e','#ffe08a'), 'D': ('#672b35','#ffb2b9')}
+    style = ''
+    if grade in colors:
+        bg, fg = colors[grade]
+        style = f' style="background:{bg};color:{fg}"'
+    return f'<span class="{cls}" title="Hạng {g}"{style}>{g}</span>'
+
+
+
 # ------------------------------------------------------------------ SỐ LIỆU HỆ THỐNG
 @st.cache_data(show_spinner=False)
 def _foreign_cached(mtime: float) -> dict[str, tuple[float, str]]:
@@ -1177,7 +1205,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     sec = f'<div><span class="tp-sec">{_e(r["Ngành"])}</span></div>' if r["Ngành"] else ""
     chg = (f'<div class="{cls}" style="font-weight:700">{r["Chg"]:+.2f}</div><div class="{cls}" style="font-size:12px">{r["Chg %"]:+.2f}%</div>'
            if pd.notna(r["Chg"]) else '<span class="tp-mu">—</span>')
-    tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
+    tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span>{component_grade_badge(r["Tổng điểm"], grade=r["Hạng"])}{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else '<span class="tp-mu">—</span>')
     b = r["Điểm mua"]
     if isinstance(b, tuple):
@@ -1209,14 +1237,14 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if r.get('_bds_fa') else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
         fa = '<span class="tp-mu">Chưa đủ số liệu</span>'
     if _ok(r["TA"]):
         rsi = f'<div class="tp-mu" style="font-size:11.5px">RSI {r["RSI"]:.1f}</div>' if _ok(r["RSI"]) else ""
-        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
+        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{component_grade_badge(r["TA"])}{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
     else:
         ta = '<span class="tp-mu">Chưa đủ số liệu</span>'
     label, tone, note = r["Khuyến nghị"]
@@ -1270,20 +1298,20 @@ def _price_html(r) -> str:
 def _score_cells(r) -> tuple[str, str, str, str]:
     """(Tổng điểm, FA, TA, Khuyến nghị) dạng HTML, dùng chung cho nhóm Chờ mua và Đang nắm giữ."""
     mu = '<span class="tp-mu">—</span>'
-    tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
+    tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span>{component_grade_badge(r["Tổng điểm"], grade=r["Hạng"])}{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else mu)
     if _ok(r["FA"]):
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if r.get('_bds_fa') else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:12 if r.get("_bds_fa") else 6 if personal else 3])
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
         fa = '<span class="tp-mu">Chưa đủ số liệu</span>'
     if _ok(r["TA"]):
         rsi = f'<div class="tp-mu" style="font-size:11.5px">RSI {r["RSI"]:.1f}</div>' if _ok(r["RSI"]) else ""
-        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
+        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{component_grade_badge(r["TA"])}{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
     else:
         ta = '<span class="tp-mu">Chưa đủ số liệu</span>'
     label, tone, note = r["Khuyến nghị"]
