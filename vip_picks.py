@@ -724,6 +724,23 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
     wbmap = wb.drop_duplicates("Mã", keep="first").set_index("Mã").to_dict("index") if wb is not None and not wb.empty else {}
     fgn = foreign_map()
     extra_eod = _vip_extra_eod()
+    import bank_web_review
+    import vip_score_bridge as score_bridge
+    import sys
+    vip_self = sys.modules[__name__]
+    bank_rows = None
+    try:
+        config = st.secrets.get('bank_fixed_v2')
+        if config is not None:
+            bank_rows = bank_web_review.fixed_rows(config)
+        else:
+            bank_rows = st.session_state.get(bank_web_review.STATE)
+    except (FileNotFoundError, KeyError):
+        bank_rows = st.session_state.get(bank_web_review.STATE)
+    except (ValueError, TypeError, UnicodeError, OSError):
+        st.warning('BANK FA: dữ liệu quý không hợp lệ; kiểm tra cấu hình riêng.')
+    bank_asof = frames_d['Ngày'].max() if not frames_d.empty else None
+    bank_prices = bank_web_review.current_prices(frames_d,bank_asof)
     rows = []
     for _, p in plans.iterrows():
         code = p["Mã"]
@@ -772,18 +789,31 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         rec = ("DỮ LIỆU QUÁ HẠN", "gray", "Không phát sinh khuyến nghị mới") if stale else recommend(close, buy, stop, sell, wbreason, status)
         if bank_eval is not None and status != "Đang nắm giữ" and not stale and (fa is None or bank_eval["risk"]):
             rec = ("CHỜ XÁC MINH FA", "gray", "; ".join(bank_eval["tags"]) or "Kiểm tra FA ngân hàng")
+        bank_personal = False
+        fa_scale = 100
+        bank_note = ''
+        if bank_eval is not None:
+            frame = p.get('Khung thời gian','Trung hạn')
+            frame = frame if frame in score_bridge.FRAMES else 'Trung hạn'
+            base_result = score_bridge.compute_vip_scores(code,frames_d,res,fund_map,frame,asof=bank_asof,vip_module=vip_self)
+            shown,research,_,_,bank_personal = score_bridge.bank_shared_display(base_result,bank_rows,bank_prices,vip_self,frame)
+            fa, fa_tags, ta, ta_tags, sys_pts, total = (shown.get(k) for k in ('fa','tags_fa','ta','tags_ta','system','total'))
+            fa_scale = shown.get('fa_scale',100)
+            bank_note = 'Điểm tham khảo · BCTC '+str(research.get('Kỳ','')) if research else 'Điểm tham khảo'
+            if research and research.get('Rủi ro') == 'Cảnh báo': bank_note += ' · Cảnh báo rủi ro'
         name, sector = meta_fn(code) if meta_fn else ("", "")
         net5, exch = fgn.get(code, (None, ""))
         rows.append({
             "Mã": code, "Tên": name, "Ngành": sector, "Sàn": exch, "Giá": close,
             "Chg": close - prev if np.isfinite(prev) else np.nan, "Chg %": (close / prev - 1) * 100 if prev else np.nan,
             "KL": float(g["Khối lượng khớp lệnh"].iat[-1]),
-            "Tổng điểm": total, "Điểm hệ thống": sys_pts, "Hạng": grade_of(total) if total is not None else "",
+            "Tổng điểm": total, "Điểm hệ thống": sys_pts, "Hạng": ("Tham khảo" if bank_personal else grade_of(total)) if total is not None else "",
             "Điểm mua": buy, "buy_auto": buy_auto, "Entry": entry,
             "Lãi": (close - entry) if entry else np.nan, "Lãi %": (close / entry - 1) * 100 if entry else np.nan,
             "Target": target, "target_auto": target_auto, "Cutloss": stop, "stop_auto": stop_auto,
             "Điểm bán": sell, "sell_auto": parse_price(p["Điểm bán"]) is None,
             "FA": fa, "FA tags": fa_tags, "TA": ta, "TA tags": ta_tags,
+            "_fa_scale": fa_scale, "_bank_personal": bank_personal, "_bank_note": bank_note,
             "RSI": _f(g["RSI"].iat[-1]) if "RSI" in g.columns else None,
             "Khuyến nghị": rec, "Ngoại": net5,
             "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Ngày mua": p.get("Ngày mua", ""), "Luận điểm": p.get("Luận điểm", ""),
@@ -1125,6 +1155,9 @@ def _score_tip(r) -> str:
     """Chú thích khi rê chuột vào Tổng điểm: các thành phần và trọng số."""
     f = lambda lab, v: f"{lab} {v:.0f}" if _ok(v) else f"{lab} —"
     w = weights_of(r.get("Khung"))
+    if isinstance(r.get('_bank_personal'),(bool,np.bool_)) and r.get('_bank_personal'):
+        scale = 85 if r.get('_fa_scale') == 85 else 100
+        return f"Tham khảo · {f('FA', r['FA'])}/{scale} · {f('TA', r['TA'])} · {f('Hệ thống', r['Điểm hệ thống'])} · {r.get('Khung')}"
     return f"{f('FA', r['FA'])} · {f('TA', r['TA'])} · {f('Hệ thống', r['Điểm hệ thống'])} (trọng số {w[0]:.0%} / {w[1]:.0%} / {w[2]:.0%}, {r.get('Khung') or 'Trung hạn'})"
 
 
@@ -1168,7 +1201,11 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
         return f'<span class="tp-pill {tone}">{_px(val)}<small>{d:+.1f}%</small></span>{_auto(auto)}'
     sell = (f'<span class="tp-pill">≥ {_px(r["Điểm bán"])}</span>{_auto(r["sell_auto"])}' if _ok(r["Điểm bán"]) and r["Điểm bán"] else '<span class="tp-mu">—</span>')
     if _ok(r["FA"]):
-        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/100</small></span>{_bar(r["FA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["FA tags"][:3])
+        personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
+        scale = 85 if personal and r.get('_fa_scale') == 85 else 100
+        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:6 if personal else 3])
+        if personal:
+            fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
         fa = '<span class="tp-mu">Chưa đủ số liệu</span>'
     if _ok(r["TA"]):
@@ -1230,7 +1267,11 @@ def _score_cells(r) -> tuple[str, str, str, str]:
     tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span><span class="tp-grade">{_e(r["Hạng"])}</span>{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else mu)
     if _ok(r["FA"]):
-        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/100</small></span>{_bar(r["FA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["FA tags"][:3])
+        personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
+        scale = 85 if personal and r.get('_fa_scale') == 85 else 100
+        fa = f'<span class="tp-sc">{int(r["FA"])}<small>/{scale}</small></span>{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:6 if personal else 3])
+        if personal:
+            fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
         fa = '<span class="tp-mu">Chưa đủ số liệu</span>'
     if _ok(r["TA"]):
