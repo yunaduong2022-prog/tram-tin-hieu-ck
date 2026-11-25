@@ -245,11 +245,13 @@ def _panel_html(result, *, mode):
       .mvs-vip .mvs-label{min-height:0;margin-bottom:7px}}
     </style>"""
 
-    def score_text(value, *, total=False, scale=100):
+    is_bds = str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS
+
+    def score_text(value, *, total=False, scale=100, exact=False):
         n = _finite(value)
         if n is None:
             return '<span class="mvs-score">—</span>'
-        score = f'{n:.0f}'
+        score = f'{n:.2f}'.rstrip('0').rstrip('.') if exact else f'{n:.0f}'
         tip = html.escape(f'{n:.1f}/{scale}', quote=True)
         out = f'<span class="mvs-score" title="{tip}">{score}</span>'
         if not total:
@@ -272,6 +274,8 @@ def _panel_html(result, *, mode):
         '<div class="mvs-missing">Chưa đủ chỉ tiêu FA</div>'
     if result.get('bank') is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
+    elif is_bds and _finite(result.get('fa')) is not None:
+        fa = tag_list(result.get('tags_fa') or [], limit=12)
     technical_tags = []
     rsi = _finite(result.get('rsi'))
     if rsi is not None:
@@ -291,7 +295,7 @@ def _panel_html(result, *, mode):
         scale = result.get('fa_scale',100) if not cells else 100
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
-                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale)}{grade_html if is_total else ""}</div>'
+                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=is_bds and not cells)}{grade_html if is_total else ""}</div>'
                      + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
     return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
             '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
@@ -391,7 +395,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             if bank is not None:
                 import bank_web_review
                 bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
-    else:
+    elif not str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS:
         w = vip.weights_of(frame)
         eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
         st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
