@@ -88,20 +88,15 @@ def current_prices(frames_d,asof):
     return out
 
 # BANK_FIXED_V2: configured dataset stays server-side; never cache private rows globally.
-def fixed_rows(config, password=None, today=None):
-    import base64, hmac
+def fixed_rows(config, today=None):
+    import base64
+    # Owner/private_app are compatibility aliases for a PRIVATE Streamlit deployment.
+    # Never expose this dataset on a public deployment without distribution permission.
     mode=config.get('mode','owner')
-    if mode not in ('owner','public'):
+    if mode not in ('owner','private_app','public'):
         raise ValueError('Sai chế độ BANK FIXED')
-    if mode=='public':
-        if config.get('distribution_rights_confirmed') is not True:
-            raise ValueError('Chưa xác nhận quyền công bố dữ liệu')
-    else:
-        expected=config.get('owner_password','')
-        if not isinstance(expected,str) or len(expected)<16:
-            raise ValueError('Thiếu mật khẩu chủ website hợp lệ')
-        if not isinstance(password,str) or not hmac.compare_digest(password.encode('utf-8'),expected.encode('utf-8')):
-            return None
+    if mode=='public' and config.get('distribution_rights_confirmed') is not True:
+        raise ValueError('Chưa xác nhận quyền công bố dữ liệu')
     encoded=config.get('csv_b64','')
     if not isinstance(encoded,str) or len(encoded)>172000:
         raise ValueError('Dữ liệu BANK FIXED không hợp lệ')
@@ -109,7 +104,7 @@ def fixed_rows(config, password=None, today=None):
 
 
 def fixed_ui(st,key):
-    # Missing configuration preserves existing session-only workflow.
+    # Authentication belongs to Streamlit private sharing, not the bank panel.
     try:
         config=st.secrets.get('bank_fixed_v2')
     except (FileNotFoundError, KeyError):
@@ -117,40 +112,11 @@ def fixed_ui(st,key):
     if config is None:
         return False,None
     try:
-        mode=config.get('mode','owner')
-        password=None
-        if mode=='owner':
-            epoch=st.session_state.get('bank_fixed_v2_epoch',0)
-            with st.form(f'bank_fixed_login_{key}_{epoch}'):
-                password=st.text_input('Mật khẩu dữ liệu ngân hàng',type='password',key=f'bank_fixed_password_{key}_{epoch}')
-                st.form_submit_button('Mở bảng điểm')
-            # Keep only the credential fingerprint in this user's session.
-            import hmac
-            expected=config.get('owner_password','')
-            if not isinstance(expected,str) or len(expected)<16:
-                raise ValueError('Thiếu mật khẩu chủ website hợp lệ')
-            fingerprint=hashlib.sha256(expected.encode('utf-8')).hexdigest()
-            auth_key='bank_fixed_v2_auth'
-            if st.session_state.get(auth_key)==fingerprint:
-                password=expected
-            elif isinstance(password,str) and hmac.compare_digest(password.encode('utf-8'),expected.encode('utf-8')):
-                st.session_state[auth_key]=fingerprint
-            else:
-                st.info('Dữ liệu cố định dành cho chủ website. Đăng nhập để xem.')
-                return True,None
-            if st.button('Khóa dữ liệu ngân hàng',key=f'bank_fixed_logout_{key}'):
-                st.session_state.pop(auth_key,None)
-                # Rotate widget keys so a stale password does not immediately re-authenticate.
-                st.session_state['bank_fixed_v2_epoch']=st.session_state.get('bank_fixed_v2_epoch',0)+1
-                st.rerun()
-        rows=fixed_rows(config,password)
+        rows=fixed_rows(config)
     except (ValueError,TypeError,KeyError,UnicodeError,csv.Error):
-        st.error('Cấu hình BANK FIXED không hợp lệ hoặc dữ liệu chưa đủ quyền công bố. Kiểm tra Secrets.')
+        st.error('BANK FA: cấu hình hoặc dữ liệu quý không hợp lệ. Kiểm tra Secrets.')
         return True,None
-    if rows is None:
-        st.info('Chưa mở khóa dữ liệu ngân hàng.')
-        return True,None
-    st.caption('Dữ liệu ngân hàng cố định theo quý · '+('Chế độ chủ website' if mode=='owner' else 'Chế độ công khai đã xác nhận quyền')+' · Không dùng cho VIP/FA chính thức.')
+    st.caption('Dữ liệu ngân hàng cố định theo quý · FA ước tính · Không dùng cho VIP/FA chính thức.')
     return True,rows
 
 
