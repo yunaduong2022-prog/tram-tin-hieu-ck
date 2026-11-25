@@ -5,7 +5,7 @@ import csv, math
 
 PATH = Path(__file__).resolve().parent / 'data' / 'bds_fa_inputs.csv'
 SYMBOLS = frozenset('VHM NVL KDH DXG DIG PDR NLG TCH AGG NTL HQC SGR HPX HDC LDG NBB SCR QCG VPI CEO KBC IDC SZC BCM IJC VGC VRE DXS CRE VIC HDG HTN HHS'.split())
-WEIGHTS = {'ROE':10,'ROA':5,'Biên LNG':10,'Tăng trưởng LNST':10,'Nợ vay/VCSH':15,'CFO':15,'HTK':10,'MNTTT':10,'P/B lịch sử':5,'P/B ngành':5,'P/E':5}
+WEIGHTS = {'ROE':10,'ROA':5,'Biên LNG':10,'Tăng trưởng LNST':10,'Nợ vay/VCSH':10,'VCSH/TTS':10,'CFO':15,'HTK':10,'MNTTT':10,'P/B lịch sử':4,'P/B ngành':4,'P/E':2}
 FIELDS = {'ROE':'ROE TTM đã xác minh (%)','ROA':'ROA TTM đã xác minh (%)','Biên LNG':'Biên LNG TTM (%)','Nợ vay/VCSH':'Nợ vay/VCSH (lần)','P/B':'P/B dùng FA kỳ Q3 ZIP','P/B TB':'P/B TB 3N dùng FA ZIP','P/E':'P/E dùng FA kỳ Q3 ZIP','LNST':'LNST TTM (tỷ đồng)','LNST trước':'LNST TTM kỳ trước (tỷ đồng)','VCSH':'VCSH Q3 (tỷ)','CFO TTM':'CFO TTM'}
 
 def number(row,key):
@@ -20,6 +20,17 @@ def levels(v, thresholds, reverse=False):
     if v is None: return None
     for t,p in zip(thresholds,(1,.8,.6,.3)):
         if (v<=t if reverse else v>=t): return p
+    return 0
+
+def equity_ratio(equity, assets):
+    """Equity share in percentage points; missing/invalid assets stay missing."""
+    if equity is None or assets is None or assets<=0:return None
+    return equity/assets*100
+
+def equity_factor(v):
+    if v is None:return None
+    for threshold, factor in ((50,1),(40,.8),(30,.6),(20,.4),(10,.2)):
+        if v>=threshold:return factor
     return 0
 
 def pb_level(v,b):
@@ -85,6 +96,8 @@ def evaluate(row,industry):
     equity=v['VCSH']; valid_equity=equity is not None and equity>0
     debt=v['Nợ vay/VCSH']; pb=v['P/B']; pe=v['P/E']; pbh=v['P/B TB']
     p={'ROE':levels(v['ROE'],(18,12,8,5)) if valid_equity else (0 if equity is not None else None),'ROA':levels(v['ROA'],(8,5,3,1)),'Biên LNG':levels(v['Biên LNG'],(40,30,20,10)),'Tăng trưởng LNST':g,'Nợ vay/VCSH':levels(debt,(.3,.5,1,1.5),True) if valid_equity and debt is not None and debt>=0 else (0 if equity is not None and equity<=0 else None),'CFO':cfo_level(cfo),'P/B lịch sử':pb_level(pb,pbh) if valid_equity else (0 if equity is not None else None),'P/B ngành':pb_level(pb,industry) if valid_equity else (0 if equity is not None else None),'P/E':(0 if v['LNST'] is not None and v['LNST']<=0 else levels(pe,(8,12,18,25),True) if pe is not None and pe>0 else None)}
+    v['VCSH/TTS']=equity_ratio(equity,number(row,'Tổng tài sản Q3 (tỷ)'))
+    p['VCSH/TTS']=equity_factor(v['VCSH/TTS'])
     project=project_metrics(row)
     p.update({'HTK':project['inventory_factor'],'MNTTT':project['advance_factor']})
     v.update({k:project[k] for k in ('HTK/TTS','MNTTT/HTK','MNTTT YoY')})
@@ -105,7 +118,7 @@ def evaluate(row,industry):
     return {'code':row['Mã'],'values':v,'cfo':cfo,'growth_state':gstate,'factors':p,'points':points,'coverage':coverage,'score':score,'grade':grade(score),'warnings':warnings,'industry_pb':industry,'period':row.get('Kỳ tham chiếu định giá FA','Q3/2026'),'ranks':{},'project':project}
 
 def rank_values(results):
-    metrics=('ROE','ROA','Biên LNG','Tăng trưởng LNST','Nợ vay/VCSH','P/B','P/E','HTK/TTS','MNTTT/HTK','MNTTT YoY')
+    metrics=('ROE','ROA','Biên LNG','Tăng trưởng LNST','Nợ vay/VCSH','VCSH/TTS','P/B','P/E','HTK/TTS','MNTTT/HTK','MNTTT YoY')
     for k in metrics:
         eligible={s:e['values'][k] for s,e in results.items() if e['values'][k] is not None and (k not in ('P/B','P/E') or e['values'][k]>0) and (k not in ('ROE','Nợ vay/VCSH','P/B') or e['values']['VCSH'] is not None and e['values']['VCSH']>0) and (k!='P/E' or e['values']['LNST'] is not None and e['values']['LNST']>0)}
         if k in ('MNTTT/HTK','MNTTT YoY'):
@@ -135,6 +148,9 @@ def notes(e):
     for k,n in [('ROE','ROE'),('ROA','ROA'),('Biên LNG','Biên lợi nhuận gộp TTM')]:out.append(f'{n} {fmt(v[k])}% – {label(p[k])}'+top(k))
     k='Tăng trưởng LNST';out.append('Tăng trưởng LNST TTM – '+e['growth_state'] if e['growth_state'] else f'Tăng trưởng LNST TTM {fmt(v[k])}% – {label(p[k])}'+top(k))
     k='Nợ vay/VCSH';out.append(f'{k} {fmt(v[k])} lần – '+{1:'Rất an toàn',.8:'An toàn',.6:'Trung bình',.3:'Nợ vay cao',0:'Rủi ro cao'}.get(p[k],'Chưa đủ dữ liệu')+top(k))
+    k='VCSH/TTS'
+    equity_label={1:'Rất tốt',.8:'Tốt',.6:'Khá',.4:'Trung bình',.2:'Yếu',0:'Rủi ro cao'}.get(p[k],'Chưa đủ dữ liệu')
+    out.append(f'VCSH/Tổng tài sản {fmt(v[k])}% – {equity_label} | {fmt(e["points"][k],0)}/10 điểm'+top(k))
     c=e['cfo'];out.append(f'CFO dương {sum(x is not None and x>0 for x in c)}/3 năm – {fmt(e["points"]["CFO"],0)}/15 điểm')
     q=e['project']; ip=p['HTK']; ap=p['MNTTT']
     concentration={1:'Tập trung thấp',.8:'Tập trung vừa',.6:'Trung bình',.3:'Tập trung cao',0:'Tập trung rất cao'}.get(ip,'Thiếu dữ liệu')
@@ -144,8 +160,10 @@ def notes(e):
     def compare(b):return '—' if b is None or b<=0 or v['P/B'] is None else ('Thấp hơn ' if v['P/B']<b else 'Cao hơn ' if v['P/B']>b else 'Bằng ') + fmt(abs(v['P/B']/b-1)*100)+'%'
     out.append(f'P/B {fmt(v["P/B"])} lần'+top('P/B')+f' | TB 3 năm (12 quý): {fmt(v["P/B TB"])} ({compare(v["P/B TB"])}) | TB ngành: {fmt(e["industry_pb"])} ({compare(e["industry_pb"])})')
     out.append(f'P/E {fmt(v["P/E"])} lần – '+('Không có LNST dương' if v['LNST'] is not None and v['LNST']<=0 else val_label(p['P/E']))+top('P/E'))
-    if e['warnings']:out.append('Cảnh báo: '+ '; '.join(e['warnings']))
-    out.append(f'{e["grade"]} | Hạng {e["rank"]}/33 · FA Q3/2026 · ngày giá ZIP chưa xác định')
+    # Keep every metric and the warnings/rank visible within the shared 12-note UI.
+    last=f'{e["grade"]} | Hạng {e["rank"]}/33 · FA Q3/2026 · ngày giá ZIP chưa xác định'
+    if e['warnings']:last='Cảnh báo: '+ '; '.join(e['warnings'])+' | '+last
+    out.append(last)
     return out
 
 def for_symbol(symbol):

@@ -7,7 +7,7 @@ class BdsFA(unittest.TestCase):
         self.assertEqual(sum(b.WEIGHTS.values()),100)
         self.assertTrue(all(r['coverage']==100 and 0<=r['score']<=100 for r in rows.values()))
         self.assertAlmostEqual(rows['VRE']['industry_pb'],1.2360500618333334)
-        self.assertEqual(rows['VRE']['score'],89); self.assertEqual(rows['HDG']['score'],88)
+        self.assertEqual(rows['VRE']['score'],89.4); self.assertEqual(rows['HDG']['score'],89.8)
         self.assertEqual(rows['NBB']['points']['Nợ vay/VCSH'],0)
         self.assertEqual(rows['NTL']['points']['P/E'],0)
         self.assertEqual(rows['NVL']['points']['Tăng trưởng LNST'],6)
@@ -23,6 +23,43 @@ class BdsFA(unittest.TestCase):
         self.assertTrue(any('TOP 1 Ngành BĐS' in t for t in b.notes(rows['VHM'])))
         self.assertTrue(any('CFO TTM âm' in t for t in b.notes(rows['HHS'])))
         self.assertTrue(all(b.for_symbol(s)[0]==r['score'] for s,r in rows.items()))
+    def test_equity_weight_and_ranking(self):
+        import csv
+        rows=b.load()
+        self.assertEqual(b.WEIGHTS['VCSH/TTS'],10)
+        self.assertEqual(b.WEIGHTS['Nợ vay/VCSH'],10)
+        self.assertEqual((b.WEIGHTS['P/B lịch sử'],b.WEIGHTS['P/B ngành'],b.WEIGHTS['P/E']),(4,4,2))
+        with b.PATH.open(encoding='utf-8-sig',newline='') as f:
+            for raw in csv.DictReader(f):
+                e=rows[raw['Mã']]
+                expected=float(raw['VCSH Q3 (tỷ)'])/float(raw['Tổng tài sản Q3 (tỷ)'])*100
+                self.assertAlmostEqual(e['values']['VCSH/TTS'],expected)
+                points=next((p for threshold,p in ((50,10),(40,8),(30,6),(20,4),(10,2)) if expected>=threshold),0)
+                self.assertEqual(e['points']['VCSH/TTS'],points)
+                self.assertEqual(e['ranks']['VCSH/TTS'],1+sum(other['values']['VCSH/TTS']>expected for other in rows.values()))
+                self.assertTrue(any('VCSH/Tổng tài sản' in n for n in b.notes(e)))
+                self.assertTrue(any('Hạng ' in n for n in b.notes(e)))
+                if e['warnings']:self.assertTrue(any('Cảnh báo:' in n for n in b.notes(e)))
+                self.assertAlmostEqual(e['score'],sum(e['points'].values()))
+        with (b.PATH.parent/'bds_fa_rankings.csv').open(encoding='utf-8-sig',newline='') as f:
+            rankings=list(csv.DictReader(f))
+        self.assertEqual(len(rankings),33)
+        for r in rankings:
+            e=rows[r['Mã']]; self.assertEqual(float(r['FA /100']),e['score']);self.assertEqual(float(r['VCSH/TTS điểm']),e['points']['VCSH/TTS']); self.assertEqual(int(r['Hạng']),e['rank'])
+        with (b.PATH.parent/'bds_fa_top5.csv').open(encoding='utf-8-sig',newline='') as f:
+            top=[r for r in csv.DictReader(f) if r['Chỉ tiêu']=='VCSH/TTS']
+        self.assertEqual({r['Mã'] for r in top},{c for c,e in rows.items() if e['ranks']['VCSH/TTS']<=5})
+
+    def test_equity_boundaries(self):
+        for ratio, factor in [(50,1),(49.99,.8),(40,.8),(39.99,.6),(30,.6),(29.99,.4),(20,.4),(19.99,.2),(10,.2),(9.99,0),(0,0),(-1,0)]:
+            self.assertEqual(b.equity_factor(ratio),factor)
+        self.assertIsNone(b.equity_ratio(None,100))
+        self.assertIsNone(b.equity_ratio(40,0))
+        self.assertIsNone(b.equity_ratio(40,-100))
+        self.assertIsNone(b.equity_factor(None))
+        self.assertEqual(b.equity_ratio(40,100),40)
+        self.assertEqual(b.equity_ratio(-10,100),-10)
+
     def test_boundaries(self):
         self.assertEqual(b.levels(.3,(.3,.5,1,1.5),True),1)
         self.assertEqual(b.levels(.5,(.3,.5,1,1.5),True),.8)
