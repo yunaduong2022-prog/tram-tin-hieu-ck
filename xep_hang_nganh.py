@@ -251,6 +251,8 @@ def render_section(sector: str | None, frames_d=None, asof=None) -> None:
     if sector == "Ngân hàng":
         import bank_fa
         bank_fa.render(frames_d, asof)
+        import bank_web_review
+        bank_web_review.render(frames_d, asof, key="rank")
     d = load()
     if _ERR:
         st.warning(f"Không đọc được {PATH}: {_ERR}. Kiểm tra dòng tiêu đề có các cột Ngành, Mã, ... (mẫu trong file gốc).")

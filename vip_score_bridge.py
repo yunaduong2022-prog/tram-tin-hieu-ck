@@ -210,6 +210,9 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             st.write('Nguồn: ' + (bank['source'] or 'Chưa xác minh'))
             if bank['tags']:
                 st.caption('; '.join(bank['tags']))
+    if bank is not None and mode == 'stock':
+        import bank_web_review
+        bank_web_review.render(frames_d, asof, symbol=result['code'], key=key)
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
         st.write('**FA:** ' + ('; '.join(result['tags_fa']) if result['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
