@@ -46,7 +46,8 @@ def points(k,v):
 def score(row, price=None, price_day=None, fresh=False, today=None):
     today=today or datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
     p=date.fromisoformat(row['period_end']); pub=date.fromisoformat(row['published_date'])
-    usable=0<=(today-p).days<=180 and pub<=today
+    usable=p<=pub<=today
+    old_period=(today-p).days>180
     v={k:row[k] for k in METRICS}
     pts={k:points(k,v[k]) for k in METRICS}
     quality=sum(pts.values()) if usable else None
@@ -64,7 +65,7 @@ def score(row, price=None, price_day=None, fresh=False, today=None):
             'BVPS ứng viên (VND)':row['bvps'],'Giá EOD (nghìn VND)':price if fresh else None,
             'Phiên giá':str(price_day)[:10] if fresh else '', 'Kỳ':row['period_end'],'Công bố':row['published_date'],
             'Rủi ro':'Cảnh báo' if risk else 'Không vượt ngưỡng',
-            'Trạng thái':row['capital_check'] if usable else 'BCTC quá hạn; không chấm điểm',
+            'Trạng thái':(row['capital_check'] + (' · BCTC trên 180 ngày; cần cập nhật quý mới' if old_period else '')) if usable else 'Ngày công bố không hợp lệ',
             'CP lưu hành ứng viên':row.get('shares'),'Nguồn CP':row.get('shares_source',''),'Ngày tra cứu CP':row.get('shares_asof',''),
             **{k+' điểm':v if usable else None for k,v in pts.items()}}
 
@@ -116,7 +117,7 @@ def fixed_ui(st,key):
     except (ValueError,TypeError,KeyError,UnicodeError,csv.Error):
         st.error('BANK FA: cấu hình hoặc dữ liệu quý không hợp lệ. Kiểm tra Secrets.')
         return True,None
-    st.caption('Dữ liệu ngân hàng cố định theo quý · FA ước tính · Không dùng cho VIP/FA chính thức.')
+    st.caption('Dữ liệu ngân hàng cố định theo quý · FA ước tính · Dùng cho phân tích cá nhân; không tự thay đổi khuyến nghị VIP.')
     return True,rows
 
 
@@ -126,7 +127,7 @@ def resolve_rows(st,key):
     if configured and rows is None:
         return None
     if not configured:
-        st.caption('Nạp CSV cá nhân vào phiên đang dùng. Không lưu vào GitHub/R2, không dùng cho FA chính thức, tổng điểm hoặc VIP. P/B ước tính theo vốn chủ Q3 và số cổ phiếu ứng viên; chưa xác minh biến động vốn.')
+        st.caption('Nạp CSV cá nhân vào phiên đang dùng. Không lưu vào GitHub/R2, dùng cho điểm tham khảo cá nhân, không tự thay đổi VIP. P/B ước tính theo vốn chủ Q3 và số cổ phiếu ứng viên; chưa xác minh biến động vốn.')
         epoch=st.session_state.get(EPOCH,0)
         with st.expander('Nạp / xóa dữ liệu ngân hàng',expanded=STATE not in st.session_state):
             uploaded=st.file_uploader('Chọn BANK_REVIEW_28.csv',type=['csv'],key=f'bank_review_upload_{key}_{epoch}')
@@ -160,7 +161,7 @@ def render(frames_d,asof,*,symbol=None,key='rank',resolved=False,rows=None):
     data=[score(r,*prices.get(s,(None,None,False))) for s,r in rows.items()]
     df=pd.DataFrame(data)
     c1,c2=st.columns(2);c1.metric('Có điểm tài chính',f"{df['Tài chính /85'].notna().sum()}/28");c2.metric('Có FA tham khảo',f"{df['FA tham khảo /100'].notna().sum()}/28")
-    st.caption('P/B ước tính = giá EOD / (vốn chủ Q3 / số CP ứng viên). Chưa điều chỉnh tiền thu phát hành hoặc cổ tức sau kỳ. Mã có xung đột nguồn được ghi chú. Không dùng cho tổng điểm/VIP chính thức.')
+    st.caption('P/B ước tính = giá EOD / (vốn chủ Q3 / số CP ứng viên). Chưa điều chỉnh tiền thu phát hành hoặc cổ tức sau kỳ. Mã có xung đột nguồn được ghi chú. Dùng cho FA và tổng điểm tham khảo; không tự thay đổi khuyến nghị VIP.')
     if symbol is not None:
         r=next((r for r in data if r['Mã']==symbol),None)
         if r is None:return

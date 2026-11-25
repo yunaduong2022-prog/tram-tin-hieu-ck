@@ -92,6 +92,32 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
             'tags_ta': list(ta_tags), 'rsi': rsi, 'asof': last_date, 'status': status}
 
 
+def bank_display_total(display, vip, frame):
+    """Personal research only: use available score components without a risk veto."""
+    fa = _finite(display.get('fa'))
+    ta = _finite(display.get('ta'))
+    system = _finite(display.get('system'))
+    scale = display.get('fa_scale', 100)
+    if fa is None or scale not in (85, 100) or not 0 <= fa <= scale:
+        return None, 'Chưa có điểm FA để tính tổng.'
+    if ta is None and system is None:
+        return None, 'Chưa có TA hoặc điểm hệ thống để tính tổng.'
+    total = vip.total_score(fa * 100 / scale, ta, system, frame)
+    missing = []
+    if scale == 85:
+        missing.append('Thiếu P/B: FA tài chính quy về thang 100')
+    if ta is None:
+        missing.append('Thiếu TA')
+    if system is None:
+        missing.append('Thiếu điểm hệ thống')
+    note = '; '.join(missing)
+    if note:
+        note += ' · Phân bổ theo thành phần có dữ liệu.'
+    else:
+        note = 'Đủ FA, TA và điểm hệ thống.'
+    return total, note
+
+
 def _display(v):
     n = _finite(v)
     return '—' if n is None else f'{n:.1f}'
@@ -171,7 +197,7 @@ def _panel_html(result, *, mode):
     for label, val, detail, is_total in (
         (result.get('fa_label','Điểm cơ bản (FA)'), result.get('fa'), fa, False),
         ('Điểm kỹ thuật (TA)', result.get('ta'), ta, False),
-        ('Tổng điểm', result.get('total'), '', True),
+        (result.get('total_label','Tổng điểm'), result.get('total'), '', True),
     ):
         scale = result.get('fa_scale',100) if not cells else 100
         cells.append('<div class="mvs-item">'
@@ -210,15 +236,20 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             display['tags_fa']=[f"BCTC {research['Kỳ']} · {research['Rủi ro']}",
                 f"P/B ước tính {research['P/B ứng viên']:.2f}x" if research['P/B ứng viên'] is not None else 'Chưa có P/B phiên mới',
                 research['Trạng thái']]
+    # Private chart: quality warnings do not veto the research total.
+    personal_bank = bank is not None and mode == 'stock' and display.get('fa') is not None
+    if personal_bank:
+        total, note = bank_display_total(display, vip, frame)
+        display.update(total=total, grade=None, total_label='Tổng điểm tham khảo', status=note)
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
-    if research is not None and result['fa'] is None:
-        st.caption('FA ước tính từ dữ liệu quý; tổng điểm và VIP chính thức không dùng điểm này.')
+    if personal_bank:
+        st.caption('Điểm cá nhân theo dữ liệu hiện có · Cảnh báo rủi ro không chặn tính điểm · Không tự thay đổi khuyến nghị VIP.')
     w = vip.weights_of(frame)
     eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
     st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
                'Cùng công thức Khuyến nghị khách hàng; điểm TA lấy nến Ngày EOD.')
-    if result.get('status') and result['status'] != 'Đủ FA, TA và Score hệ thống.':
-        st.caption(result['status'])
+    if display.get('status'):
+        st.caption(display['status'])
     bank = result.get('bank')
     if bank is not None and (research is None or result['fa'] is not None):
         import bank_fa
@@ -235,11 +266,13 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         import bank_web_review
         bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
-        st.write('**FA:** ' + ('; '.join(result['tags_fa']) if result['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
+        st.write('**FA:** ' + ('; '.join(display['tags_fa']) if display['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
         st.write('**Điểm hệ thống:** ' + (_display(result['system']) + '/100' if result['system'] is not None else '—') +
                  ' (Score của app × 10).')
-        if bank is not None and (result['fa'] is None or bank['risk']):
-            st.caption('Không tính tổng điểm khi BANK FA chưa xác minh hoặc có rủi ro.')
+        if personal_bank:
+            st.caption(display['status'])
+        elif bank is not None and (result['fa'] is None or bank['risk']):
+            st.caption('Chưa có tổng điểm theo dữ liệu hiện có trong chế độ này.')
         else:
             st.caption('Tổng điểm được chuẩn hóa theo các thành phần có dữ liệu như trang VIP; không tự coi dữ liệu thiếu là 0.')
