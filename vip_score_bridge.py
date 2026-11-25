@@ -62,6 +62,9 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
     check_date = pd.to_datetime(asof, errors='coerce') if asof is not None else None
     stale = (last_date is not None and pd.notna(check_date) and
              last_date != check_date.normalize())
+    if bank is not None and asof is not None:
+        from market_eod_guard import stale as market_stale
+        stale = stale or market_stale(asof)
     if daily.empty or last_date is None or stale:
         return {'code': code, 'frame': frame, 'fa': fa, 'ta': None, 'total': None,
                 'system': None, 'grade': None, 'tags_fa': list(fa_tags), 'tags_ta': [],
@@ -294,27 +297,16 @@ def _panel_html(result, *, mode):
             '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
 
 
-def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode='stock'):
-    """Reusable compact block. Scoring is EOD-backed even for DNSE/1H charts."""
-    import streamlit as st
-    import vip_picks as vip
-
-    # Explicit horizon avoids silently displaying VIP long-horizon weights as medium.
-    frame = st.selectbox('Khung chấm điểm (theo Khuyến nghị khách hàng)', FRAMES,
-                         key=key + '_frame', help='Đối chiếu đúng khung Trung hạn hoặc Dài hạn trong Khuyến nghị khách hàng.')
-    result = compute_vip_scores(code, frames_d, screener, fundamentals, frame=frame,
-                                asof=asof, vip_module=vip)
-    # Presentation-only estimate; never mutate official result or VIP recommendation.
+def bank_shared_display(result, research_rows, prices, vip, frame):
+    """Common personal bank display for chart, livestream and VIP; no trade decisions."""
+    import bank_web_review
     bank = result.get('bank')
-    research_rows = None
     research = None
     ranks = {}
     pb_detail = None
     display = dict(result)
-    if bank is not None and mode == 'stock':
-        import bank_web_review
-        research_rows = bank_web_review.resolve_rows(st,key)
-        research = bank_web_review.chart_review(research_rows,result['code'],frames_d,asof)
+    if bank is not None and research_rows and result['code'] in research_rows:
+        research = bank_web_review.score(research_rows[result['code']], *prices.get(result['code'], (None,None,False)))
         if result['fa'] is None and research is not None:
             fa_est=research['FA tham khảo /100']
             if fa_est is not None:
@@ -325,22 +317,46 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             points={k:research.get(k+' điểm') for k in values}
             values['PB']=research.get('P/B ứng viên')
             points['PB']=research.get('Điểm P/B /15')
-            ranks=bank_metric_ranks(research_rows,research,bank_web_review.current_prices(frames_d,asof),bank_web_review.score)
+            ranks=bank_metric_ranks(research_rows,research,prices,bank_web_review.score)
             display['tags_fa']=bank_fa_notes(values,points,estimated=True,ranks=ranks)
             import bank_pb_compare
             pb_note, pb_detail = bank_pb_compare.chart_notes(
-                research_rows, research, bank_web_review.current_prices(frames_d,asof), bank_web_review.score)
+                research_rows, research, prices, bank_web_review.score)
             if pb_note:
                 display['tags_fa'][-1]=display['tags_fa'][-1].split(' | TOP ',1)[0]+' | '+pb_note
             display['bank_fa_notes']=True
-        elif result['fa'] is not None:
-            display['tags_fa']=bank_fa_notes(bank['values'],bank['points'])
-            display['bank_fa_notes']=True
-    # Private chart: quality warnings do not veto the research total.
-    personal_bank = bank is not None and mode == 'stock' and display.get('fa') is not None
+    if bank is not None and result['fa'] is not None:
+        display['tags_fa']=bank_fa_notes(bank['values'],bank['points'])
+        display['bank_fa_notes']=True
+    personal_bank = bank is not None and display.get('fa') is not None
     if personal_bank:
         total, note = bank_display_total(display, vip, frame)
         display.update(total=total, grade=None, total_label='Tổng điểm tham khảo', status=note)
+    return display, research, ranks, pb_detail, personal_bank
+
+
+def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode='stock'):
+    """Reusable compact block. Scoring is EOD-backed even for DNSE/1H charts."""
+    import streamlit as st
+    import vip_picks as vip
+
+    # Explicit horizon avoids silently displaying VIP long-horizon weights as medium.
+    frame = st.selectbox('Khung chấm điểm (theo Khuyến nghị khách hàng)', FRAMES,
+                         key=key + '_frame', help='Đối chiếu đúng khung Trung hạn hoặc Dài hạn trong Khuyến nghị khách hàng.')
+    result = compute_vip_scores(code, frames_d, screener, fundamentals, frame=frame,
+                                asof=asof, vip_module=vip)
+    bank = result.get('bank')
+    research_rows = None
+    research = None
+    ranks = {}
+    pb_detail = None
+    personal_bank = False
+    display = dict(result)
+    if bank is not None:
+        import bank_web_review
+        research_rows = bank_web_review.resolve_rows(st,key)
+        display, research, ranks, pb_detail, personal_bank = bank_shared_display(
+            result, research_rows, bank_web_review.current_prices(frames_d,asof), vip, frame)
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
     if pb_detail:
         st.caption(pb_detail)
@@ -370,7 +386,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             st.write('Nguồn: ' + (bank['source'] or 'Chưa xác minh'))
             if bank['tags']:
                 st.caption('; '.join(bank['tags']))
-    if bank is not None and mode == 'stock':
+    if bank is not None:
         import bank_web_review
         bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
     if ranks:
