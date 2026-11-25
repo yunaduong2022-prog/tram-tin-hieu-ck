@@ -94,6 +94,52 @@ def render():
     st.subheader('Bảng chi tiết')
     shown=ranked[['symbol','exchange','Nhóm ngành','net_ty','net_volume','net_10d_vnd','source_scope']].copy()
     shown=shown.rename(columns={'symbol':'Mã','exchange':'Sàn','net_ty':'Mua/bán ròng (tỷ)','net_volume':'KL ròng','net_10d_vnd':'Ròng 10 phiên (VND)','source_scope':'Độ phủ nguồn'})
+
+    # MIN_FOREIGN_DISPLAY_V2
+    _exchange = "S\u00e0n"
+    _net10 = "R\u00f2ng 10 phi\u00ean (VND)"
+    _scope = "\u0110\u1ed9 ph\u1ee7 ngu\u1ed3n"
+    _code = "M\u00e3"
+
+    shown[_exchange] = shown[_exchange].fillna(
+        "Ch\u01b0a x\u00e1c \u0111\u1ecbnh"
+    ).replace(
+        "", "Ch\u01b0a x\u00e1c \u0111\u1ecbnh"
+    )
+
+    shown[_net10] = pd.to_numeric(
+        shown[_net10],errors="coerce"
+    ) / 1e9
+
+    shown = shown.rename(columns={
+        _net10:"R\u00f2ng 10 phi\u00ean (t\u1ef7)"
+    })
+
+    shown[_scope] = shown[_scope].replace({
+        "SSI_WATCHLIST_SAMPLE":"M\u1eabu SSI",
+        "FLOW_VERIFIED_FULL":"Danh s\u00e1ch ngu\u1ed3n",
+        "RANKING_TOP_ONLY":"Ch\u1ec9 TOP mua/b\u00e1n"
+    })
+
+    try:
+        directory = pd.read_csv(
+            "data/company_directory.csv",
+            encoding="utf-8-sig"
+        )
+
+        names = dict(zip(
+            directory.symbol,
+            directory.company_name
+        ))
+
+        shown.insert(
+            1,
+            "T\u00ean doanh nghi\u1ec7p",
+            shown[_code].map(names).fillna("")
+        )
+    except (OSError,ValueError,KeyError):
+        pass
+
     st.dataframe(shown.sort_values('Mua/bán ròng (tỷ)',ascending=False),use_container_width=True,hide_index=True)
     st.download_button('Xuất bảng CSV',shown.to_csv(index=False).encode('utf-8-sig'),file_name='foreign_net_flow_selected.csv',mime='text/csv')
     with st.expander('📥 Nhập CSV riêng (phương án dự phòng)'):
