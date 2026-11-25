@@ -56,7 +56,7 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
                 'asof': None, 'status': 'Chỉ chấm điểm cổ phiếu, không chấm chỉ số.'}
 
     fdict = (fundamentals or {}).get(code, {}) if isinstance(fundamentals, dict) else {}
-    fa, fa_tags = vip.fa_score_fd(fdict or {})
+    fa, fa_tags, bank = vip.fa_score_for_symbol(code, fdict or {})
     daily, last_date = _daily_for(code, frames_d)
     check_date = pd.to_datetime(asof, errors='coerce') if asof is not None else None
     stale = (last_date is not None and pd.notna(check_date) and
@@ -64,7 +64,7 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
     if daily.empty or last_date is None or stale:
         return {'code': code, 'frame': frame, 'fa': fa, 'ta': None, 'total': None,
                 'system': None, 'grade': None, 'tags_fa': list(fa_tags), 'tags_ta': [],
-                'asof': last_date,
+                'asof': last_date, 'bank': bank,
                 'status': ('Chưa có nến EOD hợp lệ để chấm TA / Tổng điểm.' if daily.empty or last_date is None
                            else f'Dữ liệu EOD của mã mới đến {last_date:%d/%m/%Y}; chưa tính TA / Tổng điểm như phiên hiện tại.')}
 
@@ -79,12 +79,14 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
             v = _finite(match.iloc[-1])  # VIP dict(zip(...)) keeps the last matching row
             if v is not None:
                 sys_score = min(100.0, max(0.0, v * 10))
-    total = vip.total_score(fa, ta, sys_score, frame)
+    total = vip.total_score_for_symbol(fa, ta, sys_score, frame, bank)
     grade = vip.grade_of(total) if total is not None else None
     missing = [name for name, val in [('FA', fa), ('TA', ta), ('Score hệ thống', sys_score)] if val is None]
     status = ('Đủ FA, TA và Score hệ thống.' if not missing else
               'Thiếu ' + ', '.join(missing) + '; Tổng điểm nếu có đã được VIP phân bổ lại trọng số.')
-    return {'code': code, 'frame': frame, 'fa': fa, 'ta': ta, 'total': total,
+    if bank is not None and (fa is None or bank['risk']):
+        status = 'BANK FA: chưa đủ dữ liệu xác minh hoặc có cảnh báo rủi ro; không xếp hạng tổng điểm.'
+    return {'code': code, 'frame': frame, 'fa': fa, 'ta': ta, 'total': total, 'bank': bank,
             'system': sys_score, 'grade': grade, 'tags_fa': list(fa_tags),
             'tags_ta': list(ta_tags), 'rsi': rsi, 'asof': last_date, 'status': status}
 
@@ -152,6 +154,8 @@ def _panel_html(result, *, mode):
 
     fa = tag_list(result.get('tags_fa') or []) if _finite(result.get('fa')) is not None else \
         '<div class="mvs-missing">Chưa đủ chỉ tiêu FA</div>'
+    if result.get('bank') is not None:
+        fa = tag_list(result.get('tags_fa') or [])
     technical_tags = []
     rsi = _finite(result.get('rsi'))
     if rsi is not None:
@@ -193,10 +197,23 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
                'Cùng công thức Khuyến nghị khách hàng; điểm TA lấy nến Ngày EOD.')
     if result.get('status') and result['status'] != 'Đủ FA, TA và Score hệ thống.':
         st.caption(result['status'])
+    bank = result.get('bank')
+    if bank is not None:
+        import bank_fa
+        st.caption(f"BANK FA · Độ phủ {bank['coverage']}% · {bank['status']} · Kỳ: {bank['period'] or 'Chưa xác minh'}")
+        with st.expander('Chi tiết 6 chỉ tiêu ngân hàng', expanded=False):
+            st.dataframe(pd.DataFrame([{'Chỉ tiêu': k, 'Giá trị': bank['values'][k],
+                'Điểm': bank['points'].get(k), 'Tối đa': w} for k,w in bank_fa.WEIGHTS.items()]),
+                hide_index=True, use_container_width=True)
+            st.write('Nguồn: ' + (bank['source'] or 'Chưa xác minh'))
+            if bank['tags']:
+                st.caption('; '.join(bank['tags']))
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
         st.write('**FA:** ' + ('; '.join(result['tags_fa']) if result['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
         st.write('**Điểm hệ thống:** ' + (_display(result['system']) + '/100' if result['system'] is not None else '—') +
                  ' (Score của app × 10).')
-        st.caption('Tổng điểm được chuẩn hóa theo các thành phần có dữ liệu như trang VIP; '
-                   'không tự coi dữ liệu thiếu là 0 và không phải khuyến nghị mua/bán.')
+        if bank is not None and (result['fa'] is None or bank['risk']):
+            st.caption('Không tính tổng điểm khi BANK FA chưa xác minh hoặc có rủi ro.')
+        else:
+            st.caption('Tổng điểm được chuẩn hóa theo các thành phần có dữ liệu như trang VIP; không tự coi dữ liệu thiếu là 0.')

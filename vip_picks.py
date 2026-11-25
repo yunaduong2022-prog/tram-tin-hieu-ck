@@ -482,6 +482,24 @@ def fa_score_fd(fd: dict | None) -> tuple[int | None, list[str]]:
     return fa_score(fd.get("P/E"), fd.get("ROE"), fd.get("P/B"))
 
 
+def fa_score_for_symbol(code, fd=None):
+    """Shared symbol-aware FA result: score, tags and bank assessment."""
+    import bank_fa
+    code = str(code or '').strip().upper()
+    bank = bank_fa.for_symbol(code) if code in bank_fa.BANKS else None
+    if bank is None:
+        score, tags = fa_score_fd(fd)
+        return score, tags, None
+    tags = [f"BANK FA · Độ phủ {bank['coverage']}%"] + list(bank['tags'])
+    return bank['score'], tags, bank
+
+
+def total_score_for_symbol(fa, ta, sys_pts, frame, bank=None):
+    if bank is not None and (fa is None or bank['risk']):
+        return None
+    return total_score(fa, ta, sys_pts, frame)
+
+
 def ta_score(g: pd.DataFrame) -> tuple[int | None, list[str]]:
     """Điểm kỹ thuật 0-100 chấm trên khung Ngày từ MA20, MA50, MA200, RSI(14) và khối lượng. g = các phiên gần nhất của một mã (cần ≥ 26 phiên
     để chấm khối lượng), có cột Giá đóng cửa, Khối lượng khớp lệnh, MA20, MA50, MA200, RSI.
@@ -743,15 +761,13 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         mid = (buy[0] + buy[1]) / 2 if (status == "Đang nắm giữ" and buy and not buy_auto) else None
         entry = (fill or mid) if status == "Đang nắm giữ" else None      # chỉ tính lợi nhuận khi đã vào lệnh; ưu tiên Giá khớp, không có thì giữa vùng Điểm mua do Admin nhập
         fd = fund_map.get(code, {}) or {}
-        import bank_fa
-        bank_eval = bank_fa.for_symbol(code) if code in bank_fa.BANKS else None
-        fa, fa_tags = (bank_eval["score"], bank_eval["tags"]) if bank_eval is not None else fa_score_fd(fd)
+        fa, fa_tags, bank_eval = fa_score_for_symbol(code, fd)
         if fa is not None and fa < FA_WEAK:
             fa_tags = [f"Cơ bản yếu (FA dưới {FA_WEAK})"] + list(fa_tags)
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
         sys_pts = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
-        total = None if bank_eval is not None and (fa is None or bank_eval["risk"]) else total_score(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"))
+        total = total_score_for_symbol(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"), bank_eval)
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
         rec = ("DỮ LIỆU QUÁ HẠN", "gray", "Không phát sinh khuyến nghị mới") if stale else recommend(close, buy, stop, sell, wbreason, status)
         if bank_eval is not None and status != "Đang nắm giữ" and not stale and (fa is None or bank_eval["risk"]):
