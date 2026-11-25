@@ -284,8 +284,8 @@ def _panel_html(result, *, mode):
     ta = tag_list(technical_tags) if _finite(result.get('ta')) is not None else \
         '<div class="mvs-missing">Chưa đủ dữ liệu TA</div>'
     grade = result.get('grade')
-    grade_html = (f'<span class="mvs-badge" title="Hạng {html.escape(str(grade), quote=True)}">'
-                  f'{html.escape(str(grade))}</span>') if grade and _finite(result.get('total')) is not None else ''
+    from vip_picks import component_grade_badge
+    grade_html = component_grade_badge(result.get('total'), css_class='mvs-badge', grade=grade) if grade else ''
     cells = []
     for label, val, detail, is_total in (
         (result.get('fa_label','Điểm cơ bản (FA)'), result.get('fa'), fa, False),
@@ -293,9 +293,10 @@ def _panel_html(result, *, mode):
         (result.get('total_label','Tổng điểm'), result.get('total'), '', True),
     ):
         scale = result.get('fa_scale',100) if not cells else 100
+        cell_badge = grade_html if is_total else component_grade_badge(val, scale=scale, css_class="mvs-badge")
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
-                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=is_bds and not cells)}{grade_html if is_total else ""}</div>'
+                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=is_bds and not cells)}{cell_badge}</div>'
                      + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
     return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
             '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
