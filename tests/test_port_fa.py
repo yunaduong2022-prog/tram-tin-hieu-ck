@@ -13,7 +13,7 @@ class PortFA(unittest.TestCase):
     def test_missing(self):
         self.assertIsNone(p.tier(None,'roe'));self.assertIsNone(p.tier(-1,'ev_ebitda'));self.assertIsNone(p.evaluate(self.rows['CCP'],30,1,5,1.97,p.ASOF,'snapshot')['score'])
     def test_snapshot(self):
-        a=p.snapshot(self.rows);self.assertNotIn('CCP',a);self.assertNotIn('PAP',a);self.assertNotIn('CAG',a);self.assertEqual(a['CDN']['score'],92);self.assertEqual(sum(e['score'] is not None for e in a.values()),21)
+        a=p.snapshot(self.rows);self.assertNotIn('CCP',a);self.assertNotIn('PAP',a);self.assertNotIn('CAG',a);self.assertEqual(a['CDN']['score'],92);self.assertEqual(sum(e['score'] is not None for e in a.values()),22);self.assertEqual(a['TMS']['score'],60.5);self.assertEqual(a['TMS']['coverage'],100)
         self.assertTrue(all(e['score'] is None or 0<=e['score']<=100 for e in a.values()))
     def test_rank(self):
         a=p.snapshot(self.rows);self.assertEqual(a['CDN']['rank'],1);self.assertEqual(a['ILB']['rank'],1);self.assertIn('tham khảo',p.notes(a['CDN'])[0]);self.assertEqual(p.score_grade(75),'A');self.assertEqual(p.score_grade(60),'B')
