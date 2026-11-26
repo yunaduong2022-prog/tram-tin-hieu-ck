@@ -400,7 +400,7 @@ def drivers_card(code: str, sectors: list[str]) -> str:
 
 
 # ---------------------------------------------------------------- cổ phiếu mạnh cùng ngành
-def peers_card(res_df: pd.DataFrame, code: str, sector: str | None, groups: dict, top_n: int = 5) -> str:
+def peers_card(res_df: pd.DataFrame, code: str, sector: str | None, groups: dict, top_n: int = 5, *, fa_lookup=None) -> str:
     if not sector:
         return _card(f"🏆 CỔ PHIẾU CÙNG NGÀNH · {esc(code)}", "<div class='live-muted'>Mã này chưa được xếp vào ngành nào trong watchlist.py.</div>")
     members = {str(m).upper() for m in groups.get(sector, [])} | {str(code).upper()}
@@ -425,13 +425,22 @@ def peers_card(res_df: pd.DataFrame, code: str, sector: str | None, groups: dict
         me = str(r["Mã"]).upper() == str(code).upper()
         sty = " style='background:#17314a'" if me else ""
         mark = " ◀" if me else ""
-        rows.append(f"<tr{sty}><td>#{int(r['_rank'])}</td><td><b>{esc(r['Mã'])}</b>{mark}</td><td>{'—' if pd.isna(rs) else f'{rs:.2f}'}</td>"
+        fa_value = ""
+        if fa_lookup is not None:
+            try:
+                fa_value = f"<td><b>{esc(fa_lookup(str(r['Mã']).upper()))}</b></td>"
+            except Exception:
+                fa_value = "<td>—</td>"
+        rows.append(f"<tr{sty}><td>#{int(r['_rank'])}</td><td><b>{esc(r['Mã'])}</b>{mark}</td>{fa_value}<td>{'—' if pd.isna(rs) else f'{rs:.2f}'}</td>"
                     f"<td>{trend}</td><td>{status}</td></tr>")
     pos = ""
     if len(cur):
         rk = int(cur["_rank"].iat[0])
         pos = f"<div class='live-muted' style='margin-bottom:6px'>{esc(code)} xếp hạng RS #{rk}/{n} trong ngành {esc(sector)}.</div>"
-    tbl = ("<table class='live-table'><thead><tr><th>Hạng</th><th>Mã CP</th><th>RS20</th><th>Xu hướng</th><th>Trạng thái</th></tr></thead><tbody>"
+    fa_header = "<th>FA</th>" if fa_lookup is not None else ""
+    tbl = (f"<table class='live-table'><thead><tr><th>Hạng</th><th>Mã CP</th>{fa_header}<th>RS20</th><th>Xu hướng</th><th>Trạng thái</th></tr></thead><tbody>"
            + "".join(rows) + "</tbody></table>")
     note = "<div class='live-muted' style='margin-top:6px'>RS20 = sức mạnh 20 phiên so với VN-Index (&gt;1 là mạnh hơn thị trường); xếp hạng chỉ gồm các mã của ngành có trong dữ liệu.</div>"
+    if fa_lookup is not None:
+        note += "<div class='live-muted'>FA: điểm cơ bản theo bộ chấm điểm hiện có; * tham khảo (hoặc khác phiên EOD); — thiếu dữ liệu. Xếp hạng vẫn theo RS20.</div>"
     return _card(head, pos + tbl + note)

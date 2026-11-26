@@ -4314,7 +4314,9 @@ def page_livestream():
             if _cm_card:
                 st.markdown(_cm_card, unsafe_allow_html=True)
             st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
-            st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS), unsafe_allow_html=True)
+            from live_peer_fa import make_lookup as _make_peer_fa_lookup
+            _peer_fa_lookup = _make_peer_fa_lookup(frames["D"], _wb_meta_maps(WY_KEY)[1], latest_date, st=st)
+            st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS, fa_lookup=_peer_fa_lookup), unsafe_allow_html=True)
         except Exception as exc:  # noqa: BLE001
             st.caption(f"Không dựng được thông tin theo mã: {exc}")
 
