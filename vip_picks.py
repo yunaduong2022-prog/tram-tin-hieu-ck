@@ -1214,13 +1214,15 @@ def _score_tip(r) -> str:
 
 
 def _port_total_html(r):
-    """Return display-only reference total; official ranking column remains untouched."""
-    if not (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa')):
+    """Display reference total with A-D; official ranking columns remain untouched."""
+    is_industry_ref = isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa')
+    is_bank_ref = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
+    if not (is_industry_ref or is_bank_ref):
         return None
-    value = r.get('_port_total_ref')
-    if not _ok(value):
+    value = r.get('_port_total_ref') if is_industry_ref else r.get('Tổng điểm')
+    if not _ok(value) or not 0 <= float(value) <= 100:
         return '<span class="tp-mu">—</span><div class="tp-note">Tổng điểm tham khảo</div>'
-    return (f'<span class="tp-score" title="{_e(_score_tip(r))}">{value:.0f}</span>{_bar(value)}'
+    return (f'<span class="tp-score" title="{_e(_score_tip(r))}">{value:.0f}</span>{component_grade_badge(value)}{_bar(value)}'
             '<div class="tp-note">Tổng điểm tham khảo</div>')
 
 
