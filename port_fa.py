@@ -195,3 +195,22 @@ def score_grade(value):
     except (ValueError,TypeError):return None
     if not math.isfinite(v) or not 0<=v<=100:return None
     return 'A' if v>=75 else 'B' if v>=60 else 'C' if v>=40 else 'D'
+
+
+def compact_notes(tags):
+    """Hide provenance and long warnings in compact view only; retain in detail."""
+    return [str(t).replace('TB 3N (ảnh):','TB 3 năm:')
+            .replace(' Cảng khai thác',' Ngành Cảng khai thác')
+            .replace(' ICD - Kho bãi - Logistics',' Nhóm ICD - Kho bãi - Logistics')
+            for t in (tags or []) if not str(t).startswith(('FA tham khảo |','Cảnh báo:'))]
+
+
+def reference_total(scorer, fa, ta, system, frame, *, stale=False):
+    """Display-only total; do not store in official VIP score or grade."""
+    def valid(v):
+        try: return v is not None and math.isfinite(float(v)) and 0 <= float(v) <= 100
+        except (TypeError, ValueError, OverflowError): return False
+    if stale or not valid(fa) or not (valid(ta) or valid(system)):
+        return None
+    return scorer(float(fa), float(ta) if valid(ta) else None,
+                  float(system) if valid(system) else None, frame)

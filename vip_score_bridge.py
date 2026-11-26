@@ -62,7 +62,7 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
     check_date = pd.to_datetime(asof, errors='coerce') if asof is not None else None
     stale = (last_date is not None and pd.notna(check_date) and
              last_date != check_date.normalize())
-    if bank is not None and asof is not None:
+    if (bank is not None or code in __import__("port_fa").SYMBOLS) and asof is not None:
         from market_eod_guard import stale as market_stale
         stale = stale or market_stale(asof)
     if daily.empty or last_date is None or stale:
@@ -85,6 +85,7 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
                 sys_score = min(100.0, max(0.0, v * 10))
     is_port = code in __import__("port_fa").SYMBOLS
     total = None if is_port else vip.total_score_for_symbol(fa, ta, sys_score, frame, bank)
+    port_ref = __import__("port_fa").reference_total(vip.total_score, fa, ta, sys_score, frame) if is_port else None
     grade = vip.grade_of(total) if total is not None else None
     missing = [name for name, val in [('FA', fa), ('TA', ta), ('Score hệ thống', sys_score)] if val is None]
     status = ('Đủ FA, TA và Score hệ thống.' if not missing else
@@ -92,7 +93,7 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
     if bank is not None and (fa is None or bank['risk']):
         status = 'BANK FA: chưa đủ dữ liệu xác minh hoặc có cảnh báo rủi ro; không xếp hạng tổng điểm.'
     return {'code': code, 'frame': frame, 'fa': fa, 'ta': ta, 'total': total, 'bank': bank,
-            'system': sys_score, 'grade': grade, 'tags_fa': list(fa_tags),
+            'system': sys_score, 'grade': grade, 'port_total_ref': port_ref, 'tags_fa': list(fa_tags),
             'tags_ta': list(ta_tags), 'rsi': rsi, 'asof': last_date, 'status': status}
 
 
@@ -278,7 +279,9 @@ def _panel_html(result, *, mode):
     if result.get('bank') is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
     elif is_port:
-        fa = tag_list(result.get('tags_fa') or [], limit=16)
+        fa = tag_list(__import__('port_fa').compact_notes(result.get('tags_fa')), limit=16)
+        if _finite(result.get('fa')) is not None:
+            fa += '<div class="mvs-missing">FA tham khảo · xem chi tiết</div>'
     elif (is_bds or is_ck) and _finite(result.get('fa')) is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=13)
     technical_tags = []
@@ -368,7 +371,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         display, research, ranks, pb_detail, personal_bank = bank_shared_display(
             result, research_rows, bank_web_review.current_prices(frames_d,asof), vip, frame)
     if str(code).upper().strip() in __import__("port_fa").SYMBOLS:
-        display.update(fa_label="Điểm cơ bản (FA) – tham khảo", total_label="Tổng điểm – chờ xác minh FA", total=None, grade=None)
+        display.update(fa_label="Điểm cơ bản (FA)", total_label="Tổng điểm tham khảo", total=result.get("port_total_ref"), grade=None)
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
     if personal_bank and research is not None and result['fa'] is None:
         if research['Rủi ro']=='Cảnh báo':
@@ -431,7 +434,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         if personal_bank:
             st.caption(display['status'])
         elif str(result.get('code','')).upper() in __import__('port_fa').SYMBOLS:
-            st.caption('PORT FA: điểm tham khảo; chưa tính tổng điểm VIP chính thức.')
+            st.caption('PORT FA và tổng điểm chỉ để tham khảo, không xếp hạng VIP chính thức. ' + result.get('status',''))
         elif bank is not None and (result['fa'] is None or bank['risk']):
             st.caption('Chưa có tổng điểm theo dữ liệu hiện có trong chế độ này.')
         else:
