@@ -293,7 +293,9 @@ def _panel_html(result, *, mode):
         '<div class="mvs-missing">Chưa đủ dữ liệu TA</div>'
     grade = result.get('grade')
     from vip_picks import component_grade_badge
-    grade_html = component_grade_badge(result.get('total'), css_class='mvs-badge', grade=grade) if grade else ''
+    # MIN_REFERENCE_TOTAL_GRADE_V1: badge only, never change official grade.
+    is_ref_total = result.get('total_label') == 'Tổng điểm tham khảo'
+    grade_html = component_grade_badge(result.get('total'), css_class='mvs-badge', grade=None if is_ref_total else grade) if (grade or is_ref_total) else ''
     cells = []
     for label, val, detail, is_total in (
         (result.get('fa_label','Điểm cơ bản (FA)'), result.get('fa'), fa, False),
