@@ -500,6 +500,10 @@ def fa_score_for_symbol(code, fd=None, *, price_k=None, price_date=None, asof=No
     if bank is None and code in port_fa.SYMBOLS:
         score, tags = port_fa.for_symbol(code)
         return score, tags, None
+    import shipping_fa
+    if bank is None and code in shipping_fa.SYMBOLS:
+        score, tags = shipping_fa.for_symbol(code)
+        return score, tags, None
     if bank is None:
         score, tags = fa_score_fd(fd)
         return score, tags, None
@@ -825,9 +829,9 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         ta, ta_tags = ta_score(g)
         sc = score.get(code)
         sys_pts = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
-        is_port = code in __import__("port_fa").SYMBOLS
+        is_port = code in __import__("reference_fa").SYMBOLS
         total = None if is_port else total_score_for_symbol(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"), bank_eval)
-        port_ref = __import__("port_fa").reference_total(total_score, fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"), stale=stale) if is_port else None
+        port_ref = __import__("reference_fa").reference_total(total_score, fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"), stale=stale) if is_port else None
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
         rec = ("DỮ LIỆU QUÁ HẠN", "gray", "Không phát sinh khuyến nghị mới") if stale else recommend(close, buy, stop, sell, wbreason, status)
         if bank_eval is not None and status != "Đang nắm giữ" and not stale and (fa is None or bank_eval["risk"]):
@@ -1222,7 +1226,7 @@ def _port_total_html(r):
 
 def _port_fa_display_tags(r):
     tags = r.get('FA tags') or []
-    return __import__('port_fa').compact_notes(tags) if isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa') else tags
+    return __import__('reference_fa').compact_notes(tags) if isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa') else tags
 
 
 def _port_fa_detail_html(r):
@@ -1280,7 +1284,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if (r.get('_bds_fa') or r.get('_ck_fa') or (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa'))) else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("port_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in _port_fa_display_tags(r)[:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("reference_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in _port_fa_display_tags(r)[:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
         fa += _port_fa_detail_html(r)
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
@@ -1352,7 +1356,7 @@ def _score_cells(r) -> tuple[str, str, str, str]:
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if (r.get('_bds_fa') or r.get('_ck_fa') or (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa'))) else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("port_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in _port_fa_display_tags(r)[:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("reference_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in _port_fa_display_tags(r)[:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
         fa += _port_fa_detail_html(r)
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
