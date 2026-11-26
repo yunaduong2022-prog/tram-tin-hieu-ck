@@ -827,6 +827,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
         sys_pts = None if sc is None or not np.isfinite(sc) else float(min(100.0, max(0.0, sc * 10)))
         is_port = code in __import__("port_fa").SYMBOLS
         total = None if is_port else total_score_for_symbol(fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"), bank_eval)
+        port_ref = __import__("port_fa").reference_total(total_score, fa, ta, sys_pts, p.get("Khung thời gian", "Trung hạn"), stale=stale) if is_port else None
         wbreason = wbrow.get("Lý do", "") if isinstance(wbrow.get("Lý do", ""), str) else ""
         rec = ("DỮ LIỆU QUÁ HẠN", "gray", "Không phát sinh khuyến nghị mới") if stale else recommend(close, buy, stop, sell, wbreason, status)
         if bank_eval is not None and status != "Đang nắm giữ" and not stale and (fa is None or bank_eval["risk"]):
@@ -858,7 +859,7 @@ def build_view(plans: pd.DataFrame, res: pd.DataFrame, frames_d: pd.DataFrame, f
             "_fa_scale": fa_scale, "_bank_personal": bank_personal, "_bank_note": bank_note,
             "_bds_fa": code in __import__("bds_fa").SYMBOLS,
             "_ck_fa": code in __import__("ck_fa").SYMBOLS,
-            "_port_fa": is_port,
+            "_port_fa": is_port, "_port_total_ref": port_ref,
             "RSI": _f(g["RSI"].iat[-1]) if "RSI" in g.columns else None,
             "Khuyến nghị": rec, "Ngoại": net5,
             "Trạng thái": status, "Khung": p.get("Khung thời gian", "Trung hạn"), "Ngày KN": p.get("Ngày khuyến nghị", ""), "Ngày mua": p.get("Ngày mua", ""), "Luận điểm": p.get("Luận điểm", ""),
@@ -1200,10 +1201,38 @@ def _score_tip(r) -> str:
     """Chú thích khi rê chuột vào Tổng điểm: các thành phần và trọng số."""
     f = lambda lab, v: f"{lab} {v:.0f}" if _ok(v) else f"{lab} —"
     w = weights_of(r.get("Khung"))
+    if isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa"):
+        return f"Tham khảo · {f('FA', r['FA'])} · {f('TA', r['TA'])} · {f('Hệ thống', r['Điểm hệ thống'])} · Không xếp hạng VIP chính thức"
     if isinstance(r.get('_bank_personal'),(bool,np.bool_)) and r.get('_bank_personal'):
         scale = 85 if r.get('_fa_scale') == 85 else 100
         return f"Tham khảo · {f('FA', r['FA'])}/{scale} · {f('TA', r['TA'])} · {f('Hệ thống', r['Điểm hệ thống'])} · {r.get('Khung')}"
     return f"{f('FA', r['FA'])} · {f('TA', r['TA'])} · {f('Hệ thống', r['Điểm hệ thống'])} (trọng số {w[0]:.0%} / {w[1]:.0%} / {w[2]:.0%}, {r.get('Khung') or 'Trung hạn'})"
+
+
+def _port_total_html(r):
+    """Return display-only reference total; official ranking column remains untouched."""
+    if not (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa')):
+        return None
+    value = r.get('_port_total_ref')
+    if not _ok(value):
+        return '<span class="tp-mu">—</span><div class="tp-note">Tổng điểm tham khảo</div>'
+    return (f'<span class="tp-score" title="{_e(_score_tip(r))}">{value:.0f}</span>{_bar(value)}'
+            '<div class="tp-note">Tổng điểm tham khảo</div>')
+
+
+def _port_fa_display_tags(r):
+    tags = r.get('FA tags') or []
+    return __import__('port_fa').compact_notes(tags) if isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa') else tags
+
+
+def _port_fa_detail_html(r):
+    if not (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa')):
+        return ''
+    tags = r.get('FA tags') or []
+    details = [t for t in tags if str(t).startswith(('FA tham khảo |','Cảnh báo:'))]
+    if not details:
+        return ''
+    return '<details class="tp-note"><summary>FA tham khảo · chi tiết</summary>' + ''.join(f'<div>{_e(t)}</div>' for t in details) + '</details>'
 
 
 def _row_html(i: int, r, mode: str = "hold") -> str:
@@ -1219,6 +1248,8 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
            if pd.notna(r["Chg"]) else '<span class="tp-mu">—</span>')
     tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span>{component_grade_badge(r["Tổng điểm"], grade=r["Hạng"])}{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else '<span class="tp-mu">—</span>')
+    port_tot = _port_total_html(r)
+    if port_tot is not None: tot = port_tot
     b = r["Điểm mua"]
     if isinstance(b, tuple):
         bt = _px(b[0]) if abs(b[0] - b[1]) < 1e-9 else f"{_px(b[0])} – {_px(b[1])}"
@@ -1249,7 +1280,8 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if (r.get('_bds_fa') or r.get('_ck_fa') or (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa'))) else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("port_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("port_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in _port_fa_display_tags(r)[:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
+        fa += _port_fa_detail_html(r)
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
@@ -1314,11 +1346,14 @@ def _score_cells(r) -> tuple[str, str, str, str]:
     mu = '<span class="tp-mu">—</span>'
     tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span>{component_grade_badge(r["Tổng điểm"], grade=r["Hạng"])}{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else mu)
+    port_tot = _port_total_html(r)
+    if port_tot is not None: tot = port_tot
     if _ok(r["FA"]):
         personal = isinstance(r.get('_bank_personal'), (bool, np.bool_)) and r.get('_bank_personal')
         scale = 85 if personal and r.get('_fa_scale') == 85 else 100
         fa_number = ('{:.2f}'.format(r['FA']).rstrip('0').rstrip('.') if (r.get('_bds_fa') or r.get('_ck_fa') or (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa'))) else int(r['FA']))
-        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("port_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in r["FA tags"][:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
+        fa = f'<span class="tp-sc">{fa_number}<small>/{scale}</small></span>{component_grade_badge(r["FA"], scale=scale, grade=__import__("port_fa").score_grade(r["FA"]) if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else None)}{_bar(r["FA"]*100/scale)}' + "".join(f'<span class="tp-chip"'+ (' style="white-space:normal;overflow-wrap:anywhere"' if personal or r.get("_bds_fa") or r.get("_ck_fa") or (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else '') +f'>{_e(t)}</span>' for t in _port_fa_display_tags(r)[:16 if (isinstance(r.get("_port_fa"), (bool, np.bool_)) and r.get("_port_fa")) else 13 if (r.get("_bds_fa") or r.get("_ck_fa")) else 6 if personal else 3])
+        fa += _port_fa_detail_html(r)
         if personal:
             fa += f'<div class="tp-note">{_e(r.get("_bank_note","Điểm tham khảo"))}</div>'
     else:
