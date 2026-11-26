@@ -400,6 +400,33 @@ def drivers_card(code: str, sectors: list[str]) -> str:
 
 
 # ---------------------------------------------------------------- cổ phiếu mạnh cùng ngành
+def _peer_fa_html(symbol, raw):
+    """Render existing score only; /85 is partial and cannot receive A–D."""
+    import re
+    from math import isfinite
+    text = str(raw or '—')
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)/(85|100)(\*)?", text)
+    if not match:
+        return esc(text)
+    number, scale, star = match.groups()
+    value = float(number)
+    if not isfinite(value) or not 0 <= value <= int(scale):
+        return '—'
+    if scale != '100':
+        return f"<span style='color:#94a3b8;font-weight:600' title='{esc(text)}'>{esc(text)}</span>"
+    try:
+        import vip_picks as vip
+        import port_fa
+        grade = port_fa.score_grade(value) if str(symbol).upper() in port_fa.SYMBOLS else vip.grade_of(value)
+    except Exception:
+        return esc(text)
+    colors = {'A':'#43d69d', 'B':'#a3df86', 'C':'#ffe08a', 'D':'#ffb2b9'}
+    if grade not in colors:
+        return esc(text)
+    label = f"{number} {grade}{star or ''}"
+    return f"<span style='color:{colors[grade]};font-weight:750;white-space:nowrap' title='{esc(text)}'>{esc(label)}</span>"
+
+
 def peers_card(res_df: pd.DataFrame, code: str, sector: str | None, groups: dict, top_n: int = 5, *, fa_lookup=None) -> str:
     if not sector:
         return _card(f"🏆 CỔ PHIẾU CÙNG NGÀNH · {esc(code)}", "<div class='live-muted'>Mã này chưa được xếp vào ngành nào trong watchlist.py.</div>")
@@ -428,7 +455,7 @@ def peers_card(res_df: pd.DataFrame, code: str, sector: str | None, groups: dict
         fa_value = ""
         if fa_lookup is not None:
             try:
-                fa_value = f"<td><b>{esc(fa_lookup(str(r['Mã']).upper()))}</b></td>"
+                fa_value = f"<td>{_peer_fa_html(str(r['Mã']).upper(), fa_lookup(str(r['Mã']).upper()))}</td>"
             except Exception:
                 fa_value = "<td>—</td>"
         rows.append(f"<tr{sty}><td>#{int(r['_rank'])}</td><td><b>{esc(r['Mã'])}</b>{mark}</td>{fa_value}<td>{'—' if pd.isna(rs) else f'{rs:.2f}'}</td>"
@@ -442,5 +469,5 @@ def peers_card(res_df: pd.DataFrame, code: str, sector: str | None, groups: dict
            + "".join(rows) + "</tbody></table>")
     note = "<div class='live-muted' style='margin-top:6px'>RS20 = sức mạnh 20 phiên so với VN-Index (&gt;1 là mạnh hơn thị trường); xếp hạng chỉ gồm các mã của ngành có trong dữ liệu.</div>"
     if fa_lookup is not None:
-        note += "<div class='live-muted'>FA: điểm cơ bản theo bộ chấm điểm hiện có; * tham khảo (hoặc khác phiên EOD); — thiếu dữ liệu. Xếp hạng vẫn theo RS20.</div>"
+        note = "<div class='live-muted' style='margin-top:6px'>Xếp hạng RS20: sức mạnh 20 phiên so với VN-Index (&gt;1 là mạnh hơn thị trường); chỉ gồm mã có dữ liệu.<br>FA /100 · A–D: xếp loại · * tham khảo/khác phiên EOD · — thiếu dữ liệu.</div>"
     return _card(head, pos + tbl + note)
