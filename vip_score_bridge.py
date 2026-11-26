@@ -83,7 +83,8 @@ def compute_vip_scores(code, frames_d, screener, fundamentals, frame='Trung hạ
             v = _finite(match.iloc[-1])  # VIP dict(zip(...)) keeps the last matching row
             if v is not None:
                 sys_score = min(100.0, max(0.0, v * 10))
-    total = vip.total_score_for_symbol(fa, ta, sys_score, frame, bank)
+    is_port = code in __import__("port_fa").SYMBOLS
+    total = None if is_port else vip.total_score_for_symbol(fa, ta, sys_score, frame, bank)
     grade = vip.grade_of(total) if total is not None else None
     missing = [name for name, val in [('FA', fa), ('TA', ta), ('Score hệ thống', sys_score)] if val is None]
     status = ('Đủ FA, TA và Score hệ thống.' if not missing else
@@ -247,6 +248,7 @@ def _panel_html(result, *, mode):
 
     is_bds = str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS
     is_ck = str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS
+    is_port = str(result.get('code','')).upper() in __import__('port_fa').SYMBOLS
 
     def score_text(value, *, total=False, scale=100, exact=False):
         n = _finite(value)
@@ -275,6 +277,8 @@ def _panel_html(result, *, mode):
         '<div class="mvs-missing">Chưa đủ chỉ tiêu FA</div>'
     if result.get('bank') is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
+    elif is_port:
+        fa = tag_list(result.get('tags_fa') or [], limit=16)
     elif (is_bds or is_ck) and _finite(result.get('fa')) is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=13)
     technical_tags = []
@@ -294,10 +298,10 @@ def _panel_html(result, *, mode):
         (result.get('total_label','Tổng điểm'), result.get('total'), '', True),
     ):
         scale = result.get('fa_scale',100) if not cells else 100
-        cell_badge = grade_html if is_total else component_grade_badge(val, scale=scale, css_class="mvs-badge")
+        cell_badge = grade_html if is_total else component_grade_badge(val, scale=scale, css_class="mvs-badge", grade=__import__("port_fa").score_grade(val) if is_port and not cells else None)
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
-                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=(is_bds or is_ck) and not cells)}{cell_badge}</div>'
+                     f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=(is_bds or is_ck or is_port) and not cells)}{cell_badge}</div>'
                      + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
     return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
             '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
@@ -363,6 +367,8 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         research_rows = bank_web_review.resolve_rows(st,key,compact=True)
         display, research, ranks, pb_detail, personal_bank = bank_shared_display(
             result, research_rows, bank_web_review.current_prices(frames_d,asof), vip, frame)
+    if str(code).upper().strip() in __import__("port_fa").SYMBOLS:
+        display.update(fa_label="Điểm cơ bản (FA) – tham khảo", total_label="Tổng điểm – chờ xác minh FA", total=None, grade=None)
     st.markdown(_panel_html(display, mode=mode), unsafe_allow_html=True)
     if personal_bank and research is not None and result['fa'] is None:
         if research['Rủi ro']=='Cảnh báo':
@@ -397,7 +403,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             if bank is not None:
                 import bank_web_review
                 bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
-    elif str(result.get('code','')).upper() not in (__import__('bds_fa').SYMBOLS | __import__('ck_fa').SYMBOLS):
+    elif str(result.get('code','')).upper() not in (__import__('bds_fa').SYMBOLS | __import__('ck_fa').SYMBOLS | __import__('port_fa').SYMBOLS):
         w = vip.weights_of(frame)
         eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
         st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
@@ -415,12 +421,17 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         elif str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS:
             import ck_fa
             st.write(ck_fa.detail(result['code']))
+        elif str(result.get('code','')).upper() in __import__('port_fa').SYMBOLS:
+            import port_fa
+            st.write(port_fa.detail(result['code']))
         st.write('**FA:** ' + ('; '.join(display['tags_fa']) if display['tags_fa'] else 'Chưa đủ dữ liệu chỉ tiêu cơ bản.'))
         st.write('**TA:** ' + ('; '.join(result['tags_ta']) if result['tags_ta'] else 'Chưa đủ dữ liệu MA/RSI/khối lượng.'))
         st.write('**Điểm hệ thống:** ' + (_display(result['system']) + '/100' if result['system'] is not None else '—') +
                  ' (Score của app × 10).')
         if personal_bank:
             st.caption(display['status'])
+        elif str(result.get('code','')).upper() in __import__('port_fa').SYMBOLS:
+            st.caption('PORT FA: điểm tham khảo; chưa tính tổng điểm VIP chính thức.')
         elif bank is not None and (result['fa'] is None or bank['risk']):
             st.caption('Chưa có tổng điểm theo dữ liệu hiện có trong chế độ này.')
         else:
