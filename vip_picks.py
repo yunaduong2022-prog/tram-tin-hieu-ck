@@ -2133,6 +2133,15 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
             with tab:
                 _render_group(s_, groups[s_], res, frames_d, fund_map, wb, meta_fn, ctx_fn, on_chart, admin)
 
+    from dnse_online_private import enabled as _dnse_enabled, render as _render_dnse_online
+    if _dnse_enabled() and frames_d is not None and 'Ngày' in frames_d.columns:
+        _dnse_codes = sorted(set(plans['Mã'].astype(str).str.strip().str.upper()) & available) if 'Mã' in plans.columns else []
+        if _dnse_codes:
+            with st.expander("Dòng tiền chủ động DNSE cá nhân", expanded=True):
+                _dnse_code = st.selectbox("Cổ phiếu", _dnse_codes, key="vp_dnse_online_code")
+                from foreign_session_card import _dates as _dnse_dates
+                _render_dnse_online(_dnse_code, frames_d, _dnse_dates(frames_d['Ngày'].tolist()).max(), key="vip", dark=TH.is_dark())
+
     f1, f2 = st.columns([5, 1.6])
     f1.markdown('<div class="vp-foot">🛡️ Danh mục Khuyến nghị độc quyền dành cho khách hàng VIP • Cập nhật giá &amp; chỉ báo tự động</div>'
                 f'<div class="vp-disc">Tổng điểm = FA + TA + điểm hệ thống (Score của app × 10), trọng số theo khung: Trung hạn {WEIGHTS["Trung hạn"][0]:.0%} / {WEIGHTS["Trung hạn"][1]:.0%} / {WEIGHTS["Trung hạn"][2]:.0%}, '

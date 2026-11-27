@@ -3548,6 +3548,8 @@ def page_stock():
         if code not in E.INDEX_CODES:
             from foreign_session_card import render as _render_foreign_session
             _render_foreign_session(code, frames["D"], latest_date, key="stock", dark=TH.is_dark())
+            from dnse_online_private import render as _render_dnse_online
+            _render_dnse_online(code, frames["D"], latest_date, key="stock", dark=TH.is_dark())
         _render_vip_scores_chart(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
                                  key="vip_scores_stock_chart", mode="stock")
 
@@ -4249,6 +4251,8 @@ def page_livestream():
         if code not in E.INDEX_CODES:
             from foreign_session_card import render as _render_foreign_session
             _render_foreign_session(code, frames["D"], latest_date, key="live", dark=TH.is_dark())
+            from dnse_online_private import render as _render_dnse_online
+            _render_dnse_online(code, frames["D"], latest_date, key="live", dark=TH.is_dark())
         from vip_score_bridge import render_vip_scores as _render_vip_scores_live
         _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
                                 key="vip_scores_livestream", mode="live")
