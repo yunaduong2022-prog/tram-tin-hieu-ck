@@ -459,6 +459,8 @@ except Exception as e:
 
 df = frames["D"]
 latest_date = df["Ngày"].max()
+import price_colors as PC
+PC.bind_daily(df, latest_date)
 
 # MIN_GLOBAL_EOD_GUARD_V1
 import market_eod_guard as MEG
@@ -1275,7 +1277,7 @@ def kq_table(b: pd.DataFrame):
     names = {"Mã": "Mã CK", "Giá": "Giá", "Chg_%": "Thay đổi (%)", "RS vs VNI": "RS",
              "MA10": "MA10", "MA20": "MA20", "MA50": "MA50", "MA100": "MA100", "MA200": "MA200",
              "Trend_NganHan": "Ngắn hạn", "Trend_TrungHan": "Trung hạn", "Trend_DaiHan": "Dài hạn"}
-    t = b[[c for c in names if c in b.columns]].rename(columns=names).copy()
+    t = PC.display_frame(b)[[c for c in names if c in b.columns]].rename(columns=names).copy()
     trend_cols = [c for c in ("Ngắn hạn", "Trung hạn", "Dài hạn") if c in t.columns]
     for c in trend_cols:
         t[c] = t[c].map({"TĂNG": "Tăng", "GIẢM": "Giảm", "LẪN LỘN": "Lẫn lộn"}).fillna("Chưa đủ dữ liệu")
@@ -1290,7 +1292,7 @@ def kq_table(b: pd.DataFrame):
     if trend_cols:
         sty = ap(sty)(lambda v: tcolor.get(v, ""), subset=trend_cols)
     if "Thay đổi (%)" in t.columns:
-        sty = ap(sty)(lambda v: "color:#0E8A6D" if pd.notna(v) and v > 0 else "color:#C93A52" if pd.notna(v) and v < 0 else "", subset=["Thay đổi (%)"])
+        sty = sty.apply(lambda r: PC.style_row(r, code="Mã CK", chg="Thay đổi (%)"), axis=1)
     return sty
 
 
@@ -1418,7 +1420,7 @@ def page_filter():
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
                         f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div>{lean_html}</div>{status_html}</div>'
-                        f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{price_color}">{r["Giá"]:,.2f}</span>'
+                        f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{PC.display(code, r['Giá'], chg).color}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
                         f'<div class="metrics-grid">'
@@ -2498,24 +2500,12 @@ def dir_kind(d):
     return "green" if d > 0 else "red" if d < 0 else "gray"
 
 
-def _mtf_price_html(price, chg) -> str:
-    """Giá phiên gần nhất cạnh mã: xanh nếu tăng so với phiên trước, đỏ nếu giảm, xám nếu đứng giá / chưa có phiên so sánh."""
-    try:
-        price = float(price)
-    except (TypeError, ValueError):
+def _mtf_price_html(price, chg, code="") -> str:
+    if PC.number(price) is None:
         return ""
-    if pd.isna(price):
-        return ""
-    chg = float(chg) if chg is not None and pd.notna(chg) else None
-    if chg is None:
-        col, sub = "var(--muted)", ""
-    elif chg > 1e-9:
-        col, sub = "var(--green)", f"▲ {price - price / (1 + chg / 100):+,.2f} ({chg:+.2f}%)"
-    elif chg < -1e-9:
-        col, sub = "var(--red)", f"▼ {price - price / (1 + chg / 100):+,.2f} ({chg:+.2f}%)"
-    else:
-        col, sub = "var(--muted)", "— 0.00 (0.00%)"
-    return (f'<div class="mtf-px" style="color:{col}"><b>{price:,.2f}</b>' + (f"<span>{sub}</span>" if sub else "") + "</div>")
+    x = PC.display(code, price, chg)
+    return (f'<div class="mtf-px" style="color:{x.color}"><b>{float(price):,.2f}</b>'
+            + (f"<span>{x.change_text}</span>" if x.change_text else "") + "</div>")
 
 
 
@@ -2569,7 +2559,7 @@ def _technical_horizon_html(A, show_frames=True):
 def mtf_card(conc, A, code="", price=None, chg=None):
     code_html = f'<div class="mtf-code">{htmllib.escape(str(code))}</div>' if code else ""
     if code_html:       # giá hiện tại nằm cạnh mã
-        code_html = f'<div class="mtf-right">{code_html}{_mtf_price_html(price, chg)}</div>'
+        code_html = f'<div class="mtf-right">{code_html}{_mtf_price_html(price, chg, code)}</div>'
     if conc is None:
         return card("Kết luận kỹ thuật · D/W/M", f'<div class="mtf-top"><div class="muted">Chưa đủ dữ liệu ở cả 3 khung để kết luận.</div>{code_html}</div>')
     k = conc["kind"]
@@ -2879,20 +2869,14 @@ PX_UP, PX_DOWN, PX_FLAT = "#089981", "#F23645", "#F5C84C"     # giá tăng xanh 
 
 
 def _price_change(code: str) -> dict:
-    """Thay đổi giá phiên mới nhất so với phiên trước: màu (xanh tăng, đỏ giảm, vàng không đổi) và dòng \"▼ -0.15 (-0.51%)\"."""
+    """Shared session colors; official reference when available."""
     try:
         g = df[df["Mã"].astype(str).str.upper() == str(code).upper()].sort_values("Ngày")
-        c = pd.to_numeric(g["Giá đóng cửa"], errors="coerce").dropna()
-        last, prev = float(c.iloc[-1]), float(c.iloc[-2])
-    except Exception:  # noqa: BLE001
+        r = g.iloc[-1]
+        x = PC.display(code, r["Giá đóng cửa"], r.get("Chg_%"), day=r["Ngày"])
+        return {"px_color": x.color, "px_chg": x.change_text}
+    except (IndexError, KeyError, TypeError, ValueError):
         return {}
-    d = round(last - prev, 2)
-    pct = (last / prev - 1) * 100 if prev else 0.0
-    if d > 0:
-        return {"px_color": PX_UP, "px_chg": f"▲ {d:+.2f} ({pct:+.2f}%)"}
-    if d < 0:
-        return {"px_color": PX_DOWN, "px_chg": f"▼ {d:+.2f} ({pct:+.2f}%)"}
-    return {"px_color": PX_FLAT, "px_chg": "■ 0.00 (0.00%)"}
 
 
 def _chart_name(code: str) -> str:
@@ -2914,13 +2898,13 @@ def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
     r = g.iloc[-1]
     prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else float("nan")
     o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
-    up = (c >= prev) if pd.notna(prev) else (c >= o)
-    col = "#089981" if up else "#F23645"
+    x = PC.display(code, c, r.get("Chg_%") if tf == "D" else None, day=r["Ngày"], prev=prev if tf != "D" else None, session=tf == "D")
+    col = x.color
     head = f'<span style="color:#8B95A5;font-size:12px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
     pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
     chg = ""
-    if pd.notna(pct) and pd.notna(prev):
-        chg = f' {c - prev:+,.2f} ({f"{pct:+.2f}".replace(".", ",")}%)'
+    if x.pct is not None:
+        chg = f' {x.delta:+,.2f} ({f"{x.pct:+.2f}".replace(".", ",")}%)'
     ohlc = f'<span style="color:{col};font-size:12px">  O{o:,.2f} H{h:,.2f} L{l_:,.2f} C{c:,.2f}{chg}</span>'
     return head + ohlc
 
@@ -3595,7 +3579,8 @@ def page_stock():
         _prev = float(_g["Giá đóng cửa"].iat[-2])
         _delta = _close - _prev
         _pct = _delta / _prev * 100 if _prev else 0.0
-        _pc = PX_UP if _delta > 0 else PX_DOWN if _delta < 0 else PX_FLAT
+        _px_state = PC.display(code, _close, day=_last, prev=_prev, session=tf == "D")
+        _pc = _px_state.color
         _info = stock_row(code)
         if _info is not None:
             _metrics = _chart_metrics(code, _info)
@@ -3604,7 +3589,7 @@ def page_stock():
         for _met in _metrics:
             if _met["label"] == "Giá":
                 _met.update(value=f"{_close:,.2f}", px_color=_pc,
-                            px_chg=f"{_delta:+.2f} ({_pct:+.2f}%)", sub="")
+                            px_chg=_px_state.change_text, sub="")
             if _met["label"] == "Vol vs MA10":
                 _r = pd.to_numeric(_g["Vol_vs_MA10"].iat[-1], errors="coerce")
                 _met["value"] = f"{float(_r):.1f}x" if pd.notna(_r) else "—"
@@ -3737,11 +3722,12 @@ def page_stock():
         close = float(hourly_g['Giá đóng cửa'].iat[-1])
         prev = float(hourly_g['Giá đóng cửa'].iat[-2])
         delta = close - prev
-        pc = PX_UP if delta > 0 else PX_DOWN if delta < 0 else PX_FLAT
+        _px_state = PC.display(code, close, prev=prev, session=False)
+        pc = _px_state.color
         for m in header_metrics:
             if m['label'] == 'Giá':
                 m['value'], m['px_color'] = f"{close:,.2f}", pc
-                m['px_chg'] = f"{delta:+.2f} ({(delta / prev * 100 if prev else 0):+.2f}%)"
+                m['px_chg'] = _px_state.change_text
                 m['sub'] = ''
             if m['label'] == 'Vol vs MA10':
                 r = pd.to_numeric(hourly_g['Vol_vs_MA10'].iat[-1], errors='coerce')
@@ -3800,14 +3786,15 @@ def page_stock():
         close = float(g["Giá đóng cửa"].iloc[-1])
         prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else close
         delta = close - prev
-        col = PX_UP if delta > 0 else PX_DOWN if delta < 0 else PX_FLAT
+        _px_state = PC.display(code, close, day=latest_symbol_date, prev=prev, session=tf == "D")
+        col = _px_state.color
         safe_layers = [layer for layer in layers if layer in (
             "MA20", "Bollinger", "Dual Ichimoku", "EMA 50/200",
             "Hull Suite", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI")]
         if len(g) < 30:
             safe_layers = [layer for layer in safe_layers if layer in ("Khối lượng",)]
         metric = [{"label": "Giá", "value": f"{close:,.2f}", "px_color": col,
-                   "px_chg": f"{delta:+.2f} ({(delta / prev * 100 if prev else 0):+.2f}%)"}]
+                   "px_chg": _px_state.change_text}]
         mobile = is_mobile()
         if mobile:
             st.markdown(metrics_html(metric, code, _chart_name(code)), unsafe_allow_html=True)
@@ -4284,7 +4271,7 @@ def page_livestream():
             "<div style='display:flex;justify-content:space-between;align-items:center;gap:8px'>"
             f"<div style='color:{_v_color};font-size:23px;font-weight:850'>{htmllib.escape(verdict.upper())}</div>"
             f"<div style='text-align:right'><div class='live-muted'>{htmllib.escape(code)} · EOD</div>"
-            f"<div class='live-price'>{_fmt_level(price)}</div></div></div>"
+            f"<div class='live-price' style='color:{PC.display(code,price,d_chg).color}'>{_fmt_level(price)}</div></div></div>"
             f"<div class='live-muted' style='margin-top:5px'>Điểm D/W/M: {_score}</div>"
             "<div style='height:1px;background:#29384d;margin:12px 0'></div>"
             + _technical_horizon_html(A, show_frames=True)

@@ -150,7 +150,8 @@ def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot=
     tn = TONES.get(tone, TONES["sell"])
     esc = lambda s: html.escape(str(s if pd.notna(s) else ""))
     chg = r.get("Chg %")
-    up = pd.notna(chg) and float(chg) >= 0
+    from price_colors import display
+    _p = display(r.get("Mã"),r.get("Giá"),chg,day=as_of)
     rs = r.get("RS20")
     rs_ok = pd.notna(rs) and float(rs) >= 1
     gain = r.get("Tăng từ đáy %")
@@ -165,8 +166,7 @@ def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot=
     dt = _fmt_date(as_of)
     foot_html = f'<div class="sc-foot">Theo nến cuối phiên {dt}</div>' if dt else ""
     reason = _tidy_sentence(_PREFIX.sub("", str(r.get("Lý do") or "")))
-    chg_html = (f'<span class="sc-chg {"sc-up" if up else "sc-dn"}">{"▲" if up else "▼"} {float(chg):+.2f}%</span>'
-                if pd.notna(chg) else "")
+    chg_html = f'<span class="sc-chg" style="color:{_p.color}">{_p.arrow} {_p.pct_text}</span>' if _p.pct is not None else ""
     rs_note = "" if pd.isna(rs) else (
         f'<span class="sc-rsnote {"sc-up" if rs_ok else "sc-dn"}">{"Mạnh hơn" if rs_ok else "Yếu hơn"} VN-Index</span>')
     ladder = ""
@@ -182,7 +182,7 @@ def card_html(r, as_of=None, tone="sell", wy_of=None, lean_of=None, ladder_foot=
         f'<header class="sc-head"><div><div class="sc-tkr">{esc(r.get("Mã"))}</div>{name_html}<span class="sc-grp">{esc(r.get("Nhóm"))}</span></div>'
         f'<span class="sc-badge"><i></i>{tn["label"]}</span></header>'
         f'{lean_of(r.get("Mã")) if lean_of else ""}'
-        f'<div class="sc-px"><span class="sc-p">{_f(r.get("Giá"))}</span>{chg_html}</div>'
+        f'<div class="sc-px"><span class="sc-p" style="color:{_p.color}">{_f(r.get("Giá"))}</span>{chg_html}</div>'
         f'{gain_html}'
         '<div class="sc-stats">'
         f'<div class="sc-stat"><div class="sc-k">Score</div><div class="sc-v">{_f(r.get("Score"), 1)}</div></div>'

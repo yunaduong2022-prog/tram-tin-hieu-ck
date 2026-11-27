@@ -17,7 +17,11 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 "%PY%" validate_eod.py %*
 if errorlevel 1 goto fail
+"%PY%" sync_price_limits.py
+if errorlevel 1 echo WARNING: price limits unavailable; EOD unchanged.
 "%GIT%" add -- data/eod_prices.csv data/eod_meta.json data/stock_metadata.csv data/shares_outstanding.csv data/index_prices.csv
+if errorlevel 1 goto fail
+if exist data\price_limits_daily.csv "%GIT%" add -- data/price_limits_daily.csv
 if errorlevel 1 goto fail
 if exist data\nhom_von_hoa_gia.csv "%GIT%" add -- data/nhom_von_hoa_gia.csv
 if errorlevel 1 goto fail

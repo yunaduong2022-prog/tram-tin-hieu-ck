@@ -977,7 +977,8 @@ def table_html(d: pd.DataFrame, group: str, sector_of=None, ma_of=None) -> str:
     for _, r in d.iterrows():
         state = str(r["Trạng thái"])
         chg = r.get("Chg %", np.nan)
-        cc = "up" if pd.notna(chg) and chg > 0 else "down" if pd.notna(chg) and chg < 0 else ""
+        from price_colors import display
+        _p = display(r["Mã"], r["Giá"], chg)
         zone = "—" if pd.isna(r.get("Vùng mua từ")) else f'{px(r["Vùng mua từ"])} – {px(r["Vùng mua đến"])}'
         act = r.get("Hành động")
         act_html = f'<span class="go">{"✔ Vào được ngay" if act == "Vào ngay" else "⏳ Chờ mua"}</span>' if pd.notna(r.get("Vùng mua từ")) else ""
@@ -997,7 +998,7 @@ def table_html(d: pd.DataFrame, group: str, sector_of=None, ma_of=None) -> str:
             f'<tr><td class="code">{esc(str(r["Mã"]))}</td>'
             f'<td>{esc(str(sector_of(str(r["Mã"])) if sector_of else r.get("Nhóm", "")))}</td>'
             f'<td>{zone}{act_html}</td>'
-            f'<td><b>{px(r["Giá"])}</b>' + (f'<small class="{cc}">{chg:+.2f}%</small>' if pd.notna(chg) else "") + '</td>'
+            f'<td style="color:{_p.color}"><b>{px(r["Giá"])}</b>' + (f'<small style="color:{_p.color}">{_p.pct_text}</small>' if _p.pct is not None else "") + '</td>'
             f'<td class="st"><span class="dot {_BADGE.get(group, "n")}"></span>{esc(BADGE_TEXT.get(state, state))}</td>'
             + ma_cell(20) + ma_cell(50) + ma_cell(200) +
             f'<td class="sl">{px(r["Cắt lỗ"])}<small>{pc(r["Cắt lỗ %"])}</small></td>'
@@ -1036,11 +1037,10 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     px = lambda x: "-" if pd.isna(x) else f"{round(float(x), 1):,.1f}"
     sg = lambda x: "" if pd.isna(x) else f" ({x:+.1f}%)"
     chg = r.get("Chg %", np.nan)
-    cls, arrow = (("up", " ▲") if pd.notna(chg) and chg > 0 else ("down", " ▼") if pd.notna(chg) and chg < 0 else ("flat", ""))
-    if pd.notna(chg) and abs(float(chg)) < 1e-9:
-        cls = "ref"      # đứng đúng giá tham chiếu (bằng giá đóng cửa hôm trước): màu vàng
+    from price_colors import display
+    _p = display(r["Mã"], r["Giá"], chg)
     html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
-            f'<span class="wb-px {cls}">{px(r["Giá"])}<small>{arrow.strip()}</small></span></div>'
+            f'<span class="wb-px" style="color:{_p.color}">{px(r["Giá"])}<small>{_p.arrow} {_p.pct_text if _p.pct is not None else ""}</small></span></div>'
             f'<span class="wb-badge {_BADGE.get(group, group if group in ("g", "a", "n", "r", "v", "c") else "n")}{" buy" if state == "MUA" else ""}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
             f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
             f'{lean_html}{ctx_html}'

@@ -120,7 +120,7 @@ tbody tr:nth-child(odd){background:#161B26}tbody tr:nth-child(even){background:#
 tbody tr:hover{background:#1F2635}td.code{color:#7C6CF0;font-weight:700}td.pos{color:#3FD6AE}td.neg{color:#FF7B72}td.na{color:#566070}
 </style><div class="wrap"><table><thead><tr id="h"></tr></thead><tbody id="b"></tbody></table></div>
 <script>
-const COLS=__COLS__,ROWS=__ROWS__;let sk=null,asc=true;
+const COLS=__COLS__,ROWS=__ROWS__,PX=__PX_COLORS__;let sk=null,asc=true;
 const fmt=(v,t)=>v===null||v===undefined||v===""?null:t==="txt"?String(v):t==="num1"?Number(v).toLocaleString("en-US",{minimumFractionDigits:1,maximumFractionDigits:1}):t==="num2"?Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}):t==="num0"?Math.round(Number(v)).toLocaleString("en-US"):t==="mult"?Number(v).toFixed(2)+"x":t==="chg"?(Number(v)>0?"+":"")+Number(v).toFixed(2)+"%":Number(v).toLocaleString("en-US",{maximumFractionDigits:2})+"%";
 function draw(){const h=document.getElementById("h");h.innerHTML="";
  COLS.forEach((c,i)=>{const th=document.createElement("th");th.className=sk===i?"on":"";th.innerHTML=c[0]+'<span class="ar">'+(sk===i?(asc?"↑":"↓"):"⇅")+"</span>";
@@ -130,12 +130,12 @@ function draw(){const h=document.getElementById("h");h.innerHTML="";
   const c=t==="txt"?String(x).localeCompare(String(y)):x-y;return asc?c:-c})}
  const b=document.getElementById("b");b.innerHTML="";
  r.forEach(row=>{const tr=document.createElement("tr");row.forEach((v,i)=>{const td=document.createElement("td");const f=fmt(v,COLS[i][1]);
-  if(i===0)td.className="code";if(COLS[i][1]==="chg"&&v!==null&&v!==""){td.className=Number(v)>0?"pos":Number(v)<0?"neg":""}if(f===null){td.className="na";td.textContent="—"}else td.textContent=f;tr.appendChild(td)});b.appendChild(tr)})}
+  if(i===0)td.className="code";if(COLS[i][1]==="chg"&&v!==null&&v!==""){td.className=Number(v)>0?"pos":Number(v)<0?"neg":""}if(f===null){td.className="na";td.textContent="—"}else {td.textContent=f;if(PX[row[0]]&&["Giá","1 phiên"].includes(COLS[i][0]))td.style.setProperty("color",PX[row[0]],"important")}tr.appendChild(td)});b.appendChild(tr)})}
 draw();
 </script>"""
 
 
-def _dark_table(cols, rows, height=600):
+def _dark_table(cols, rows, height=600, price_colors=None):
     """Bảng ngang nền tối, bấm tiêu đề để sắp xếp. cols = [(tiêu đề, 'txt'|'num1'|'num2'|'pct')]."""
     import json
     import streamlit.components.v1 as components
@@ -157,7 +157,7 @@ def _dark_table(cols, rows, height=600):
                  "RED":p["red"], "MUTED":p["muted"]}.items():
         extra = extra.replace("__" + k + "__", v)
     html = (_TABLE_HTML.replace("__COLS__", json.dumps(cols, ensure_ascii=False))
-            .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)).replace("__H__", str(height)))
+            .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)).replace("__PX_COLORS__",json.dumps(price_colors or {})).replace("__H__", str(height)))
     components.html(extra + html, height=height + 20, scrolling=False)
 
 
@@ -438,6 +438,8 @@ def _sector_exchange(codes) -> pd.DataFrame:
 
 def market_table(sub, df, codes):
     st_ = _market_stats(df, f"{len(df)}-{df['Ngày'].max():%Y%m%d}")
+    from price_colors import display
+    px_colors = {}
     spec = MARKET_SPECS[sub]
     cols = [("Mã CK", "txt"), ("Ngành", "txt"), ("Sàn", "txt")] + [(h, k) for h, _, k in spec]
     rows = []
@@ -445,8 +447,14 @@ def market_table(sub, df, codes):
         code = r["Mã"]
         s_ = st_.loc[code] if code in st_.index else None
         vals = [None if s_ is None or pd.isna(s_[key]) else float(s_[key]) for _, key, _ in spec]
+        if s_ is not None:
+            px = display(code, s_["Giá"], s_["r1"])
+            px_colors[code] = px.color
+            if px.verified:
+                for i, (_,key,_) in enumerate(spec):
+                    if key == "r1": vals[i] = px.pct
         rows.append([code, None if pd.isna(r["Ngành"]) else r["Ngành"], None if pd.isna(r["Sàn"]) else r["Sàn"]] + vals)
-    _dark_table(cols, rows)
+    _dark_table(cols, rows, price_colors=px_colors)
     st.caption(f"{len(rows)} mã · tính từ dữ liệu giá/khối lượng đang nạp. Bấm tiêu đề cột để sắp xếp. "
                "Ngành, Sàn lấy từ data/bctc.csv (nếu đã điền).")
 
