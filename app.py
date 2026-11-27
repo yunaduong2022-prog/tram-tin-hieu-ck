@@ -3544,6 +3544,10 @@ def page_stock():
     from vip_score_bridge import render_vip_scores as _render_vip_scores_chart
 
     def _stock_score_panel_below_chart():
+        # MIN_FOREIGN_CARD_BELOW_CHART_V2
+        if code not in E.INDEX_CODES:
+            from foreign_session_card import render as _render_foreign_session
+            _render_foreign_session(code, frames["D"], latest_date, key="stock", dark=TH.is_dark())
         _render_vip_scores_chart(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
                                  key="vip_scores_stock_chart", mode="stock")
 
@@ -4241,6 +4245,10 @@ def page_livestream():
         range_bar_ui("W", _nW, "live_", "2Y")
         # MIN_VIP_SCORE_BRIDGE_CHART_LIVE_20261124
         # MIN_VIP_SCORE_CARDS_BELOW_CHART_V2_20261124
+        # MIN_FOREIGN_CARD_BELOW_CHART_V2
+        if code not in E.INDEX_CODES:
+            from foreign_session_card import render as _render_foreign_session
+            _render_foreign_session(code, frames["D"], latest_date, key="live", dark=TH.is_dark())
         from vip_score_bridge import render_vip_scores as _render_vip_scores_live
         _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
                                 key="vip_scores_livestream", mode="live")
