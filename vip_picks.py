@@ -1239,7 +1239,8 @@ def _port_fa_detail_html(r):
     if not (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa')):
         return ''
     tags = r.get('FA tags') or []
-    details = [t for t in tags if str(t).startswith(('FA tham khảo |','Cảnh báo:'))]
+    steel = any(str(t).startswith('FA tham khảo | Thép |') for t in tags)
+    details = tags if steel else [t for t in tags if str(t).startswith(('FA tham khảo |','Cảnh báo:'))]
     if not details:
         return ''
     return '<details class="tp-note"><summary>FA tham khảo · chi tiết</summary>' + ''.join(f'<div>{_e(t)}</div>' for t in details) + '</details>'
