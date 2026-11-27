@@ -247,6 +247,9 @@ def _panel_html(result, *, mode):
       .mvs-vip .mvs-label{min-height:0;margin-bottom:7px}}
     </style>"""
 
+    if mode == 'live':
+        style += "<style>.mvs-vip .mvs-item{padding:5px 4px}.mvs-vip .mvs-label{min-height:29px;font-size:10px}.mvs-vip .mvs-score{font-size:24px}.mvs-vip .mvs-badge{margin-left:3px;padding:2px 4px}.mvs-vip .mvs-tags{font-size:12px}</style>"
+
     is_bds = str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS
     is_ck = str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS
     is_port = str(result.get('code','')).upper() in __import__('reference_fa').SYMBOLS
@@ -297,6 +300,7 @@ def _panel_html(result, *, mode):
     is_ref_total = result.get('total_label') == 'Tổng điểm tham khảo'
     grade_html = component_grade_badge(result.get('total'), css_class='mvs-badge', grade=None if is_ref_total else grade) if (grade or is_ref_total) else ''
     cells = []
+    live_details = []
     for label, val, detail, is_total in (
         (result.get('fa_label','Điểm cơ bản (FA)'), result.get('fa'), fa, False),
         ('Điểm kỹ thuật (TA)', result.get('ta'), ta, False),
@@ -304,12 +308,15 @@ def _panel_html(result, *, mode):
     ):
         scale = result.get('fa_scale',100) if not cells else 100
         cell_badge = grade_html if is_total else component_grade_badge(val, scale=scale, css_class="mvs-badge", grade=__import__("reference_fa").score_grade(val) if is_port and not cells else None)
+        if mode == 'live' and detail:
+            live_details.append(f'<details style="margin:6px 0;padding:5px 0;border-top:1px solid {line}"><summary style="cursor:pointer;font-size:12px;font-weight:700">Chi tiết {html.escape(label)}</summary>{detail}</details>')
+            detail = ''
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
                      f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=(is_bds or is_ck or is_port) and not cells)}{cell_badge}</div>'
                      + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
     return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
-            '<div class="mvs-grid">' + ''.join(cells) + '</div></section>')
+            '<div class="mvs-grid">' + ''.join(cells) + '</div>' + ''.join(live_details) + '</section>')
 
 
 def bank_shared_display(result, research_rows, prices, vip, frame):
