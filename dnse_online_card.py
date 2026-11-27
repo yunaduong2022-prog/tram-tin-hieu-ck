@@ -280,7 +280,7 @@ def dnse_net_html(models, green, red, muted):
     return '<div class="dnse-net-values" title="Giá trị khớp mua chủ động trừ bán chủ động; không gồm phần chưa xác định chiều" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr));gap:4px 12px;margin:5px 0 7px;color:'+muted+'">'+''.join(parts)+'</div>'
 
 def card_html(models, dark=True, price_warning=None, quote=None, code=None, date=None, prior_ma20=None, source="SSI"):
-    fg,muted,border,tile=('#edf3fa','#a0b1c7','#29384d','#273445') if dark else ('#20324b','#586981','#d6e0eb','#eef3f9')
+    fg,muted,border,tile=('#E6EDF5','#94A3B8','#303B4D','#252E3E') if dark else ('#20324b','#586981','#d6e0eb','#eef3f9')
     green,red=('#21bd87','#f05e70') if dark else ('#087c56','#b4233c')
     blocks=[]
     unknown_notes=[]
@@ -368,7 +368,7 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
     assessment=''
     def finish(content):
         if source!='DNSE':return content
-        bg='#111b2b' if dark else '#f5f8fc'
+        bg='#1D2432' if dark else '#f5f8fc'
         return f'<div style="background:{bg};border-radius:10px;padding:10px 12px;color:{fg};font-variant-numeric:tabular-nums">{content}</div>'
     if source=='DNSE':
         at,ad,ak=dnse_flow_assessment(models,price_warning,quote)

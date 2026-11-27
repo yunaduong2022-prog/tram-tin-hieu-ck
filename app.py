@@ -3303,6 +3303,10 @@ def make_chart(a, code, tf, layers, metrics=None, mobile=False, bars=None, drag=
         fig.update_layout(height=height, template=TH.plotly_template(), margin=dict(l=10, r=62, t=(50 if hide_legend else 96), b=10),
                           legend=dict(orientation="h", y=1.04, font=dict(size=10)))
     TH.style_fig(fig)
+    if TH.is_dark():
+        fig.update_layout(paper_bgcolor="#181D28", plot_bgcolor="#181D28")
+        fig.update_xaxes(gridcolor="#303B4D")
+        fig.update_yaxes(gridcolor="#303B4D")
     fig.update_layout(meta=dict(vn_code=str(code), vn_tf=tf))      # draw_tools.py dựa vào đây để gắn thanh vẽ đúng biểu đồ (Livestream có cả Ngày và Tuần)
     if hide_legend:
         fig.update_layout(showlegend=False)
