@@ -288,6 +288,7 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
         m=models[n]; pair=m['total']; v=pct(pair); label='Hiện tại' if n==1 else f'Lũy kế {n} phiên'
         if source=='DNSE' and pair is not None:
             vols=(*pair,m['unknown']); vals=(*m['est'],m['unknown_val']); total=sum(vols)
+            if n==1: label='Phiên hiện tại'
             f=dnse_display_pct
             percentages=[100*x/total for x in vols]
             labels=('Mua CĐ','Bán CĐ','Chưa xác định')
@@ -296,12 +297,12 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
             for i,c in enumerate((green,red)):
                 align='left' if i==0 else 'right'
                 small_pct=' · '+f(percentages[i]) if percentages[i]<13 else ''
-                sides.append(f'<div style="min-width:0;text-align:{align};color:{c};font-size:12px"><span>{labels[i]} · {fmt_vol(vols[i])}{small_pct}</span> <b style="font-size:13px">{dnse_display_value(vals[i])}</b></div>')
+                sides.append(f'<div style="min-width:0;text-align:{align};color:{c};font-size:12px"><span>{labels[i]} · {fmt_vol(vols[i])}{small_pct}</span> · <b style="font-size:13px">{dnse_display_value(vals[i])}</b></div>')
             meta=''.join(sides)
             if vols[2]:
                 unknown_notes.append((label,vols[2],vals[2],percentages[2]))
             bar='<div style="display:flex;height:22px;border-radius:5px;overflow:hidden" aria-label="'+html.escape('; '.join(f'{l}: {p:.6f}%' for l,p in zip(labels,percentages)),quote=True)+'">'+''.join(f'<div style="width:{p:.8f}%;background:{bg};color:white;line-height:22px;text-align:center;font-weight:700;font-size:12px;overflow:hidden;white-space:nowrap">{f(p) if p>=13 else ""}</div>' for p,bg in zip(percentages,backgrounds))+'</div>'
-            blocks.append(f'<div style="margin:7px 0"><b style="color:{fg};font-size:12px">{label}</b><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;margin:2px 0 3px">{meta}</div>{bar}</div>')
+            blocks.append(f'<div style="margin:5px 0"><div style="display:flex;align-items:baseline;gap:2px 12px;flex-wrap:wrap;margin-bottom:3px;line-height:1.3"><b style="color:{fg};font-size:12px;flex:0 0 auto">{label}</b><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;flex:1 1 320px;min-width:0">{meta}</div></div>{bar}</div>')
             continue
         elif v is None:
             meta=f'<span style="color:{muted}">Chưa đủ dữ liệu · {m["count"]}/{n} phiên</span>';bar=f'<div style="height:20px;background:{tile};border-radius:5px;text-align:center;color:{muted};font-size:11px;line-height:20px">—</div>'
@@ -320,7 +321,10 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
                 meta+=f'<span style="color:{muted};white-space:nowrap">{f(buy)} / {f(sell)}</span>'
         blocks.append(f'<div style="margin:5px 0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:3px;font-size:11px"><b style="color:{fg}">{label}</b>{meta}</div>{bar}</div>')
     if source=='DNSE' and unknown_notes:
-        notes='; '.join(f'{label}: {fmt_vol_exact(q)} · {dnse_display_value(v)} · {dnse_display_pct(p)}' for label,q,v,p in unknown_notes)
+        grouped={}
+        for label,q,v,pct_ in unknown_notes:
+            grouped.setdefault((q,v),[]).append((label,pct_))
+        notes='; '.join(f'{" / ".join(label.replace("Lũy kế ","") for label,_ in items)}: {fmt_vol_exact(q)} · {dnse_display_value(v)} (' + ' / '.join(dnse_display_pct(pct_) for _,pct_ in items) + ')' for (q,v),items in grouped.items())
         blocks.append(f'<div style="font-size:11px;color:{muted};margin:4px 0">Chưa xác định chiều — {notes}</div>')
     title,desc,tone=conclusion(models,price_warning,quote);purple='#d946ef' if dark else '#a21caf';color={'buy':green,'sell':red,'neutral':muted,'ceiling':purple}[tone]
     if source=='DNSE' and any(m.get('unknown',0) for m in models.values()) and not (quote and (quote.get('floor') or quote.get('ceiling'))) and not price_warning:

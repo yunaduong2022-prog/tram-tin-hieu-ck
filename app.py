@@ -2509,7 +2509,7 @@ def _mtf_price_html(price, chg, code="") -> str:
 
 
 
-def _technical_horizon_html(A, show_frames=True):
+def _technical_horizon_html(A, show_frames=True, show_ma=True):
     """Source-shared MA states plus existing engine D/W/M directions; display only.
 
     MA = ma_structure_view.trend_state (daily), D/W/M = engine scores.
@@ -2536,6 +2536,8 @@ def _technical_horizon_html(A, show_frames=True):
 
     out_ = ["<div style='font-size:12px;color:#c7d4e5;font-weight:800;"
             "margin-top:10px'>CẤU TRÚC MA · NẾN NGÀY</div>", _group(ma_states)]
+    if not show_ma:
+        out_ = []
     if show_frames:
         directions_ = []
         for tf_, label_ in (("D", "Ngày (D)"), ("W", "Tuần (W)"), ("M", "Tháng (M)")):
@@ -4253,11 +4255,7 @@ def page_livestream():
             _render_foreign_session(code, frames["D"], latest_date, key="live", dark=TH.is_dark())
             from dnse_online_private import render as _render_dnse_online
             _render_dnse_online(code, frames["D"], latest_date, key="live", dark=TH.is_dark())
-        from vip_score_bridge import render_vip_scores as _render_vip_scores_live
-        _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
-                                key="vip_scores_livestream", mode="live")
         st.caption("Biểu đồ sử dụng bộ chỉ báo sẵn có của ứng dụng. Biểu đồ tuần giúp kiểm tra xu hướng lớn trước khi diễn giải tín hiệu ngày.")
-        LTP.render(code, A, latest_date)
 
     with right:
         # MA and D/W/M are displayed together, but their scores are NOT mixed.
@@ -4284,22 +4282,24 @@ def page_livestream():
             f"<div style='color:{_v_color};font-size:23px;font-weight:850'>{htmllib.escape(verdict.upper())}</div>"
             f"<div style='text-align:right'><div class='live-muted'>{htmllib.escape(code)} · EOD</div>"
             f"<div class='live-price' style='color:{PC.display(code,price,d_chg).color}'>{_fmt_level(price)}</div></div></div>"
-            f"<div class='live-muted' style='margin-top:5px'>Điểm D/W/M: {_score}</div>"
             "<div style='height:1px;background:#29384d;margin:12px 0'></div>"
-            + _technical_horizon_html(A, show_frames=True)
+            + _technical_horizon_html(A, show_frames=True, show_ma=False)
             + f"<div style='color:#dce5f0;font-size:12px;line-height:1.6;margin-top:9px'>"
             f"{htmllib.escape(str(_reason))}</div>"
-            "<div style='height:1px;background:#29384d;margin:12px 0'></div>"
-            "<div style='font-size:12px;font-weight:800;color:#c7d4e5;margin-bottom:8px'>"
-            "MỐC GIÁ & RS · THEO DÕI</div>"
-            "<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
-            + _level_html +
-            "</div><div class='live-muted' style='margin-top:9px'>"
-            "MA là cấu trúc nến ngày, D/W/M là điểm đa chỉ báo; hai kết quả không bị gộp thành tín hiệu mới. "
-            "Vùng ±2% và mốc −8% là phép tính dự phòng, không phải điểm mua/cắt lỗ đã xác nhận. "
-            "RS và các mốc giá không tham gia điểm D/W/M.</div></div>",
+            "</div>",
             unsafe_allow_html=True
         )
+        with st.expander("Chi tiết kỹ thuật · MA / điểm D/W/M / mốc giá & RS", expanded=False):
+            st.markdown(
+                f"<div class='live-muted'>Điểm D/W/M: {_score}</div>"
+                + _technical_horizon_html(A, show_frames=False)
+                + "<div style='font-size:12px;font-weight:800;color:#c7d4e5;margin:8px 0'>MỐC GIÁ & RS · THEO DÕI</div>"
+                "<div style='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px'>"
+                + _level_html + "</div><div class='live-muted' style='margin-top:9px'>"
+                "MA là cấu trúc nến ngày, D/W/M là điểm đa chỉ báo; hai kết quả không bị gộp thành tín hiệu mới. "
+                "Vùng ±2% và mốc −8% là phép tính dự phòng, không phải điểm mua/cắt lỗ đã xác nhận. "
+                "RS và các mốc giá không tham gia điểm D/W/M.</div>", unsafe_allow_html=True)
+
 
         # Ba thẻ dưới đây phụ thuộc vào MÃ ĐANG PHÁT (không còn gắn cứng ngành cao su): định giá, động lực/đầu vào/đầu ra của ngành, cổ phiếu cùng ngành.
         # Ngành dùng để so sánh: ngành đang lọc ở ô "Ngành" nếu mã thuộc ngành đó, không thì ngành đầu tiên của mã trong watchlist.py.
@@ -4308,11 +4308,19 @@ def page_livestream():
         if _sec_main:
             _secs = [_sec_main] + [x_ for x_ in _secs if x_ != _sec_main]
         try:
-            # Thẻ "Vốn hóa & định giá" đã bỏ (vốn hóa, P/E, P/B, ROE đã có sẵn ở đầu biểu đồ); mã có file data/nhan_dinh_ma/<MÃ>.md thì vẫn hiện thẻ nhận định.
             _cm_card = SDV.commentary_card(code)
             if _cm_card:
                 st.markdown(_cm_card, unsafe_allow_html=True)
-            st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
+        except Exception as exc:
+            st.caption(f"Không dựng được nhận định theo mã: {exc}")
+
+        from vip_score_bridge import render_vip_scores as _render_vip_scores_live
+        _render_vip_scores_live(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
+                                key="vip_scores_livestream", mode="live")
+        LTP.render(code, A, latest_date)
+        try:
+            with st.expander("Động lực tăng trưởng & yếu tố theo ngành", expanded=False):
+                st.markdown(SDV.drivers_card(code, _secs), unsafe_allow_html=True)
             from live_peer_fa import make_lookup as _make_peer_fa_lookup
             _peer_fa_lookup = _make_peer_fa_lookup(frames["D"], _wb_meta_maps(WY_KEY)[1], latest_date, st=st)
             st.markdown(SDV.peers_card(res_df, code, _sec_main, WL.GROUPS, fa_lookup=_peer_fa_lookup), unsafe_allow_html=True)
