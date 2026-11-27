@@ -8,7 +8,7 @@ import streamlit as st
 DARK = {
     "bg": "#131720", "bg2": "#181D28", "card": "#1D2432",
     "card2": "#252E3E", "line": "#303B4D", "line2": "#293344",
-    "txt": "#E6EDF5", "txt2": "#F3F6FA", "muted": "#94A3B8",
+    "txt": "#E6EDF5", "txt2": "#F3F6FA", "muted": "#A7B5C9",
     "accent": "#2DD4A7", "red": "#FF6B81", "green": "#2DD4A7",
     "amber": "#F5B942", "gold": "#E0B565", "cream": "#FCF8DF",
     "hero": "#1A3B32", "tag-red-bg": "#3A1A22",
@@ -198,6 +198,7 @@ def inject():
 """
     if is_dark():
         css += '\n/* MIN_DARK_FINANCE_V3: surface colors only. */\n.stApp .live-shell{background:var(--bg2)!important;border-color:var(--line)!important}\n.stApp .live-card{background:var(--card)!important;border-color:var(--line)!important}\n.stApp .live-kpi{background:var(--card2)!important;border-color:var(--line)!important}\n.stApp .st-key-mega-nav,.stApp .st-key-nav-filter-groups,.stApp .st-key-nav-sub{background:var(--bg2)!important;border-color:var(--line)!important}\n.stApp .mvs-vip{background:var(--card)!important;border-color:var(--line)!important;color:var(--txt)!important}\n.stApp .mvs-vip .mvs-item,.stApp .mvs-vip details{border-color:var(--line)!important}\n.stApp .mvs-vip .mvs-bar{background:var(--bar)!important}\n.stApp .mvs-vip .mvs-label{color:var(--muted)!important}\n.stApp [data-testid="stExpander"]{background:var(--bg2)!important}\n'
+        css += '\n/* MIN_DARK_FINANCE_V4: dark-only visual refinements */\n.stApp .brand-hero{background:linear-gradient(135deg,#1D2432,#252E3E)!important;border:1px solid #303B4D!important}\n.stApp .brand-hero .brand-ttl p{color:#A7B5C9!important}\n.stApp .live-muted,.stApp .live-sub{color:#A7B5C9!important}\n.stApp [data-testid="stCaptionContainer"] p{color:#A7B5C9!important}\n.stApp [data-baseweb="tag"]{background:#16896D!important;color:#FFFFFF!important}\n.vnd-bar,.vnd-tab{background:rgba(29,36,50,.96)!important;border-color:#303B4D!important}\n.vnd-tab:hover{background:#303B4D!important}\n.vnd-tip,.vnd-hint{background:#181D28!important;color:#E6EDF5!important;border-color:#303B4D!important}\n'
     else:
         css += FINANCE_LIGHT_CSS
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
