@@ -491,7 +491,7 @@ def _table_html(data):
         day = pd.to_datetime(r["Ngày tín hiệu"], errors="coerce")
         day_txt = day.strftime("%d/%m/%Y") if pd.notna(day) else "—"
         fields = [cell('<b>' + e(r["Mã"]) + '</b>'), cell(e(day_txt)), cell(e(r["Tín hiệu"])),
-                  cell(e(age_txt)), cell(e(_fmt_number(r["Giá tín hiệu"]))), cell('<span class="t2eodval">' + e(_fmt_number(now)) + '</span>', "t2eod"),
+                  cell(e(age_txt)), cell(e(_fmt_number(r["Giá tín hiệu"]))), cell('<span class="t2eodval" style="color:' + __import__('price_colors').display(r['Mã'],now).color + '">' + e(_fmt_number(now)) + '</span>', "t2eod"),
                   cell(e(_fmt_signed(gain)), gain_cls), cell(e(_fmt_number(r["RSI14"]))),
                   cell(e(_fmt_number(r["Vol/TB20"])) + "x"),
                   cell(level(r["Cắt lỗ tham khảo"], now, stop=True)),

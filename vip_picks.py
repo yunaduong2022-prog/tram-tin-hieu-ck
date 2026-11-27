@@ -1255,12 +1255,12 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     if isinstance(nd, (bool, np.bool_)) and nd:
         return (f'<tr><td><span class="tp-rank">{i}</span></td><td class="l"><span class="tp-code">{_e(r["Mã"])}</span>'
                 f'<div class="tp-name">Chưa có dữ liệu giá của mã này</div></td>' + '<td></td>' * 12 + '</tr>')
-    up = (r["Chg"] or 0) >= 0 if pd.notna(r["Chg"]) else True
-    cls = "tp-up" if up else "tp-dn"
+    from price_colors import display
+    _p = display(r["Mã"], r["Giá"], r.get("Chg %"))
     ex = f'<span class="tp-ex">{_e(r["Sàn"])}</span>' if r["Sàn"] else ""
     sec = f'<div><span class="tp-sec">{_e(r["Ngành"])}</span></div>' if r["Ngành"] else ""
-    chg = (f'<div class="{cls}" style="font-weight:700">{r["Chg"]:+.2f}</div><div class="{cls}" style="font-size:12px">{r["Chg %"]:+.2f}%</div>'
-           if pd.notna(r["Chg"]) else '<span class="tp-mu">—</span>')
+    chg = (f'<div style="color:{_p.color};font-weight:700">{_p.delta:+.2f}</div><div style="color:{_p.color};font-size:12px">{_p.pct_text}</div>'
+           if _p.delta is not None else '<span class="tp-mu">—</span>')
     tot = (f'<span class="tp-score" title="{_e(_score_tip(r))}">{r["Tổng điểm"]:.0f}</span>{component_grade_badge(r["Tổng điểm"], grade=r["Hạng"])}{_bar(r["Tổng điểm"])}'
            if _ok(r["Tổng điểm"]) else '<span class="tp-mu">—</span>')
     port_tot = _port_total_html(r)
@@ -1319,7 +1319,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     thesis = str(r.get("Luận điểm") or "").strip()
     main = (f'<tr class="{"hasth" if thesis else ""}"><td><span class="tp-rank">{i}</span></td>'
             f'<td class="l"><span class="tp-code">{_e(r["Mã"])}</span>{ex}<div class="tp-name">{_e(r["Tên"])}</div>{sec}{meta}</td>'
-            f'<td><span class="tp-px {cls}">{_px(r["Giá"])}</span></td><td>{chg}</td><td style="font-weight:700">{_vol(r["KL"])}</td>'
+            f'<td><span class="tp-px" style="color:{_p.color}">{_px(r["Giá"])}</span></td><td>{chg}</td><td style="font-weight:700">{_vol(r["KL"])}</td>'
             f'<td>{tot}</td><td>{buy}</td><td>{profit}</td><td>{lvl(r["Target"], r["target_auto"], "a")}</td>'
             f'<td>{lvl(r["Cutloss"], r["stop_auto"], "r")}</td><td>{sell}</td><td>{fa}</td><td>{ta}</td><td>{rec}</td></tr>')
     if thesis:
@@ -1348,12 +1348,11 @@ def example_text(weight, qty) -> str:
 
 
 def _price_html(r) -> str:
-    """Giá hiện tại tô màu theo phiên: xanh tăng, đỏ giảm, cam vàng đứng giá; dòng dưới là ▲/▼/■ % so với phiên trước."""
-    chg, chgp = _f(r.get("Chg")), _f(r.get("Chg %"))
-    if chg is None:
+    from price_colors import display
+    x = display(r.get("Mã"), r.get("Giá"), r.get("Chg %"))
+    if x.pct is None:
         return _px(r["Giá"])
-    pc, ar = ("up", "▲") if round(chg, 2) > 0 else ("dn", "▼") if round(chg, 2) < 0 else ("fl", "■")
-    return f'<div class="lv {pc}">{_px(r["Giá"])}</div><div class="lv {pc}">{ar} {abs(chgp or 0):.2f}%</div>'
+    return f'<div class="lv" style="color:{x.color}">{_px(r["Giá"])}</div><div class="lv" style="color:{x.color}">{x.arrow} {x.pct_text}</div>'
 
 
 def _score_cells(r) -> tuple[str, str, str, str]:

@@ -245,7 +245,7 @@ def table_html(board: pd.DataFrame, dark: bool) -> str:
                      f'<td class="trend"><span class="wl-t2-trend {trend_css}" title="MA trung hạn: MA20 / MA50 / MA100">{esc(trend)}</span></td>',
                      td(r["Ngành"]), td(_fmt(r["Giá đáy"])),
                      positive(r["% từ đáy"]), td(_fmt(r["Giá tín hiệu"])), td(day_s),
-                     td(_fmt(r["Giá hiện tại"]), "price"), positive(r["Tăng/Giảm (%)"]),
+                     td(_fmt(r["Giá hiện tại"]), "price", f'style="color:{__import__("price_colors").display(r["Mã"],r["Giá hiện tại"]).color}"'), positive(r["Tăng/Giảm (%)"]),
                      level_cell(r["TP1"], r["Dư địa TP1"], r["Nguồn TP1"]),
                      level_cell(r["TP2"], r["Dư địa TP2"], r["Nguồn TP2"]),
                      level_cell(r["Cắt lỗ"],

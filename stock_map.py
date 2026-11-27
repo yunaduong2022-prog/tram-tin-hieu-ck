@@ -288,10 +288,9 @@ def _e(x) -> str:
 def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) -> str:
     price = _px(row.get("Giá")) if row is not None else "—"
     chg = _f(row.get("Chg %")) if row is not None else None
-    chg_html = ""
-    if chg is not None:
-        col = "var(--green)" if chg > 0 else "var(--red)" if chg < 0 else "var(--muted)"
-        chg_html = f' <span style="color:{col};font-weight:600">{chg:+.2f}%</span>'
+    from price_colors import display
+    _p = display(code, row.get("Giá") if row is not None else None, chg)
+    chg_html = f' <span style="color:{_p.color};font-weight:600">{_p.pct_text}</span>' if _p.pct is not None else ""
     name = dict(funda).get("Tên công ty", "")
     sub = f'<div class="mm-sub">{_e(name)}</div>' if name and name != "Chưa có" else ""
     stt = str(row.get("Trạng thái") or "").strip() if row is not None else ""
@@ -302,7 +301,7 @@ def tree_html(code: str, row, mems: list[dict], funda: list[tuple[str, str]]) ->
         stt_html = f'<span class="mm-st" style="--c:{col}">{_e(WB.BADGE_TEXT.get(stt, stt).upper())}</span>'
     else:
         stt_html = ""
-    root = f'<div class="mm-root"><span class="mm-code">{_e(code)}</span><span class="mm-px">Giá {price}{chg_html}</span>{stt_html}{sub}</div>'
+    root = f'<div class="mm-root"><span class="mm-code">{_e(code)}</span><span class="mm-px" style="color:{_p.color}">Giá {price}{chg_html}</span>{stt_html}{sub}</div>'
 
     # nhánh 1: các mục mã đang nằm trong
     if mems:

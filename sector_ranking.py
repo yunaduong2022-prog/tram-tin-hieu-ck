@@ -627,7 +627,13 @@ def _rank_table_html(show: pd.DataFrame, period: str) -> str:
                     tds.append('<td class="num">-</td>')
                 else:
                     cls = (" pos" if float(v) > 0 else " neg" if float(v) < 0 else "") if c in signed else ""
-                    tds.append(f'<td class="num{cls}">{fmt[c].format(float(v))}</td>')
+                    if c in ("Giá", "% phiên"):
+                        from price_colors import display
+                        px = display(r.get("Mã"),r.get("Giá"),r.get("% phiên"))
+                        if c == "% phiên" and px.verified: v=px.pct
+                        tds.append(f'<td class="num" style="color:{px.color}">{fmt[c].format(float(v))}</td>')
+                    else:
+                        tds.append(f'<td class="num{cls}">{fmt[c].format(float(v))}</td>')
             else:
                 tds.append(f'<td class="num">{esc("" if pd.isna(v) else str(v))}</td>')
         rows.append("<tr>" + "".join(tds) + "</tr>")
