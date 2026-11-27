@@ -20,8 +20,9 @@ def _dates(values):
     return out.dt.normalize()
 
 
-def calendar_sessions(daily, asof, path=CALENDAR_FILE):
+def calendar_sessions(daily, asof, path=CALENDAR_FILE, *, period=10):
     """Use the VNINDEX calendar, not a ticker's last ten observations."""
+    if period not in (10,20): raise ValueError("Invalid period")
     end = _dates([asof]).iloc[0]
     if pd.isna(end): return []
     candidates = []
@@ -36,7 +37,7 @@ def calendar_sessions(daily, asof, path=CALENDAR_FILE):
     # Merge valid calendar observations; never use dates after the displayed session.
     dates = _dates([v for values in candidates for v in values]).dropna()
     sessions = sorted(set(dates[dates.le(end)]))
-    return sessions[-10:] if sessions and sessions[-1] == end else []
+    return sessions[-period:] if sessions and sessions[-1] == end else []
 
 
 def _number(x):
@@ -59,12 +60,13 @@ def _clean(rec):
     return vals if vals['net_val'] is not None else None
 
 
-def build_summary(flows, code, asof, sessions):
-    """Exact day, exact ten sessions. Unknown values stay unknown, never zero."""
+def build_summary(flows, code, asof, sessions, *, period=10):
+    """Exact day and selected consecutive sessions; never fill missing data."""
+    if period not in (10,20): raise ValueError("Invalid period")
     end = _dates([asof]).iloc[0]
     code = str(code).strip().upper()
     dates = sorted(set(_dates(sessions).dropna())) if sessions is not None else []
-    dates = [d for d in dates if pd.notna(end) and d<=end][-10:]
+    dates = [d for d in dates if pd.notna(end) and d<=end][-period:]
     if not dates or dates[-1] != end: dates=[]
     by_day = {}
     if isinstance(flows,pd.DataFrame) and {'symbol','trading_date','data_source'}.issubset(flows):
@@ -81,23 +83,24 @@ def build_summary(flows, code, asof, sessions):
     rows=[by_day.get(d) for d in dates]
     present=sum(x is not None for x in rows)
     totals={k:None for k in FIELDS}
-    if len(dates)==10 and present==10:
+    if len(dates)==period and present==period:
         for k in FIELDS:
             vals=[r[k] for r in rows]
             if all(v is not None for v in vals): totals[k]=sum(vals)
-    return dict(code=code,day=end,today=today,dates=dates,rows=rows,coverage=present,totals=totals,
+    return dict(period=period,code=code,day=end,today=today,dates=dates,rows=rows,coverage=present,totals=totals,
                 latest=max(by_day) if by_day else None)
 
 
 
 def flow_conclusion(model):
     """Describe observed net flow only; do not imply a trade signal."""
-    if len(model['dates']) != 10 or model['coverage'] != 10:
+    period = model.get('period',10)
+    if len(model['dates']) != period or model['coverage'] != period:
         return None
     vals = [r['net_val'] for r in model['rows']]
     buy = sum(v > 0 for v in vals)
     sell = sum(v < 0 for v in vals)
-    flat = 10 - buy - sell
+    flat = period - buy - sell
     last_sign = (vals[-1] > 0) - (vals[-1] < 0)
     streak = 0
     if last_sign:
@@ -107,7 +110,7 @@ def flow_conclusion(model):
             streak += 1
     net = model['totals']['net_val']
     direction = 'Mua ròng' if net > 0 else 'Bán ròng' if net < 0 else 'Cân bằng'
-    chain = (('Mua ròng' if last_sign > 0 else 'Bán ròng') + f' {streak} phiên liên tiếp (trong 10 phiên)' if last_sign else 'Phiên cuối cân bằng')
+    chain = (('Mua ròng' if last_sign > 0 else 'Bán ròng') + f' {streak} phiên liên tiếp (trong {period} phiên)' if last_sign else 'Phiên cuối cân bằng')
     return dict(buy=buy,sell=sell,flat=flat,streak=streak,net=net,direction=direction,chain=chain)
 
 
@@ -122,40 +125,40 @@ def _tone(v):
 
 
 def card_html(model, dark=True):
-    bg, tile, fg, muted, border = ('#111b2b','#1c293a','#edf3fa','#a0b1c7','#29384d') if dark else ('#ffffff','#eef3f9','#20324b','#586981','#d6e0eb')
-    e=html.escape
+    """Compact two-row table, using the same values and coverage rules."""
+    bg,tile,fg,muted,border = ('#111b2b','#1c293a','#edf3fa','#a0b1c7','#29384d') if dark else ('#ffffff','#eef3f9','#20324b','#586981','#d6e0eb')
+    period=model.get('period',10)
     def date(d): return d.strftime('%d/%m/%Y') if d is not None and pd.notna(d) else '—'
-    def tiles(vals):
-        vals=vals or {}
-        items=[]
-        for k,label in [('buy','NN mua'),('sell','NN bán'),('net','Mua/bán ròng')]:
+    def tone(v):
+        c=_tone(v)
+        return c if dark else ('#087c56' if c=='#21bd87' else '#b4233c' if c=='#f05e70' else muted)
+    def row(label,vals,detail):
+        vals=vals or {}; cells=[]
+        for k in ('buy','sell','net'):
             v=vals.get(k+'_val'); vol=vals.get(k+'_vol')
-            c=('#21bd87' if k=='buy' else '#f05e70') if k!='net' and (v is not None or vol is not None) else _tone(v if v is not None else vol)
-            if not dark: c='#087c56' if c=='#21bd87' else '#b4233c' if c=='#f05e70' else muted
-            if k=='net' and v is not None: label='Mua ròng' if v>0 else 'Bán ròng' if v<0 else 'Ròng cân bằng'
-            items.append(f'<div style="min-width:0;background:{tile};border-radius:8px;padding:9px 4px;text-align:center;overflow-wrap:anywhere"><div style="font-size:12px;color:{muted}">{label}</div><div style="font-size:16px;font-weight:800;color:{c};margin:5px 0">{_fmt(vol)}</div><div style="font-size:12px;color:{fg}">{_fmt(v,True)}</div></div>')
-        return '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px">'+''.join(items)+'</div>'
-    top=f'<div style="font-size:11px;color:{muted};margin:0 0 8px">Phiên {date(model["day"])}</div>'
-    if model['today'] is None:
-        top+=f'<div style="color:{muted};font-size:12px;margin-bottom:8px">Chưa có số liệu đúng phiên. Gần nhất có dữ liệu: {date(model["latest"])}</div>'
+            c=tone((1 if k=='buy' else -1) if k!='net' and (v is not None or vol is not None) else (v if v is not None else vol))
+            cells.append(f'<td style="padding:5px 4px;text-align:center;background:{tile};border:1px solid {border};white-space:nowrap"><b style="font-size:15px;color:{c}">{_fmt(v,True)}</b><div style="font-size:12px;color:{c}">{_fmt(vol)} cp</div></td>')
+        return f'<tr><th scope="row" style="text-align:left;padding:5px 6px;font-size:12px;color:{fg};border:1px solid {border}">{label}<div style="font-size:10px;font-weight:400;color:{muted}">{detail}</div></th>'+''.join(cells)+'</tr>'
     count=model['coverage']; days=model['dates']
-    detail=(f'{date(days[0])} – {date(days[-1])} · {count}/10 phiên có dữ liệu' if days else 'Chưa có lịch phiên VN-Index khớp EOD')
-    warning= '' if count==10 and len(days)==10 else f'<div style="font-size:11px;color:{muted};margin-top:7px">Chưa đủ 10 phiên liền kề; không tính lũy kế.</div>'
-    if count==10 and any(v is None for v in model['totals'].values()):
-        warning=f'<div style="font-size:11px;color:{muted};margin-top:7px">Chỉ tiêu thiếu dữ liệu được để trống.</div>'
-    conclusion=flow_conclusion(model)
-    note=''
+    detail=f'{date(days[0])[:5]} – {date(days[-1])} · {count}/{period} phiên' if days else 'Chưa có lịch phiên khớp EOD'
+    warnings=[]
+    if model['today'] is None: warnings.append(f'Chưa có số liệu đúng phiên; gần nhất: {date(model["latest"])}.')
+    if count!=period or len(days)!=period: warnings.append(f'Chưa đủ {period} phiên liền kề; không tính lũy kế.')
+    elif any(v is None for v in model['totals'].values()): warnings.append('Chỉ tiêu thiếu dữ liệu được để trống.')
+    conclusion=flow_conclusion(model); note=''
     if conclusion:
-        c=_tone(conclusion['net']) if dark else ('#087c56' if conclusion['net']>0 else '#b4233c' if conclusion['net']<0 else muted)
-        note=(f'<div style="font-size:12px;line-height:1.6;border-top:1px solid {border};margin-top:10px;padding-top:8px">'
-              f'<b style="color:{c}">Lũy kế: {conclusion["direction"]} · {_fmt(abs(conclusion["net"]),True)}</b>'
-              f'<div>{conclusion["buy"]} phiên mua ròng · {conclusion["sell"]} phiên bán ròng'
+        note=(f'<div style="font-size:12px;line-height:1.45;margin-top:6px"><b style="color:{tone(conclusion["net"])}">Lũy kế: {conclusion["direction"]} · {_fmt(abs(conclusion["net"]),True)}</b>'
+              f' · {conclusion["buy"]} phiên mua ròng · {conclusion["sell"]} phiên bán ròng'
               + (f' · {conclusion["flat"]} phiên cân bằng' if conclusion['flat'] else '')
-              + f'</div><div>{conclusion["chain"]}</div></div>')
-    return (f'<div style="background:{bg};border:1px solid {border};border-radius:13px;padding:13px;margin:0 0 10px;color:{fg}">'
-            f'<div style="font-weight:800;font-size:14px;margin-bottom:5px">🌐 GIAO DỊCH KHỐI NGOẠI · {e(model["code"])}</div>'+top+tiles(model['today'])+
-            f'<div style="border-top:1px solid {border};margin:12px 0 8px;padding-top:10px;font-weight:800;font-size:13px">LŨY KẾ 10 PHIÊN LIỀN KỀ</div>'
-            f'<div style="font-size:11px;color:{muted};margin-bottom:7px">{detail}</div>'+tiles(model['totals'])+warning+note+'</div>')
+              + f'<div>{conclusion["chain"]}</div></div>')
+    header='<tr>'+''.join(f'<th style="text-align:{"left" if i==0 else "center"};padding:4px;color:{muted};font-size:12px">{v}</th>' for i,v in enumerate(('Khung','NN mua','NN bán','Mua/bán ròng')))+'</tr>'
+    return (f'<div style="color:{fg};background:{bg};border-radius:8px;padding:6px 8px">'
+            f'<div style="font-size:14px;font-weight:800;margin-bottom:3px">🌐 GIAO DỊCH KHỐI NGOẠI · {html.escape(model["code"])}</div>'
+            f'<div style="overflow-x:auto"><table aria-label="Giao dịch khối ngoại" style="width:100%;min-width:420px;border-collapse:collapse">'+header
+            +row('Phiên hiện tại',model['today'],date(model['day']))
+            +row(f'LŨY KẾ {period} PHIÊN LIỀN KỀ',model['totals'],detail)+'</table></div>'
+            + (f'<div style="font-size:11px;color:{muted};margin-top:4px">'+html.escape(' '.join(warnings))+'</div>' if warnings else '')
+            +note+'</div>')
 
 
 def render(code,daily,asof,*,key,dark=True):
@@ -171,16 +174,20 @@ def render(code,daily,asof,*,key,dark=True):
         if GROSS_FILE.is_file():
             stat=GROSS_FILE.stat(); flows=_read(str(GROSS_FILE),stat.st_mtime_ns,stat.st_size)
         else: flows=pd.DataFrame()
-        sessions=calendar_sessions(daily,asof)
-        m=build_summary(flows,code,asof,sessions)
-        st.markdown(card_html(m,dark=dark),unsafe_allow_html=True)
-        if m['coverage']:
-            dates=[d.strftime('%d/%m') for d in m['dates']]
-            net=[r['net_val']/1e9 if r is not None else None for r in m['rows']]
-            fig=go.Figure(go.Bar(x=dates,y=net,marker_color=[_tone(v) for v in net],hovertemplate='%{x}<br>Ròng: %{y:,.2f} tỷ<extra></extra>'))
-            fig.add_hline(y=0,line_color='#8794a4',line_width=1)
-            fig.update_layout(title=dict(text='Giá trị ròng từng phiên · tỷ đồng',font=dict(size=12)),height=175,showlegend=False,template='plotly_dark' if dark else 'plotly_white',paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',margin=dict(l=5,r=5,t=30,b=20),xaxis=dict(type='category',categoryorder='array',categoryarray=dates,tickfont=dict(size=10)),yaxis=dict(tickfont=dict(size=10)))
-            st.plotly_chart(fig,use_container_width=True,config={'displayModeBar':False},key=f'foreign_session_{key}_{code}')
+        with st.container(border=True):
+            period=st.radio('Lũy kế khối ngoại', (10,20), index=0, horizontal=True,
+                            format_func=lambda n:f'{n} phiên', key=f'foreign_period_v3_{key}',
+                            label_visibility='collapsed')
+            sessions=calendar_sessions(daily,asof,period=period)
+            m=build_summary(flows,code,asof,sessions,period=period)
+            st.markdown(card_html(m,dark=dark),unsafe_allow_html=True)
+            if m['coverage']:
+                dates=[d.strftime('%d/%m') for d in m['dates']]
+                net=[r['net_val']/1e9 if r is not None else None for r in m['rows']]
+                fig=go.Figure(go.Bar(x=dates,y=net,marker_color=[_tone(v) for v in net],hovertemplate='%{x}<br>Ròng: %{y:,.2f} tỷ<extra></extra>'))
+                fig.add_hline(y=0,line_color='#8794a4',line_width=1)
+                fig.update_layout(title=dict(text=f'Giá trị ròng {period} phiên · tỷ đồng',font=dict(size=12)),height=155,showlegend=False,template='plotly_dark' if dark else 'plotly_white',paper_bgcolor='rgba(0,0,0,0)',plot_bgcolor='rgba(0,0,0,0)',margin=dict(l=5,r=5,t=30,b=20),xaxis=dict(type='category',categoryorder='array',categoryarray=dates,tickfont=dict(size=10),tickmode='array',tickvals=dates if period==10 else dates[::2]+[dates[-1]]),yaxis=dict(tickfont=dict(size=10)))
+                st.plotly_chart(fig,use_container_width=True,config={'displayModeBar':False},key=f'foreign_session_{key}_{code}')
     except Exception:
         # Optional display must not interrupt charts or signals.
         st.caption('Chưa đọc được dữ liệu khối ngoại đã xác minh; không hiển thị số liệu suy đoán.')

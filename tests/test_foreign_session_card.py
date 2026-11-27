@@ -53,4 +53,22 @@ class ForeignCard(unittest.TestCase):
         self.assertNotIn('Lũy kế:',card_html(self.m(self.data.iloc[:-1])))
     def test_conclusion_html(self):
         self.assertIn('10 phiên mua ròng',card_html(self.m()));self.assertIn('Mua ròng 10 phiên liên tiếp',card_html(self.m()))
+    def test_twenty(self):
+        days=list(pd.bdate_range('2025-10-20',periods=20)); end=days[-1]
+        d=pd.concat([self.data]*2,ignore_index=True);d['trading_date']=[x.strftime('%Y-%m-%d') for x in days]
+        m=build_summary(d,'BSR',end,days,period=20)
+        self.assertEqual(m['coverage'],20);self.assertEqual(m['totals']['net_val'],60e9)
+        self.assertEqual(flow_conclusion(m)['streak'],20)
+        self.assertIn('LŨY KẾ 20 PHIÊN LIỀN KỀ',card_html(m))
+        self.assertIn('60.00 tỷ',card_html(m))
+        self.assertEqual(build_summary(d,'BSR',end,days)['coverage'],10)
+        self.assertIsNone(build_summary(d.drop(index=2),'BSR',end,days,period=20)['totals']['net_val'])
+    def test_twenty_calendar(self):
+        days=list(pd.bdate_range('2025-10-20',periods=20)); d=pd.DataFrame({'Mã':'VNINDEX','Ngày':days})
+        with TemporaryDirectory() as t:
+            p=Path(t)/'missing.csv';self.assertEqual(calendar_sessions(d,days[-1],p,period=20),days)
+    def test_compact_table(self):
+        a=card_html(self.m());self.assertEqual(a.count('<tr>'),3);self.assertIn('Phiên hiện tại',a);self.assertIn('overflow-x:auto',a)
+    def test_invalid_period(self):
+        with self.assertRaises(ValueError):build_summary(self.data,'BSR',self.end,self.days,period=15)
 if __name__=='__main__':unittest.main()
