@@ -251,6 +251,14 @@ def dnse_flow_assessment(models, price_warning=None, quote=None):
         if tone=='buy':title='MUA CHỦ ĐỘNG CHIẾM ƯU THẾ – GIÁ CHƯA XÁC NHẬN';tone='warning'
     return title,detail+tail+' Theo dõi khả năng duy trì trong các phiên tới.',tone
 
+def dnse_display_pct(p):
+    return '&lt;0,01%' if 0<p<0.005 else f'{p:.2f}%'.replace('.',',')
+
+
+def dnse_display_value(v):
+    return '—' if v is None else f'{v/Decimal(1_000_000_000):,.2f}'.translate(str.maketrans({',':'.','.':','}))+' tỷ'
+
+
 def dnse_net_html(models, green, red, muted):
     """Matched value difference, not net capital inflow; no partial-window totals."""
     parts=[]
@@ -268,22 +276,33 @@ def dnse_net_html(models, green, red, muted):
             color=green if net>0 else red if net<0 else muted
             value=f'{net/Decimal(1000000000):+,.2f}'.translate(str.maketrans({',':'.','.':','}))+' tỷ' if net else '0,00 tỷ'
             if net and abs(net)<Decimal(5000000):value=('+' if net>0 else '−')+'&lt;0,01 tỷ'
-        parts.append(f'<span>{label}: <b style="color:{color}">{value}</b></span>')
-    return '<div class="dnse-net-values" title="Giá trị khớp mua chủ động trừ bán chủ động; không gồm phần chưa xác định chiều" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin:3px 0;color:'+muted+'">'+''.join(parts)+'</div>'
+        parts.append(f'<div style="min-width:0"><div style="font-size:11px">{label}</div><b style="color:{color};font-size:15px;font-variant-numeric:tabular-nums">{value}</b></div>')
+    return '<div class="dnse-net-values" title="Giá trị khớp mua chủ động trừ bán chủ động; không gồm phần chưa xác định chiều" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr));gap:4px 12px;margin:5px 0 7px;color:'+muted+'">'+''.join(parts)+'</div>'
 
 def card_html(models, dark=True, price_warning=None, quote=None, code=None, date=None, prior_ma20=None, source="SSI"):
     fg,muted,border,tile=('#edf3fa','#a0b1c7','#29384d','#273445') if dark else ('#20324b','#586981','#d6e0eb','#eef3f9')
     green,red=('#21bd87','#f05e70') if dark else ('#087c56','#b4233c')
     blocks=[]
+    unknown_notes=[]
     for n in (1,5,10,20):
         m=models[n]; pair=m['total']; v=pct(pair); label='Hiện tại' if n==1 else f'Lũy kế {n} phiên'
         if source=='DNSE' and pair is not None:
             vols=(*pair,m['unknown']); vals=(*m['est'],m['unknown_val']); total=sum(vols)
-            f=lambda x:f'{x:.2f}%'.replace('.',',')
-            labels=('Mua CĐ','Bán CĐ','Chưa xác định'); colors=(green,red,muted); backgrounds=('#178962','#c34154','#667085')
+            f=dnse_display_pct
             percentages=[100*x/total for x in vols]
-            meta=''.join(f'<span style="color:{c};white-space:nowrap">{label} {fmt_vol(q)} · {fmt_val(a).lstrip("≈")} · {f(p)}</span>' for label,c,q,a,p in zip(labels,colors,vols,vals,percentages) if q or label!='Chưa xác định')
-            bar='<div style="display:flex;height:20px;border-radius:5px;overflow:hidden">'+''.join(f'<div style="width:{p:.8f}%;background:{bg};color:white;line-height:20px;text-align:center;font-weight:700;font-size:11px;overflow:hidden;white-space:nowrap">{f(p) if p>=13 else ""}</div>' for p,bg in zip(percentages,backgrounds))+'</div>'
+            labels=('Mua CĐ','Bán CĐ','Chưa xác định')
+            backgrounds=('#178962','#c34154','#667085')
+            sides=[]
+            for i,c in enumerate((green,red)):
+                align='left' if i==0 else 'right'
+                small_pct=' · '+f(percentages[i]) if percentages[i]<13 else ''
+                sides.append(f'<div style="min-width:0;text-align:{align};color:{c};font-size:12px"><span>{labels[i]} · {fmt_vol(vols[i])}{small_pct}</span> <b style="font-size:13px">{dnse_display_value(vals[i])}</b></div>')
+            meta=''.join(sides)
+            if vols[2]:
+                unknown_notes.append((label,vols[2],vals[2],percentages[2]))
+            bar='<div style="display:flex;height:22px;border-radius:5px;overflow:hidden" aria-label="'+html.escape('; '.join(f'{l}: {p:.6f}%' for l,p in zip(labels,percentages)),quote=True)+'">'+''.join(f'<div style="width:{p:.8f}%;background:{bg};color:white;line-height:22px;text-align:center;font-weight:700;font-size:12px;overflow:hidden;white-space:nowrap">{f(p) if p>=13 else ""}</div>' for p,bg in zip(percentages,backgrounds))+'</div>'
+            blocks.append(f'<div style="margin:7px 0"><b style="color:{fg};font-size:12px">{label}</b><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;margin:2px 0 3px">{meta}</div>{bar}</div>')
+            continue
         elif v is None:
             meta=f'<span style="color:{muted}">Chưa đủ dữ liệu · {m["count"]}/{n} phiên</span>';bar=f'<div style="height:20px;background:{tile};border-radius:5px;text-align:center;color:{muted};font-size:11px;line-height:20px">—</div>'
             if n==1 and quote and source=="SSI":
@@ -300,6 +319,9 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
             if min(buy,sell)<13:
                 meta+=f'<span style="color:{muted};white-space:nowrap">{f(buy)} / {f(sell)}</span>'
         blocks.append(f'<div style="margin:5px 0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:3px;font-size:11px"><b style="color:{fg}">{label}</b>{meta}</div>{bar}</div>')
+    if source=='DNSE' and unknown_notes:
+        notes='; '.join(f'{label}: {fmt_vol_exact(q)} · {dnse_display_value(v)} · {dnse_display_pct(p)}' for label,q,v,p in unknown_notes)
+        blocks.append(f'<div style="font-size:11px;color:{muted};margin:4px 0">Chưa xác định chiều — {notes}</div>')
     title,desc,tone=conclusion(models,price_warning,quote);purple='#d946ef' if dark else '#a21caf';color={'buy':green,'sell':red,'neutral':muted,'ceiling':purple}[tone]
     if source=='DNSE' and any(m.get('unknown',0) for m in models.values()) and not (quote and (quote.get('floor') or quote.get('ceiling'))) and not price_warning:
         title,desc,tone='CÓ KHỐI LƯỢNG CHƯA XÁC ĐỊNH CHIỀU','Tỷ trọng tính trên toàn bộ khối lượng khớp G1; không suy đoán chiều của phần chưa xác định.','neutral'
@@ -334,8 +356,16 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
         risk_line+=queue_comparison_html(queue_qty,prior_ma20,queue_volume,fg,muted,queue_color)
     detail_color=red if title.startswith('CẢNH BÁO GIÁ SÀN') else fg
     header=(f'<div style="font-size:14px;font-weight:800;color:{fg}">DÒNG TIỀN CHỦ ĐỘNG · {html.escape(str(code))}</div>' if code else '')
+    if source=='DNSE':
+        header=header.replace('font-size:14px','font-size:16px')
+        if date and len(str(date))==10 and str(date)[4]=='-' and str(date)[7]=='-':
+            date='/'.join(reversed(str(date).split('-')))
     source_label='DNSE · G1 · GT tính từ giá khớp · Cảnh báo hàng chờ SSI' if source=='DNSE' else 'SSI · Mua/Bán CĐ tham khảo (chưa xác minh chiều BU/SD) · ≈ GT ước tính'
     assessment=''
+    def finish(content):
+        if source!='DNSE':return content
+        bg='#111b2b' if dark else '#f5f8fc'
+        return f'<div style="background:{bg};border-radius:10px;padding:10px 12px;color:{fg};font-variant-numeric:tabular-nums">{content}</div>'
     if source=='DNSE':
         at,ad,ak=dnse_flow_assessment(models,price_warning,quote)
         ac={'buy':green,'sell':red,'neutral':muted,'warning':'#efb65b' if dark else '#986000'}[ak]
@@ -344,8 +374,8 @@ def card_html(models, dark=True, price_warning=None, quote=None, code=None, date
                     +dnse_net_html(models,green,red,muted)+f'<b style="color:{ac}">{html.escape(at)}</b><div style="margin-top:2px">{html.escape(ad)}</div></div>')
         # Keep independent ceiling/floor warnings, including queue comparisons.
         if not (title.startswith('CẢNH BÁO GIÁ SÀN') or tone=='ceiling'):
-            return header+f'<div style="font-size:10px;color:{muted};margin-bottom:4px">{source_label} · {html.escape(str(date or "—"))}</div>'+''.join(blocks)+assessment
-    return header+f'<div style="font-size:10px;color:{muted};margin-bottom:4px">{source_label} · {html.escape(str(date or '—'))}</div>'+''.join(blocks)+assessment+f'<div style="border-top:1px solid {border};padding-top:5px;margin-top:6px;font-size:11px;color:{fg}"><b style="color:{color}">{html.escape(title)}</b>{risk_line}<div style="margin-top:2px;color:{detail_color}">{html.escape(desc)}</div></div>'
+            return finish(header+f'<div style="font-size:10px;color:{muted};margin-bottom:4px">{source_label} · {html.escape(str(date or "—"))}</div>'+''.join(blocks)+assessment)
+    return finish(header+f'<div style="font-size:10px;color:{muted};margin-bottom:4px">{source_label} · {html.escape(str(date or '—'))}</div>'+''.join(blocks)+assessment+f'<div style="border-top:1px solid {border};padding-top:5px;margin-top:6px;font-size:11px;color:{fg}"><b style="color:{color}">{html.escape(title)}</b>{risk_line}<div style="margin-top:2px;color:{detail_color}">{html.escape(desc)}</div></div>')
 
 def price_warning(daily,code,dates):
     import pandas as pd
