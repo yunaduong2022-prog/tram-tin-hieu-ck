@@ -12,7 +12,7 @@ class CompactSteel(unittest.TestCase):
         e=self.results['HPG']; full=s.notes(e); compact=ref.compact_notes(full)
         self.assertEqual(e['score'],83)
         self.assertTrue(any('8,00/10' in x for x in full))
-        self.assertTrue(any('ROE 19,95% – Tốt | TOP 2 nhóm khảo sát'==x for x in compact))
+        self.assertTrue(any('ROE 19,95% – Tốt | TOP 2 Ngành Thép'==x for x in compact))
         self.assertTrue(any('P/B 1,13x' in x and 'TB 3 năm: 1,53' in x and 'TB ngành: 1,03' in x for x in compact))
         self.assertTrue(any('P/E 6,12x' in x and 'TB ngành: 6,45' in x for x in compact))
         self.assertFalse(any('8,00/10' in x or x.startswith('Định giá:') or x.startswith('FA tham khảo |') for x in compact))
@@ -38,3 +38,21 @@ class CompactSteel(unittest.TestCase):
             self.assertIsNone(s.for_symbol('TVN')[0]);self.assertIn('dưới 9.000',s.for_symbol('TVN')[1][0])
         with patch.object(s,'stamp',return_value=('x',)),patch.object(s,'ref_cached',return_value=self.results),patch.object(s,'eod_cached',return_value=('2026-11-26',{'TVN':9000},{})):
             self.assertEqual(s.for_symbol('TVN')[0],66)
+
+    def test_industry_labels_and_scope(self):
+        import re
+        for e in self.results.values():
+            full=s.notes(e); compact=ref.compact_notes(full)
+            self.assertTrue(any('không phải toàn bộ ngành' in x for x in full))
+            self.assertFalse(any('không phải toàn bộ ngành' in x for x in compact))
+            expected=sorted(n for n in e['ranks'].values() if n<=5)
+            for notes in (full,compact):
+                observed=sorted(int(m) for x in notes for m in re.findall(r'TOP ([1-5]) Ngành Thép',x))
+                self.assertEqual(observed,expected,e['code'])
+                self.assertFalse(any('TOP ' in x and ('nhóm khảo sát' in x or 'Nhóm thép khảo sát' in x) for x in notes))
+
+    def test_scope_in_detail(self):
+        e=self.results['HPG']; full=s.notes(e)
+        with patch.object(s,'lookup',return_value=(e,full)):
+            self.assertIn('không phải toàn bộ ngành',s.detail('HPG'))
+            self.assertIn('TOP 2 Ngành Thép',s.detail('HPG'))

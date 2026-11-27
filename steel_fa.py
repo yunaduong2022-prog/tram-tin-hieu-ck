@@ -149,7 +149,8 @@ def cmp(v,ref):
 
 def notes(e):
     v,p=e['v'],e['points'];out=['FA tham khảo | Thép | BCTC '+e['raw']['period']+' | '+('EOD ước tính '+e['day'] if e['mode']=='eod' else 'Nguồn định giá cập nhật 27/11/2026; chưa xác nhận phiên giá')]
-    def top(k):return f' | TOP {e["ranks"][k]} Nhóm thép khảo sát' if e['ranks'].get(k,99)<=5 else ''
+    out[0] += ' | TOP chỉ trong tập mã Thép đủ điều kiện của 12 mã khảo sát, không phải toàn bộ ngành; biên lợi nhuận và tồn kho so theo cùng mô hình kinh doanh.'
+    def top(k):return f' | TOP {e["ranks"][k]} Ngành Thép' if e['ranks'].get(k,99)<=5 else ''
     def label(k):
         if p[k] is None:return 'Thiếu dữ liệu'
         f=p[k]/WEIGHTS[k];return 'Rất tốt' if f>=.9 else 'Tốt' if f>=.75 else 'Khá' if f>=.6 else 'Trung bình' if f>=.4 else 'Yếu' if f>0 else 'Rất yếu'
@@ -183,7 +184,7 @@ def compact_notes(tags):
         if t.startswith(('Rủi ro:', 'Chưa đủ dữ liệu FA:', 'FA Thép:')):
             out.append(t);continue
         t=re.sub(r' \| (?:\d[\d.,]*|—)/\d+(?:\.\d+)?(?= \| TOP | \(thiếu tham chiếu\)|$)', '', t)
-        t=t.replace(' Nhóm thép khảo sát',' nhóm khảo sát')
+        t=t.replace(' Nhóm thép khảo sát',' Ngành Thép')
         t=t.replace('Tăng trưởng doanh thu TTM','Tăng trưởng DT').replace('Tăng trưởng LNST TTM','Tăng trưởng LNST')
         t=t.replace('Nợ vay ròng/EBITDA','Nợ ròng/EBITDA').replace('Số ngày tồn kho','Tồn kho')
         t=t.replace('TB ngành (ảnh):','TB ngành:')
@@ -197,7 +198,7 @@ def for_symbol(symbol):
 
 def detail(symbol):
     e,tags=lookup(symbol)
-    return ('STEEL FA V2 – tham khảo, không xếp hạng VIP chính thức. 12 mã đã phân nhóm; không đại diện toàn bộ 32 mã trong ảnh. '
+    return ('STEEL FA V3 – tham khảo, không xếp hạng VIP chính thức. 12 mã đã phân nhóm; không đại diện toàn bộ 32 mã trong ảnh. '
             'BCTC quý từ ZIP, TTM 4 quý; ROE/ROA dùng LNST hợp nhất và bình quân đầu/cuối kỳ; DIO TB 12 kỳ TTM; nợ ròng trừ tiền và tương đương tiền; EBIT = LNTT + lãi vay. '
             'P/E P/B lịch sử và mốc ngành 6,45/1,03 lấy từ ảnh nguồn cập nhật 27/11/2026; chưa xác nhận phiên giá/phương pháp. EOD dùng vốn và lợi nhuận công ty mẹ, số CP đối chiếu; trung bình nhóm EOD theo vốn hóa/tổng mẫu số dương (tối thiểu 5 mã mỗi tỷ số), không phải toàn ngành. '
             'Thiếu dữ liệu không quy 0; lợi nhuận chưa chuẩn hóa. '+ '; '.join(tags))
