@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import shipping_fa as s
 import port_fa as p
 import reference_fa as rf
+import steel_fa as steel
 
 class Shipping(unittest.TestCase):
     @classmethod
@@ -11,7 +12,11 @@ class Shipping(unittest.TestCase):
     def test_weights_and_universe(self):
         self.assertEqual(sum(s.WEIGHTS.values()),100);self.assertEqual(len(self.rows),10)
         self.assertEqual(len(s.TANKER),6);self.assertEqual(len(s.CARGO),4);self.assertNotIn('PPH',rf.SYMBOLS)
-        self.assertEqual(rf.SYMBOLS,p.SYMBOLS|s.SYMBOLS);self.assertFalse(p.SYMBOLS&s.SYMBOLS)
+        self.assertEqual(rf.SYMBOLS,p.SYMBOLS|s.SYMBOLS|steel.SYMBOLS)
+        self.assertFalse(p.SYMBOLS&s.SYMBOLS)
+        self.assertFalse(steel.SYMBOLS&p.SYMBOLS)
+        self.assertFalse(steel.SYMBOLS&s.SYMBOLS)
+        self.assertEqual(steel.SYMBOLS,frozenset("HPG TVN TIS POM VGS HSG NKG GDA DTL SMC TLH HMC".split()))
     def test_reference(self):
         a=s.results(self.rows);self.assertEqual(len(a),8)
         for k,v in {'PVT':89.6,'PVP':91.,'VTO':89.,'VIP':67.4,'GSP':63.,'HAH':90.6,'VOS':73.6,'VNA':63.2}.items():
