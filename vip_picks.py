@@ -508,6 +508,10 @@ def fa_score_for_symbol(code, fd=None, *, price_k=None, price_date=None, asof=No
     if bank is None and code in steel_fa.SYMBOLS:
         score, tags = steel_fa.for_symbol(code)
         return score, tags, None
+    import oil_fa
+    if bank is None and code in oil_fa.SYMBOLS:
+        score, tags = oil_fa.for_symbol(code)
+        return score, tags, None
     if bank is None:
         score, tags = fa_score_fd(fd)
         return score, tags, None
@@ -1239,7 +1243,7 @@ def _port_fa_detail_html(r):
     if not (isinstance(r.get('_port_fa'), (bool, np.bool_)) and r.get('_port_fa')):
         return ''
     tags = r.get('FA tags') or []
-    steel = any(str(t).startswith('FA tham khảo | Thép |') for t in tags)
+    steel = any(str(t).startswith(('FA tham khảo | Thép |','FA tham khảo | Dầu khí |')) for t in tags)
     details = tags if steel else [t for t in tags if str(t).startswith(('FA tham khảo |','Cảnh báo:'))]
     if not details:
         return ''

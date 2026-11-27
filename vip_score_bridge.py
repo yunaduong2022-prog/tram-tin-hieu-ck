@@ -280,7 +280,7 @@ def _panel_html(result, *, mode):
         fa = tag_list(result.get('tags_fa') or [], limit=6 if result.get('bank_fa_notes') else 3)
     elif is_port:
         fa = tag_list(__import__('reference_fa').compact_notes(result.get('tags_fa')), limit=16)
-        if _finite(result.get('fa')) is not None and str(result.get('code','')).upper() not in __import__('steel_fa').SYMBOLS:
+        if _finite(result.get('fa')) is not None and str(result.get('code','')).upper() not in (__import__('steel_fa').SYMBOLS | __import__('oil_fa').SYMBOLS):
             fa += '<div class="mvs-missing">FA tham khảo · xem chi tiết</div>'
     elif (is_bds or is_ck) and _finite(result.get('fa')) is not None:
         fa = tag_list(result.get('tags_fa') or [], limit=13)
@@ -426,6 +426,9 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
         elif str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS:
             import ck_fa
             st.write(ck_fa.detail(result['code']))
+        elif str(result.get('code','')).upper() in __import__('oil_fa').SYMBOLS:
+            import oil_fa
+            st.write(oil_fa.detail(result['code']))
         elif str(result.get('code','')).upper() in __import__('steel_fa').SYMBOLS:
             import steel_fa
             st.write(steel_fa.detail(result['code']))

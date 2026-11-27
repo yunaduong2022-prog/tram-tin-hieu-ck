@@ -5,6 +5,7 @@ import shipping_fa as s
 import port_fa as p
 import reference_fa as rf
 import steel_fa as steel
+import oil_fa as oil
 
 class Shipping(unittest.TestCase):
     @classmethod
@@ -12,7 +13,8 @@ class Shipping(unittest.TestCase):
     def test_weights_and_universe(self):
         self.assertEqual(sum(s.WEIGHTS.values()),100);self.assertEqual(len(self.rows),10)
         self.assertEqual(len(s.TANKER),6);self.assertEqual(len(s.CARGO),4);self.assertNotIn('PPH',rf.SYMBOLS)
-        self.assertEqual(rf.SYMBOLS,p.SYMBOLS|s.SYMBOLS|steel.SYMBOLS)
+        self.assertEqual(rf.SYMBOLS,p.SYMBOLS|s.SYMBOLS|steel.SYMBOLS|oil.SYMBOLS)
+        self.assertFalse(oil.SYMBOLS & (p.SYMBOLS|s.SYMBOLS|steel.SYMBOLS))
         self.assertFalse(p.SYMBOLS&s.SYMBOLS)
         self.assertFalse(steel.SYMBOLS&p.SYMBOLS)
         self.assertFalse(steel.SYMBOLS&s.SYMBOLS)
