@@ -504,6 +504,10 @@ def fa_score_for_symbol(code, fd=None, *, price_k=None, price_date=None, asof=No
     if bank is None and code in shipping_fa.SYMBOLS:
         score, tags = shipping_fa.for_symbol(code)
         return score, tags, None
+    import steel_fa
+    if bank is None and code in steel_fa.SYMBOLS:
+        score, tags = steel_fa.for_symbol(code)
+        return score, tags, None
     if bank is None:
         score, tags = fa_score_fd(fd)
         return score, tags, None
