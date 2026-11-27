@@ -460,6 +460,11 @@ except Exception as e:
 df = frames["D"]
 latest_date = df["Ngày"].max()
 import price_colors as PC
+
+
+def _min_price_text_color(state):
+    return "#2DD4A7" if TH.is_dark() and state.state == "up" else state.color
+
 PC.bind_daily(df, latest_date)
 
 # MIN_GLOBAL_EOD_GUARD_V1
@@ -1420,7 +1425,7 @@ def page_filter():
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
                         f'<div class="stock-company" title="{name_text}" style="margin-top:6px">{name_text}</div>{lean_html}</div>{status_html}</div>'
-                        f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{PC.display(code, r['Giá'], chg).color}">{r["Giá"]:,.2f}</span>'
+                        f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{_min_price_text_color(PC.display(code, r['Giá'], chg))}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
                         f'<div class="metrics-grid">'
@@ -2504,7 +2509,7 @@ def _mtf_price_html(price, chg, code="") -> str:
     if PC.number(price) is None:
         return ""
     x = PC.display(code, price, chg)
-    return (f'<div class="mtf-px" style="color:{x.color}"><b>{float(price):,.2f}</b>'
+    return (f'<div class="mtf-px" style="color:{_min_price_text_color(x)}"><b>{float(price):,.2f}</b>'
             + (f"<span>{x.change_text}</span>" if x.change_text else "") + "</div>")
 
 
@@ -2876,7 +2881,7 @@ def _price_change(code: str) -> dict:
         g = df[df["Mã"].astype(str).str.upper() == str(code).upper()].sort_values("Ngày")
         r = g.iloc[-1]
         x = PC.display(code, r["Giá đóng cửa"], r.get("Chg_%"), day=r["Ngày"])
-        return {"px_color": x.color, "px_chg": x.change_text}
+        return {"px_color": _min_price_text_color(x), "px_chg": x.change_text}
     except (IndexError, KeyError, TypeError, ValueError):
         return {}
 
@@ -2901,7 +2906,7 @@ def _ohlc_header(code: str, tf: str, g: pd.DataFrame) -> str:
     prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else float("nan")
     o, h, l_, c = (float(r[k]) for k in ("Giá mở cửa", "Giá cao nhất", "Giá thấp nhất", "Giá đóng cửa"))
     x = PC.display(code, c, r.get("Chg_%") if tf == "D" else None, day=r["Ngày"], prev=prev if tf != "D" else None, session=tf == "D")
-    col = x.color
+    col = _min_price_text_color(x)
     head = f'<span style="color:#8B95A5;font-size:12px">{ {"D": "1D", "W": "1W", "M": "1M"}.get(tf, tf) }</span>'
     pct = r.get("Chg_%", float("nan")) if tf == "D" else ((c / prev - 1) * 100 if pd.notna(prev) and prev else float("nan"))
     chg = ""
@@ -3592,7 +3597,7 @@ def page_stock():
         _delta = _close - _prev
         _pct = _delta / _prev * 100 if _prev else 0.0
         _px_state = PC.display(code, _close, day=_last, prev=_prev, session=tf == "D")
-        _pc = _px_state.color
+        _pc = _min_price_text_color(_px_state)
         _info = stock_row(code)
         if _info is not None:
             _metrics = _chart_metrics(code, _info)
@@ -3735,7 +3740,7 @@ def page_stock():
         prev = float(hourly_g['Giá đóng cửa'].iat[-2])
         delta = close - prev
         _px_state = PC.display(code, close, prev=prev, session=False)
-        pc = _px_state.color
+        pc = _min_price_text_color(_px_state)
         for m in header_metrics:
             if m['label'] == 'Giá':
                 m['value'], m['px_color'] = f"{close:,.2f}", pc
@@ -3799,7 +3804,7 @@ def page_stock():
         prev = float(g["Giá đóng cửa"].iloc[-2]) if len(g) > 1 else close
         delta = close - prev
         _px_state = PC.display(code, close, day=latest_symbol_date, prev=prev, session=tf == "D")
-        col = _px_state.color
+        col = _min_price_text_color(_px_state)
         safe_layers = [layer for layer in layers if layer in (
             "MA20", "Bollinger", "Dual Ichimoku", "EMA 50/200",
             "Hull Suite", "Supertrend", "Khối lượng", "MACD", "RSI", "StochRSI")]
@@ -4285,7 +4290,7 @@ def page_livestream():
             "<div style='display:flex;justify-content:space-between;align-items:center;gap:8px'>"
             f"<div style='color:{_v_color};font-size:23px;font-weight:850'>{htmllib.escape(verdict.upper())}</div>"
             f"<div style='text-align:right'><div class='live-muted'>{htmllib.escape(code)} · EOD</div>"
-            f"<div class='live-price' style='color:{PC.display(code,price,d_chg).color}'>{_fmt_level(price)}</div></div></div>"
+            f"<div class='live-price' style='color:{_min_price_text_color(PC.display(code,price,d_chg))}'>{_fmt_level(price)}</div></div></div>"
             "<div style='height:1px;background:#29384d;margin:12px 0'></div>"
             + _technical_horizon_html(A, show_frames=True, show_ma=False)
             + f"<div style='color:#dce5f0;font-size:12px;line-height:1.6;margin-top:9px'>"
