@@ -148,7 +148,7 @@ def cmp(v,ref):
     d=(q-1)*100;return ('Thấp hơn ' if d<0 else 'Cao hơn ' if d>0 else 'Bằng ')+fmt(abs(d))+'%'
 
 def notes(e):
-    v,p=e['v'],e['points'];out=['FA tham khảo | BCTC '+e['raw']['period']+' | '+('EOD ước tính '+e['day'] if e['mode']=='eod' else 'Ảnh định giá chưa xác nhận ngày')]
+    v,p=e['v'],e['points'];out=['FA tham khảo | Thép | BCTC '+e['raw']['period']+' | '+('EOD ước tính '+e['day'] if e['mode']=='eod' else 'Nguồn định giá cập nhật 27/11/2026; chưa xác nhận phiên giá')]
     def top(k):return f' | TOP {e["ranks"][k]} Nhóm thép khảo sát' if e['ranks'].get(k,99)<=5 else ''
     def label(k):
         if p[k] is None:return 'Thiếu dữ liệu'
@@ -166,15 +166,38 @@ def notes(e):
         out.append(f'{n} {fmt(x)} lần | TB 3 năm: {fmt(a)} ({cmp(x,a)}) | {sector}: {fmt(b)} ({cmp(x,b)}) | {fmt(score)}/{maximum}'+(' (thiếu tham chiếu)' if None in points else '')+top(k))
     if e['score'] is None:out.insert(0,f'Chưa đủ dữ liệu FA: {fmt(e["subtotal"])}/{fmt(e["coverage"])} điểm khả dụng; không xếp loại')
     if e['warnings']:out.append('Rủi ro: '+'; '.join(e['warnings']))
-    out.append('Định giá: '+('EOD ước tính '+e['day'] if e['mode']=='eod' else 'ảnh tham chiếu, chưa xác nhận ngày'))
+    out.append('Định giá: '+('EOD ước tính '+e['day'] if e['mode']=='eod' else 'nguồn cập nhật 27/11/2026; chưa xác nhận phiên giá'))
     return out
+
+
+
+def compact_notes(tags):
+    # Keep complete notes for detail; shorten only the shared main cards.
+    import re
+    out=[]
+    for raw in tags or []:
+        t=str(raw)
+        if t.startswith(('FA tham khảo | Thép |','Định giá:')):
+            continue
+        # Keep incomplete coverage and warnings, including their numeric data.
+        if t.startswith(('Rủi ro:', 'Chưa đủ dữ liệu FA:', 'FA Thép:')):
+            out.append(t);continue
+        t=re.sub(r' \| (?:\d[\d.,]*|—)/\d+(?:\.\d+)?(?= \| TOP | \(thiếu tham chiếu\)|$)', '', t)
+        t=t.replace(' Nhóm thép khảo sát',' nhóm khảo sát')
+        t=t.replace('Tăng trưởng doanh thu TTM','Tăng trưởng DT').replace('Tăng trưởng LNST TTM','Tăng trưởng LNST')
+        t=t.replace('Nợ vay ròng/EBITDA','Nợ ròng/EBITDA').replace('Số ngày tồn kho','Tồn kho')
+        t=t.replace('TB ngành (ảnh):','TB ngành:')
+        t=t.replace(' lần','x') if t.startswith(('P/B ','P/E ','Nợ vay/VCSH ','Nợ ròng/EBITDA ','Khả năng trả lãi vay ')) else t
+        out.append(t)
+    return out
+
 
 def for_symbol(symbol):
     e,tags=lookup(symbol);return (e['score'] if e else None),tags
 
 def detail(symbol):
     e,tags=lookup(symbol)
-    return ('STEEL FA V1 – tham khảo, không xếp hạng VIP chính thức. 12 mã đã phân nhóm; không đại diện toàn bộ 32 mã trong ảnh. '
+    return ('STEEL FA V2 – tham khảo, không xếp hạng VIP chính thức. 12 mã đã phân nhóm; không đại diện toàn bộ 32 mã trong ảnh. '
             'BCTC quý từ ZIP, TTM 4 quý; ROE/ROA dùng LNST hợp nhất và bình quân đầu/cuối kỳ; DIO TB 12 kỳ TTM; nợ ròng trừ tiền và tương đương tiền; EBIT = LNTT + lãi vay. '
-            'P/E P/B lịch sử và mốc ngành 6,45/1,03 lấy từ ảnh chưa xác minh ngày/phương pháp. EOD dùng vốn và lợi nhuận công ty mẹ, số CP đối chiếu; trung bình nhóm EOD theo vốn hóa/tổng mẫu số dương (tối thiểu 5 mã mỗi tỷ số), không phải toàn ngành. '
+            'P/E P/B lịch sử và mốc ngành 6,45/1,03 lấy từ ảnh nguồn cập nhật 27/11/2026; chưa xác nhận phiên giá/phương pháp. EOD dùng vốn và lợi nhuận công ty mẹ, số CP đối chiếu; trung bình nhóm EOD theo vốn hóa/tổng mẫu số dương (tối thiểu 5 mã mỗi tỷ số), không phải toàn ngành. '
             'Thiếu dữ liệu không quy 0; lợi nhuận chưa chuẩn hóa. '+ '; '.join(tags))
