@@ -176,7 +176,7 @@ def multi_horizon(m10, m20):
 
 
 def assessment_html(assessment, dark=True):
-    fg,muted,border=('#edf3fa','#a0b1c7','#29384d') if dark else ('#20324b','#586981','#d6e0eb')
+    fg,muted,border=('#E6EDF5','#94A3B8','#303B4D') if dark else ('#20324b','#586981','#d6e0eb')
     green,red,amber=('#21bd87','#f05e70','#e4bf75') if dark else ('#087c56','#b4233c','#8b5e08')
     colors={'buy':green,'sell':red,'mixed':amber,'neutral':muted}
     spans=[]
@@ -193,7 +193,7 @@ def assessment_html(assessment, dark=True):
 
 def card_html(model, dark=True, *, assessment=None):
     """Compact two-row table, using the same values and coverage rules."""
-    bg,tile,fg,muted,border = ('#111b2b','#1c293a','#edf3fa','#a0b1c7','#29384d') if dark else ('#ffffff','#eef3f9','#20324b','#586981','#d6e0eb')
+    bg,tile,fg,muted,border = ('#1D2432','#252E3E','#E6EDF5','#94A3B8','#303B4D') if dark else ('#ffffff','#eef3f9','#20324b','#586981','#d6e0eb')
     period=model.get('period',10)
     def date(d): return d.strftime('%d/%m/%Y') if d is not None and pd.notna(d) else '—'
     def tone(v):

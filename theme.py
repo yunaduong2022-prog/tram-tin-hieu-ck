@@ -6,16 +6,16 @@ plotly_template) để các phần còn lại tiếp tục hoạt động.
 import streamlit as st
 
 DARK = {
-    "bg": "#0E1C18", "bg2": "#14261F", "card": "#162B24",
-    "card2": "#1B332B", "line": "#26433A", "line2": "#1F382F",
-    "txt": "#E6EFE9", "txt2": "#F3F8F5", "muted": "#8FA89D",
+    "bg": "#131720", "bg2": "#181D28", "card": "#1D2432",
+    "card2": "#252E3E", "line": "#303B4D", "line2": "#293344",
+    "txt": "#E6EDF5", "txt2": "#F3F6FA", "muted": "#94A3B8",
     "accent": "#2DD4A7", "red": "#FF6B81", "green": "#2DD4A7",
     "amber": "#F5B942", "gold": "#E0B565", "cream": "#FCF8DF",
     "hero": "#1A3B32", "tag-red-bg": "#3A1A22",
     "tag-green-bg": "#0F2E26", "tag-amber-bg": "#3A2E12",
     "tag-gray-bg": "#262D38", "tag-green-fg": "#5EE6C0",
     "tag-amber-fg": "#F5B942", "tag-gray-fg": "#B1BAC4",
-    "bar": "#26433A", "shadow": "rgba(0,0,0,.5)",
+    "bar": "#303B4D", "shadow": "rgba(0,0,0,.5)",
 }
 LIGHT = {
     "bg": "#EDF3EF", "bg2": "#E1EBE5", "card": "#FAFDFB",
@@ -196,6 +196,8 @@ def inject():
 .st-key-min-theme-selector button{border-color:var(--line)!important;color:var(--txt)!important;background:var(--card)!important}
 .st-key-min-theme-selector button[aria-checked="true"],.st-key-min-theme-selector button[aria-pressed="true"]{border-color:var(--accent)!important;color:var(--accent)!important;background:var(--card2)!important}
 """
-    if not is_dark():
+    if is_dark():
+        css += '\n/* MIN_DARK_FINANCE_V3: surface colors only. */\n.stApp .live-shell{background:var(--bg2)!important;border-color:var(--line)!important}\n.stApp .live-card{background:var(--card)!important;border-color:var(--line)!important}\n.stApp .live-kpi{background:var(--card2)!important;border-color:var(--line)!important}\n.stApp .st-key-mega-nav,.stApp .st-key-nav-filter-groups,.stApp .st-key-nav-sub{background:var(--bg2)!important;border-color:var(--line)!important}\n.stApp .mvs-vip{background:var(--card)!important;border-color:var(--line)!important;color:var(--txt)!important}\n.stApp .mvs-vip .mvs-item,.stApp .mvs-vip details{border-color:var(--line)!important}\n.stApp .mvs-vip .mvs-bar{background:var(--bar)!important}\n.stApp .mvs-vip .mvs-label{color:var(--muted)!important}\n.stApp [data-testid="stExpander"]{background:var(--bg2)!important}\n'
+    else:
         css += FINANCE_LIGHT_CSS
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
