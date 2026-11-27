@@ -124,7 +124,74 @@ def _tone(v):
     return '#21bd87' if v is not None and v>0 else '#f05e70' if v is not None and v<0 else '#a4adb9'
 
 
-def card_html(model, dark=True):
+def multi_horizon(m10, m20):
+    """Read the same EOD session across both complete, nested windows."""
+    if (m10.get('period') != 10 or m20.get('period') != 20 or
+            m10['code'] != m20['code'] or m10['day'] != m20['day'] or
+            m10['dates'] != m20['dates'][-10:]):
+        return dict(values=(None,None,None), title='CHƯA ĐỦ DỮ LIỆU ĐỒNG NHẤT',
+                    body='Chưa thể đối chiếu ba khung thời gian.', tone='neutral')
+    today = (m10['today'] or {}).get('net_val')
+    q10, q20 = flow_conclusion(m10), flow_conclusion(m20)
+    n10 = q10['net'] if q10 else None
+    n20 = q20['net'] if q20 else None
+    values = (today,n10,n20)
+    def result(title,body,tone='neutral'):
+        return dict(values=values,title=title,body=body,tone=tone)
+    if any(v is None for v in values):
+        missing = ', '.join(k for k,v in zip(('phiên hiện tại','10 phiên','20 phiên'),values) if v is None)
+        return result('CHƯA ĐỦ DỮ LIỆU', f'Thiếu {missing}; chưa kết luận xu hướng đa khung.')
+    prev = m10['rows'][-2]['net_val']
+    if today>0 and n10<0 and n20<0:
+        title=('QUAY LẠI MUA RÒNG' if prev<0 else 'MUA RÒNG PHIÊN MỚI')+' – CHƯA XÁC NHẬN ĐẢO CHIỀU'
+        body='Phiên mới nhất mua ròng, nhưng lũy kế 10 và 20 phiên vẫn âm. Cần theo dõi khả năng duy trì lực mua.'
+        tone='mixed'
+    elif today<0 and n10>0 and n20>0:
+        title='BÁN RÒNG PHIÊN MỚI – LŨY KẾ VẪN DƯƠNG'
+        body='Phiên mới nhất bán ròng, nhưng lũy kế 10 và 20 phiên vẫn dương. Chưa xác nhận đảo chiều dòng tiền.'
+        tone='mixed'
+    elif all(v>0 for v in values):
+        title='MUA RÒNG ĐỒNG THUẬN';body='Cả ba khung đều mua ròng.';tone='buy'
+    elif all(v<0 for v in values):
+        title='BÁN RÒNG ĐỒNG THUẬN';body='Cả ba khung đều bán ròng.';tone='sell'
+    elif n10>0 and n20<0:
+        title='DÒNG TIỀN 10 PHIÊN CẢI THIỆN'
+        body='Lũy kế 10 phiên dương nhưng 20 phiên vẫn âm. Chưa xác nhận đảo chiều dài hơn.';tone='mixed'
+    elif n10<0 and n20>0:
+        title='DÒNG TIỀN 10 PHIÊN SUY YẾU'
+        body='Lũy kế 10 phiên âm nhưng 20 phiên vẫn dương. Cần theo dõi áp lực bán.';tone='mixed'
+    elif all(v==0 for v in values):
+        title='CÂN BẰNG CẢ BA KHUNG';body='Giá trị ròng bằng 0 ở cả ba khung.';tone='neutral'
+    else:
+        title='DÒNG TIỀN CHƯA ĐỒNG THUẬN';body='Ba khung có dấu ròng khác nhau hoặc có khung cân bằng.';tone='mixed'
+    # Compare disjoint 10-session windows, not overlapping totals.
+    prior10=n20-n10
+    if n10<0 and prior10<0:
+        if n10>prior10: body='Giá trị bán ròng 10 phiên gần đây thu hẹp so với 10 phiên trước. '+body
+        elif n10<prior10: body='Giá trị bán ròng 10 phiên gần đây tăng so với 10 phiên trước. '+body
+    elif n10>0 and prior10>0:
+        if n10>prior10: body='Giá trị mua ròng 10 phiên gần đây tăng so với 10 phiên trước. '+body
+        elif n10<prior10: body='Giá trị mua ròng 10 phiên gần đây giảm so với 10 phiên trước. '+body
+    return result(title,body,tone)
+
+
+def assessment_html(assessment, dark=True):
+    fg,muted,border=('#edf3fa','#a0b1c7','#29384d') if dark else ('#20324b','#586981','#d6e0eb')
+    green,red,amber=('#21bd87','#f05e70','#e4bf75') if dark else ('#087c56','#b4233c','#8b5e08')
+    colors={'buy':green,'sell':red,'mixed':amber,'neutral':muted}
+    spans=[]
+    for label,v in zip(('Phiên','10 phiên','20 phiên'),assessment['values']):
+        c=green if v is not None and v>0 else red if v is not None and v<0 else muted
+        txt='—' if v is None else f'{v/1e9:+,.2f} tỷ' if v else '0.00 tỷ'
+        spans.append(f'<span style="white-space:nowrap">{label}: <b style="color:{c}">{txt}</b></span>')
+    return (f'<div style="font-size:12px;line-height:1.5;border-top:1px solid {border};margin-top:6px;padding-top:5px;color:{fg}">'
+            '<div style="font-weight:800;font-size:12px">ĐÁNH GIÁ DÒNG TIỀN KHỐI NGOẠI</div>'
+            f'<div style="display:flex;flex-wrap:wrap;gap:2px 12px;color:{muted}">'+''.join(spans)+'</div>'
+            f'<b style="color:{colors[assessment["tone"]]}">{html.escape(assessment["title"])}</b>'
+            f'<div>{html.escape(assessment["body"])}</div></div>')
+
+
+def card_html(model, dark=True, *, assessment=None):
     """Compact two-row table, using the same values and coverage rules."""
     bg,tile,fg,muted,border = ('#111b2b','#1c293a','#edf3fa','#a0b1c7','#29384d') if dark else ('#ffffff','#eef3f9','#20324b','#586981','#d6e0eb')
     period=model.get('period',10)
@@ -158,7 +225,7 @@ def card_html(model, dark=True):
             +row('Phiên hiện tại',model['today'],date(model['day']))
             +row(f'LŨY KẾ {period} PHIÊN LIỀN KỀ',model['totals'],detail)+'</table></div>'
             + (f'<div style="font-size:11px;color:{muted};margin-top:4px">'+html.escape(' '.join(warnings))+'</div>' if warnings else '')
-            +note+'</div>')
+            +note+(assessment_html(assessment,dark) if assessment is not None else '')+'</div>')
 
 
 def render(code,daily,asof,*,key,dark=True):
@@ -178,9 +245,12 @@ def render(code,daily,asof,*,key,dark=True):
             period=st.radio('Lũy kế khối ngoại', (10,20), index=0, horizontal=True,
                             format_func=lambda n:f'{n} phiên', key=f'foreign_period_v3_{key}',
                             label_visibility='collapsed')
-            sessions=calendar_sessions(daily,asof,period=period)
-            m=build_summary(flows,code,asof,sessions,period=period)
-            st.markdown(card_html(m,dark=dark),unsafe_allow_html=True)
+            sessions=calendar_sessions(daily,asof,period=20)
+            m10=build_summary(flows,code,asof,sessions,period=10)
+            m20=build_summary(flows,code,asof,sessions,period=20)
+            m=m10 if period==10 else m20
+            assessment=multi_horizon(m10,m20)
+            st.markdown(card_html(m,dark=dark,assessment=assessment),unsafe_allow_html=True)
             if m['coverage']:
                 dates=[d.strftime('%d/%m') for d in m['dates']]
                 net=[r['net_val']/1e9 if r is not None else None for r in m['rows']]
