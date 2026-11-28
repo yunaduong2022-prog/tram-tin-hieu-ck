@@ -773,8 +773,8 @@ def render_vnindex_editorial(d_all: pd.DataFrame, s: dict) -> None:
     position:relative;overflow:hidden;padding:15px 21px 13px;border:1px solid var(--vni-line);border-radius:18px;
     background:linear-gradient(105deg,var(--vni-panel),var(--vni-panel2));color:var(--vni-ink);
     box-shadow:0 5px 18px rgba(20,51,40,.06);margin:3px 0 12px;max-width:1120px;width:100%;}
-.min-vni-story.dark{--vni-ink:#E7F2E9;--vni-muted:#A8C0B4;--vni-panel:#183328;--vni-panel2:#10251D;--vni-line:#315547;
-    --vni-up:#38DB9A;--vni-down:#FF7387;--vni-flat:#F2C46D;box-shadow:none;}
+.min-vni-story.dark{--vni-ink:#E6EDF5;--vni-muted:#A7B5C9;--vni-panel:#1D2432;--vni-panel2:#252E3E;--vni-line:#303B4D;
+    --vni-up:#2DD4A7;--vni-down:#FF6B81;--vni-flat:#F5B942;box-shadow:none;}
 .min-vni-story .min-vni-kicker{font-family:Georgia,'Times New Roman',serif;font-size:17px;letter-spacing:1.5px;font-weight:800;}
 .min-vni-story .min-vni-points{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;line-height:1.05;margin:4px 0 2px;
     font-family:Georgia,'Times New Roman',serif;font-weight:700;}
