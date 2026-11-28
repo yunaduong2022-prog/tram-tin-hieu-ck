@@ -278,6 +278,39 @@ def _vnd(x: float) -> str:
     return "—" if pd.isna(x) else f"{x / 1e6:,.1f} tr"
 
 
+# MIN_FILTER_TABLE_FINANCE_V1: display-only styling; never change position data.
+def _finance_position_style(show, palette):
+    import price_colors as PC
+    def tone(value, color, bold=False):
+        return 'color:'+color+(';font-weight:700' if bold else '')
+    def row_style(row):
+        out = {k: '' for k in row.index}
+        if 'Mã' in out:
+            out['Mã'] = tone(None, palette['txt2'], True)
+        if 'Giá' in out:
+            state = PC.display(row.get('Mã'), row.get('Giá'))
+            if state.state != 'unknown':
+                out['Giá'] = tone(None, state.color, True)
+        if 'Lãi/lỗ %' in out:
+            x = pd.to_numeric(row.get('Lãi/lỗ %'), errors='coerce')
+            if pd.notna(x) and np.isfinite(x):
+                out['Lãi/lỗ %'] = tone(x, palette['green'] if x>0 else palette['red'] if x<0 else palette['muted'], True)
+        signal = str(row.get('Tín hiệu', ''))
+        color = (palette['red'] if ('Chạm cắt lỗ' in signal or 'BÁN' in signal) else
+                 palette['amber'] if ('Cảnh báo' in signal or 'CHỐT LỜI' in signal) else
+                 palette['green'] if 'Đạt mục tiêu' in signal else palette['muted'])
+        for k in ('Tín hiệu','Gợi ý'):
+            if k in out:
+                out[k] = tone(None, color, k=='Tín hiệu')
+        if 'Cách cắt lỗ %' in out:
+            x = pd.to_numeric(row.get('Cách cắt lỗ %'), errors='coerce')
+            if pd.notna(x) and np.isfinite(x):
+                if x<=0: out['Cách cắt lỗ %'] = tone(x, palette['red'], True)
+                elif x<=NEAR_STOP: out['Cách cắt lỗ %'] = tone(x, palette['amber'], True)
+        return [out[k] for k in row.index]
+    return show.style.set_properties(**{'background-color':palette['card'], 'color':palette['txt']}).apply(row_style, axis=1)
+
+
 def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof, fund_map=None, frames_d=None, ctx_fn=None) -> None:
     """wb: bảng _wb_table(); res: res_df; on_chart(code): mở biểu đồ; asof: ngày dữ liệu mới nhất.
     fund_map, frames_d, ctx_fn (tùy chọn): dữ liệu để chấm điểm cơ bản / kỹ thuật và lấy số mặc định giống Khuyến nghị khách hàng."""
@@ -323,7 +356,9 @@ def render(wb: pd.DataFrame, res: pd.DataFrame, on_chart, asof, fund_map=None, f
                 "Mục tiêu", "Cách mục tiêu %", "Ngành", "Ghi chú"]
         show = pos[[c for c in cols if c in pos.columns]]
         nc = st.column_config.NumberColumn
-        st.dataframe(show, hide_index=True, column_config={
+        import theme as TH
+        show_display = _finance_position_style(show, TH.palette()) if TH.is_dark() else show
+        st.dataframe(show_display, hide_index=True, column_config={
             "Số lượng": nc(format="%d"), "Bán được": nc(format="%d", help="Số cổ phiếu đã về tài khoản theo T+2"),
             "Giá vốn": nc(format="%.2f", help="Bình quân gia quyền các lô, chưa gồm phí"), "Giá": nc(format="%.2f"),
             "Lãi/lỗ %": nc(format="%+.1f%%", help="Ròng sau phí và thuế nếu bán ở giá hiện tại"), "% NAV": nc(format="%.1f%%"),

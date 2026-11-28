@@ -515,6 +515,9 @@ def _table_html(data):
     .t2src{font-size:10px;color:inherit;opacity:.65;max-width:140px;white-space:normal}
     .t2table td.note{min-width:180px;max-width:250px;white-space:normal}
     </style>"""
+    import theme as TH
+    if TH.is_dark():
+        style += '<style>\n/* MIN_FILTER_TABLE_FINANCE_V1: T2 display only */\n.t2outer{background:var(--card);border-color:var(--line)}\n.t2table{color:var(--txt);font-variant-numeric:tabular-nums}\n.t2table th,.t2table td{border-bottom-color:var(--line)}\n.t2table th{background:var(--card2);color:var(--muted);font-weight:750}\n.t2table tbody tr:nth-child(even) td{background:var(--bg2)}\n.t2table th.t2eod-head{background:var(--card2);color:var(--txt2);box-shadow:inset 0 -2px 0 var(--accent)}\n.t2table tbody td.t2eod{background:var(--line2);border-left-color:var(--line);border-right-color:var(--line)}\n.t2table tbody tr:hover td,.t2table tbody tr:hover td.t2eod{background:var(--card2)}\n.t2table .green{color:var(--green)}.t2table .red{color:var(--red)}\n.t2table .t2src{color:var(--muted);opacity:1}\n</style>'
     return style + '<div class="t2outer"><table class="t2table"><thead><tr>' + "".join('<th class="t2eod-head">'+e(h)+'</th>' if h == 'Giá EOD' else '<th>'+e(h)+'</th>' for h in headers) + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table></div>'
 
 

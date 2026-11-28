@@ -62,10 +62,21 @@ def _fmt(v, digits=2):
 def _tag(s):
     fg, bg = {TREND_UP:("#08794b", "#e4f6ec"), TREND_DOWN:("#ca3434", "#fcebec"),
               TREND_OTHER:("#a66c00", "#fff5d9")}[s]
+    # MIN_FILTER_TABLE_FINANCE_V1
+    import theme as TH
+    if TH.is_dark():
+        fg, bg = {TREND_UP:("var(--tag-green-fg)", "var(--tag-green-bg)"),
+                  TREND_DOWN:("var(--red)", "var(--tag-red-bg)"),
+                  TREND_OTHER:("var(--tag-amber-fg)", "var(--tag-amber-bg)")}[s]
     return f'<span style="color:{fg};background:{bg};font-size:11px;font-weight:750;padding:5px 7px;border-radius:7px">{s}</span>'
 
 
 def _card(row: pd.Series, asof: pd.Timestamp):
+    import theme as TH
+    dark = TH.is_dark()
+    bar_bg = "var(--bar)" if dark else "#e8edf2"
+    up_color, down_color = ("var(--green)", "var(--red)") if dark else ("#28a977", "#d86b6b")
+    up_text, down_text = ("var(--green)", "var(--red)") if dark else ("#14935b", "#d25151")
     symbol = html.escape(str(row["Mã"]))
     company = str(row.get("Tên công ty", "") or "").strip()
     price = float(row["Giá đóng cửa"])
@@ -100,12 +111,12 @@ def _card(row: pd.Series, asof: pd.Timestamp):
             with mid:
                 if pd.notna(pct):
                     length = min(100, int(abs(pct) * 10))
-                    color = "#28a977" if pct >= 0 else "#d86b6b"
-                    st.markdown(f'<div style="background:#e8edf2;border-radius:8px;height:5px"><div style="width:{length}%;background:{color};height:5px;border-radius:8px"></div></div>', unsafe_allow_html=True)
+                    color = up_color if pct >= 0 else down_color
+                    st.markdown(f'<div style="background:{bar_bg};border-radius:8px;height:5px"><div style="width:{length}%;background:{color};height:5px;border-radius:8px"></div></div>', unsafe_allow_html=True)
                 else:
                     st.caption("Chưa đủ dữ liệu")
             with val:
-                st.markdown(f'<div style="text-align:right;font-size:12px">{_fmt(ma)}<div style="color:{"#14935b" if pd.notna(pct) and pct >= 0 else "#d25151"}">{pct:+.2f}%</div></div>' if pd.notna(pct) else '—', unsafe_allow_html=True)
+                st.markdown(f'<div style="text-align:right;font-size:12px">{_fmt(ma)}<div style="color:{up_text if pd.notna(pct) and pct >= 0 else down_text}">{pct:+.2f}%</div></div>' if pd.notna(pct) else '—', unsafe_allow_html=True)
         left, right = st.columns(2, gap="small")
         for pane, title, values in ((left, "HỖ TRỢ MA TIỀM NĂNG", support), (right, "KHÁNG CỰ MA TIỀM NĂNG", resist)):
             with pane:
