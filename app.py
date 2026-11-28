@@ -676,13 +676,31 @@ def _action_ctx(code):
         return None
 
 
-def _action_html(code) -> str:
+# MIN_ACTION_CARDS_COMPACT_V1: page-local selector; other views use legacy layout.
+def _card_view_mode(page):
+    mode = st.radio('Chế độ hiển thị thẻ', ['Gọn', 'Chi tiết'], horizontal=True,
+                    key='min_action_card_mode_' + page,
+                    help='Gọn: luôn hiện kết luận hành động; mở riêng các phân tích chuyên sâu. Chi tiết: hiển thị như trước.')
+    st.session_state['_min_action_cards_compact'] = mode != 'Chi tiết'
+
+
+def _compact_cards():
+    return st.session_state.get('_min_action_cards_compact', True)
+
+
+def _card_extra(label, content):
+    return WB.compact_details(label, content) if _compact_cards() else content
+
+
+def _action_html(code, *, card_view=False) -> str:
     """Khối 'Tóm tắt nhanh · Kết luận hành động' cuối thẻ (quy tắc ở action_summary.py)."""
     try:
         ctx = _action_ctx(code)
-        return AS.html(ctx) if ctx else ""
+        if not ctx:
+            return ('<div class="wb-note">Kết luận hành động: Chưa đủ dữ liệu xác nhận.</div>' if card_view else '')
+        return AS.html(ctx, compact=_compact_cards(), show_conflict=True) if card_view else AS.html(ctx)
     except Exception:
-        return ""
+        return ('<div class="wb-note">Kết luận hành động: Chưa đủ dữ liệu xác nhận.</div>' if card_view else '')
 
 
 TABLE_COLS = ["ST", "Mã", "Nhóm", "Giá", "Score", "RS vs VNI", "% Biên độ", "Position %", "Zone", "Lực mua/bán",
@@ -1315,6 +1333,7 @@ def _kq_reset_page():
 def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
+    _card_view_mode('filter')
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)      # CSS khối Vùng mua - Cắt lỗ - Mục tiêu (wb-*)
     st.caption("Chọn một bộ lọc nhanh hoặc tự chỉnh các ô bên dưới (mục Nâng cao có thêm điều kiện Cảnh báo, Zone, MA, Wyckoff, Dòng tiền). "
                "Các mã đáp ứng điều kiện sẽ hiển thị thành từng thẻ ở phần Kết quả lọc bên dưới.")
@@ -1445,13 +1464,16 @@ def page_filter():
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
                         filter_reason +
-                        f'<div class="metrics-grid">'
+                        _card_extra('Thông tin tài chính', f'<div class="metrics-grid">'
                         f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
                         f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
                         f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
-                        f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>'
+                        f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>')
                         + _ma_summary_html(code)
-                        + f'<div class="tag-container">' + chips_html + '</div>' + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '') + div_html + _wy_note(code, True) + mtf_html + _action_html(code) + '</div>')
+                        + _card_extra('Chi tiết chỉ báo', f'<div class="tag-container">' + chips_html + '</div>')
+                        + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '')
+                        + _card_extra('Wyckoff & Phân kỳ RSI', div_html + _wy_note(code, True))
+                        + _card_extra('Phân tích đa khung', mtf_html) + _action_html(code, card_view=True) + '</div>')
                 with st.container(border=True):
                     st.markdown(_opportunity_card_html(html), unsafe_allow_html=True)
                     _opportunity_score_panel(code, f"opp_filter_{code}")
@@ -1694,7 +1716,7 @@ def _wb_card(r, group, *, opportunity_kind="wait"):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
         div_html = DV.html(divergence_cached(frames, str(r["Mã"]), DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(_opportunity_card_html(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading(), "", _action_html(r["Mã"]), opportunity_kind=opportunity_kind)), unsafe_allow_html=True)
+        st.markdown(_opportunity_card_html(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading(), "", _action_html(r["Mã"], card_view=True), opportunity_kind=opportunity_kind, compact=_compact_cards())), unsafe_allow_html=True)
         _opportunity_score_panel(str(r["Mã"]), f"opp_{opportunity_kind}_{gi}_{r['Mã']}")
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
@@ -1758,15 +1780,16 @@ def _tone_card(r, tone: str, key: str):
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
         focus = key == "sell" and tone in ("sell", "tp")
         if focus:
-            st.markdown(WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
-                                     _min_trading(), ctx, _action_html(code), sell_focus=focus), unsafe_allow_html=True)
+            content = WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
+                                   _min_trading(), ctx, _action_html(code, card_view=True), sell_focus=focus, compact=_compact_cards())
+            st.markdown(_opportunity_card_html(content) if _compact_cards() else content, unsafe_allow_html=True)
             _trade_score_panel(code, f"trade_sell_{code}")
         else:
             if tone == "dry":
                 sources = r.get("Nguồn cạn cung") or []
                 ctx = f'<div class="wb-sub" style="margin:0 0 10px"><b>{len(sources)} nguồn xác nhận</b></div>' + ctx
             content = WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
-                                   _min_trading(), ctx, _action_html(code), opportunity_kind=tone)
+                                   _min_trading(), ctx, _action_html(code, card_view=True), opportunity_kind=tone, compact=_compact_cards())
             st.markdown(_opportunity_card_html(content), unsafe_allow_html=True)
             _opportunity_score_panel(code, f"opp_{key}_{tone}_{code}")
         if st.button("📊 Xem biểu đồ", key=f"{key}_chart_{code}", use_container_width=True):
@@ -1833,6 +1856,7 @@ def _wb_filters(d: pd.DataFrame, states: list[str]) -> pd.DataFrame:
 def page_wait_buy():
     st.title("🛒 Chờ mua")
     header()
+    _card_view_mode('wait')
 
     if _MARKET_EOD_STALE:
         st.warning(
@@ -2029,6 +2053,7 @@ def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool, score_panel=None) -
 def page_buy_now():
     st.title("⚡ Mua ngay")
     header()
+    _card_view_mode('buy')
 
     if _MARKET_EOD_STALE:
         st.warning(
@@ -2128,7 +2153,7 @@ def _wl_card(r, u, ver):
     code = str(r["Mã"])
     with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(_opportunity_card_html(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading(), "", _action_html(code), opportunity_kind="watch")), unsafe_allow_html=True)
+        st.markdown(_opportunity_card_html(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading(), "", _action_html(code, card_view=True), opportunity_kind="watch", compact=_compact_cards())), unsafe_allow_html=True)
         pos = MW.position_html(u, r["Giá"])
         if pos:
             st.markdown(pos, unsafe_allow_html=True)
@@ -2148,6 +2173,7 @@ def _wl_card(r, u, ver):
 def page_watchlist():
     st.title("⭐ Watchlist")
     header()
+    _card_view_mode('watch')
     st.markdown(f"<style>{WB.card_css(TH.is_dark())}</style>", unsafe_allow_html=True)
 
     def _open_chart(code: str):
@@ -2228,6 +2254,7 @@ def _move_page(kind: str):
     up = kind == "surge"
     st.title("🚀 Tăng mạnh" if up else "💥 Giảm mạnh")
     header()
+    _card_view_mode(kind)
     lbl_ses = "Tăng trong phiên" if up else "Giảm trong phiên"
     lbl_leg = "Tăng từ đáy" if up else "Giảm từ đỉnh"
     st.session_state.setdefault(f"mv_mode_{kind}", lbl_ses)
@@ -2356,6 +2383,7 @@ def _lean_of(codes) -> dict:
 def page_dry_supply():
     st.title("🧊 Cạn cung")
     header()
+    _card_view_mode('dry')
     st.caption("Các mã mà **bất kỳ mục nào của app** đang ghi là cạn cung / khối lượng cạn, gộp vào một danh sách: cờ **Cạn cung** ở Lọc tất cả CP, "
                "trạng thái **Điểm mua đẹp** và **Tích lũy / Siết nền giá** ở Chờ mua / Mua ngay, và sự kiện **Spring / Test / LPS volume thấp** của Wyckoff (tích lũy Pha C/D). "
                "Mã được nhiều nguồn cùng báo xếp trước. Cạn cung chỉ cho biết lực bán đã yếu, chưa phải tín hiệu mua: xem vùng mua và cắt lỗ ở mục **Chờ mua**. "
@@ -2399,6 +2427,7 @@ def page_dry_supply():
 def page_recovering():
     st.title("🌱 Đang phục hồi")
     header()
+    _card_view_mode('recover')
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: đang hồi phục hoặc có dấu hiệu tích lũy sau nhịp giảm. "
                "Chỉ chuyển sang tab Chờ mua khi vượt MA50 / kháng cự (xác nhận xu hướng). "
                "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")
@@ -2436,6 +2465,7 @@ def page_alert_lists():
     # MIN_ALERT_CLARITY_V2: title clarifies stock-level monitoring; classification unchanged.
     st.title("⚠️ Cảnh báo xu hướng cổ phiếu")
     header()
+    _card_view_mode('alert')
     st.caption("Các mã KHÔNG nằm trong **Chờ mua**: xu hướng suy yếu, tăng quá đà. Mã đang phục hồi có mục riêng **Đang phục hồi**. "
                "Mã có thêm tín hiệu **BÁN / CHỐT LỜI** vẫn hiện ở đây và đồng thời ở mục **Bán / Chốt lời**.")
     t_all = t = _wb_table()      # một mã có thể nằm ở nhiều mục: mã có tín hiệu BÁN / CHỐT LỜI vẫn hiện ở đây nếu Danh sách của nó là cảnh báo
@@ -2492,6 +2522,7 @@ if(!d.__scJump2){d.__scJump2=true;
 def page_sell_list():
     st.title("🔴 Bán / Chốt lời")
     header()
+    _card_view_mode('sell')
     st.caption("Các mã đang có tín hiệu **BÁN** hoặc **CHỐT LỜI** theo nến cuối phiên mới nhất. "
                "**CHỐT LỜI**: đã có lãi lớn từ đáy (từ 20%), giá còn trên MA50 nhưng đà đang yếu đi hoặc đã tăng từ 50% từ đáy. "
                "**BÁN**: có tín hiệu bán và xu hướng đã yếu (dưới MA50, nến xả mạnh, rơi nhanh). "

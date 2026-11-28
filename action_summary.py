@@ -260,6 +260,14 @@ def rules() -> str:
 .ac-bs{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
 .ac-ft{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 12px;font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
 .ac-dt{margin-left:auto;font-style:normal;white-space:nowrap}
+
+.ac-box.ac-compact{padding:10px 10px 8px;margin-top:8px}
+.ac-box.ac-compact .ac-tb{table-layout:fixed;font-size:12px}
+.ac-box.ac-compact .ac-tb th,.ac-box.ac-compact .ac-tb td{padding:6px 5px;overflow-wrap:anywhere;white-space:normal}
+.ac-box.ac-compact .ac-tb th:first-child,.ac-box.ac-compact .ac-tb td.pos{width:24%;white-space:normal}
+.ac-box.ac-compact .ac-tb th:last-child,.ac-box.ac-compact .ac-tb td.lv{width:30%}
+.ac-conflict{border:1px solid var(--tag-amber-fg);background:var(--tag-amber-bg);color:var(--txt);border-radius:9px;padding:8px 10px;margin:6px 0 10px;font-size:12px;line-height:1.5}
+.ac-conflict b{color:var(--tag-amber-fg);font-size:11.5px}
 """
 
 
@@ -277,7 +285,38 @@ def _date_label(d) -> str:
         return str(d)
 
 
-def html(ctx: dict) -> str:
+# MIN_ACTION_CARDS_COMPACT_V1: presentation only, no change to _signals/_rows/_levels.
+def _card_conflict(s):
+    positive = []
+    negative = []
+    if s['buy']: positive.append('Trạng thái mua: ' + s['state'])
+    if s['lean'] > 0: positive.append('Dự báo nghiêng tăng (D)')
+    if all(s['above'].values()): positive.append('Giá trên hoặc bằng MA20/50/200')
+    if s['div_up']: positive.append('RSI phân kỳ tăng (D/W)')
+    if s['acc']: positive.append('Wyckoff tích lũy')
+    if s['sell']: negative.append('Tín hiệu bán / hạ tỷ trọng')
+    if s['lean'] < 0: negative.append('Dự báo nghiêng giảm (D)')
+    if s['short'] == '-' and s['mid'] == '-': negative.append('Xu hướng ngắn và trung hạn suy yếu')
+    if s['div_dn']: negative.append('RSI phân kỳ giảm (D/W)')
+    if s['dist']: negative.append('Wyckoff phân phối')
+    if not positive or not negative:
+        return ''
+    msg = ' · '.join(positive) + ' | ' + ' · '.join(negative)
+    return ('<div class="ac-conflict"><b>TÍN HIỆU TRÁI CHIỀU</b><div>' + _html.escape(msg) +
+            '</div><div>Đối chiếu khung thời gian và kết luận hành động bên dưới.</div></div>')
+
+
+def _card_action_color(head):
+    if head.startswith(('HẠ ', 'HẠN CHẾ MARGIN', 'BÁN', 'KHÔNG DÙNG MARGIN', 'THOÁT')):
+        return 'var(--red)'
+    if head.startswith(('CHỜ', 'GIỮ', 'HẠN CHẾ', 'ĐỨNG', 'KHÔNG MUA', 'KHÔNG TĂNG', 'CHỐT')):
+        return 'var(--tag-amber-fg)'
+    if head.startswith(('GIẢI NGÂN', 'MUA', 'ĐƯỢC DÙNG')):
+        return 'var(--green)'
+    return 'var(--txt2)'
+
+
+def html(ctx: dict, *, compact=False, show_conflict=False) -> str:
     """Khối HTML liền một dòng (không thụt lề, tránh Markdown coi là code). Thiếu giá / MA thì trả chuỗi rỗng."""
     if not _ok(ctx.get("close")):
         return ""
@@ -285,12 +324,15 @@ def html(ctx: dict) -> str:
     lv = _levels(ctx, s)
     esc = _html.escape
     body = "".join(
-        f'<tr><td class="pos">{esc(pos)}</td><td><b>{esc(head)}</b> {esc(why)}</td><td class="lv">{esc(zone)}</td></tr>'
+        f'<tr><td class="pos">{esc(pos)}</td><td><b' + (f' style="color:{_card_action_color(head)}"' if compact else '') + f'>{esc(head)}</b> {esc(why)}</td><td class="lv">{esc(zone)}</td></tr>'
         for pos, head, why, zone in _rows(ctx, s, lv))
     code = esc(str(ctx.get("code") or ""))
     head = (f'<div class="ac-hd"><span>{code}</span><span class="sep">|</span><span>{float(ctx["close"]):,.1f}</span></div>'
             if code else "")
-    return ('<div class="ac-box">' + head + '<div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
+    if compact:
+        head = ''
+    conflict = _card_conflict(s) if show_conflict else ''
+    return (conflict + ('<div class="ac-box ac-compact">' if compact else '<div class="ac-box">') + head + '<div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
             '<table class="ac-tb"><thead><tr><th>Vị thế tài khoản</th><th>Hành động</th><th>Vùng giá / Mốc lưu ý</th></tr></thead>'
             f'<tbody>{body}</tbody></table>'
             '<div class="ac-ft"><span>Quy tắc mang tính chủ quan; chỉ để tham khảo, không phải khuyến nghị đầu tư.</span>'
