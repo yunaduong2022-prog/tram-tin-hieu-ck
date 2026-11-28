@@ -260,6 +260,9 @@ def _state_map_html(view):
     .sm-grid .sm-bar{display:inline-block;height:7px;width:92px;background:rgba(128,145,145,.20);border-radius:5px;overflow:hidden}
     .sm-grid .sm-bar>span{display:block;height:100%;background:#20c997;border-radius:5px}
     </style>"""
+    import theme as TH
+    if TH.is_dark():
+        css += '<style>\n/* MIN_FILTER_TABLE_FINANCE_V1: state map display only */\n.sm-scroll{background:var(--card);border-color:var(--line)}\n.sm-grid{color:var(--txt);font-variant-numeric:tabular-nums}\n.sm-grid th,.sm-grid td{border-bottom-color:var(--line)}\n.sm-grid th{background:var(--card2);color:var(--muted);opacity:1;font-weight:750}\n.sm-grid tbody tr:nth-child(even) td{background:var(--bg2)}\n.sm-grid tbody tr:hover td{background:var(--card2)}\n.sm-grid .sm-ticker{color:var(--txt2)}\n.sm-grid .sm-up{color:var(--green)}.sm-grid .sm-down{color:var(--red)}\n.sm-grid .sm-missing{color:var(--muted);opacity:1}\n.sm-grid .sm-bar{background:var(--bar)}\n.sm-grid .sm-bar>span{background:linear-gradient(90deg,var(--red),var(--amber),var(--green))}\n</style>'
     thead = ''.join(f'<th>{esc(h)}</th>' for h in headers)
     return css + '<div class="sm-scroll"><table class="sm-grid"><thead><tr>' + thead + '</tr></thead><tbody>' + ''.join(cells) + '</tbody></table></div>'
 

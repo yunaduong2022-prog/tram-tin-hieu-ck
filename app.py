@@ -1290,10 +1290,17 @@ def kq_table(b: pd.DataFrame):
     if "Thay đổi (%)" in t.columns: fmt["Thay đổi (%)"] = "{:+.2f}%"
     if "RS" in t.columns: fmt["RS"] = "{:.2f}"
     sty = t.style.format(fmt, na_rep="—")
+    # MIN_FILTER_TABLE_FINANCE_V1: style display copy, not screener data.
+    if TH.is_dark():
+        p = TH.palette()
+        sty = sty.set_properties(**{'background-color': p['card'], 'color': p['txt']})
     ap = lambda x: x.map if hasattr(x, "map") else x.applymap
     sty = ap(sty)(lambda v: "font-weight:800", subset=["Mã CK"])
     tcolor = {"Tăng": "color:#0E8A6D;font-weight:700", "Giảm": "color:#C93A52;font-weight:700",
               "Lẫn lộn": "color:#B7791F;font-weight:600", "Chưa đủ dữ liệu": "color:#8A93A0"}
+    if TH.is_dark():
+        tcolor = {"Tăng": "color:"+p['green']+";font-weight:700", "Giảm": "color:"+p['red']+";font-weight:700",
+                  "Lẫn lộn": "color:"+p['amber']+";font-weight:600", "Chưa đủ dữ liệu": "color:"+p['muted']}
     if trend_cols:
         sty = ap(sty)(lambda v: tcolor.get(v, ""), subset=trend_cols)
     if "Thay đổi (%)" in t.columns:
@@ -2371,8 +2378,10 @@ def page_dry_supply():
         return
     shown = _tone_limit(d, "dry")
     _sc = set(shown["Mã"].astype(str))
+    _dry_lean = _lean_of(d["Mã"])
+    _dry_colors = {1: "var(--green)", -1: "var(--red)", 0: "var(--muted)"}
     st.markdown(_chip_box(f"Danh sách tổng hợp ({len(d)} mã) · chia theo dự báo nghiêng tăng / nghiêng giảm (khung Ngày) · bấm vào mã để xuống thẻ bên dưới",
-                          DS.chips_html(d, lambda c_: _chip(c_, "var(--accent)", _sc), _lean_of(d["Mã"]))), unsafe_allow_html=True)
+                          DS.chips_html(d, lambda c_: _chip(c_, _dry_colors.get(_dry_lean.get(str(c_), 0), "var(--muted)"), _sc), _dry_lean)), unsafe_allow_html=True)
     _tone_grid(shown, len(d), "dry", "dry")
     _sell_jump_js()
     _rt_focus_scroll()
