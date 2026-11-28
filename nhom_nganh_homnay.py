@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 import nhom_nganh_data as ND
+from price_colors import display as price_display
 
 DECIMAL_COMMA = True            # True: +0,93% và 1.234 Tỷ (như bảng mẫu); False: +0.93% và 1,234 Tỷ
 SORTS = ["% Tăng mạnh", "Dòng tiền (GTGD)", "RS"]
@@ -70,18 +71,35 @@ def _dot(name: str) -> str:
     return PALETTE[zlib.crc32(name.encode("utf-8")) % len(PALETTE)]
 
 
-def _row(i: int, r: pd.Series) -> str:
+def _leader_style(r, P, period):
+    """Use verified, same-session limits only; preserve period return and rank."""
+    chg = r["% dẫn đầu"]
+    fallback = _cls(chg)
+    if period != "1 phiên":
+        return fallback, ""
+    c = P.get("c")
+    code = str(r["Mã dẫn đầu"])
+    if c is None or c.empty or code not in c.columns:
+        return fallback, ""
+    x = price_display(code, c[code].iloc[-1], chg, day=c.index[-1], session=True)
+    if x.verified and x.state in ("ceiling", "floor", "flat"):
+        return fallback, f' style="color:{x.color}" title="{x.label}"'
+    return fallback, ""
+
+
+def _row(i: int, r: pd.Series, P: dict, period: str) -> str:
     rk = f'<span class="nn-medal m{i}">{i}</span>' if i <= 3 else f'<span class="nn-rk">{i}</span>'
     rs = r["RS kỳ"]
     rs_html = '<span class="nn-rs nn-flat">-</span>' if rs is None or not np.isfinite(rs) else \
         f'<span class="nn-rs {_cls(rs)}">{"▲" if rs > 0 else "▼" if rs < 0 else "■"} {_vn(f"{abs(rs):.1f}")}đ%</span>'
     nm = _html.escape(str(r["Nhóm"]))
+    lead_cls, lead_style = _leader_style(r, P, period)
     return (f'<div class="nn-row"><div style="text-align:center">{rk}</div>'
             f'<div class="nn-name" title="{nm}"><i class="nn-dot" style="background:{_dot(str(r["Nhóm"]))}"></i>{nm}</div>'
             f'<div class="r nn-perf {_cls(r["Hiệu suất"])}">{_pct(r["Hiệu suất"])}</div>'
             f'<div class="r nn-val">{_val(r["GTGD"])}</div>'
             f'<div class="r">{rs_html}</div>'
-            f'<div class="r nn-lead"><b>{_html.escape(str(r["Mã dẫn đầu"]))}</b><span class="{_cls(r["% dẫn đầu"])}">{_pct(r["% dẫn đầu"])}</span></div></div>')
+            f'<div class="r nn-lead"><b>{_html.escape(str(r["Mã dẫn đầu"]))}</b><span class="{lead_cls}"{lead_style}>{_pct(r["% dẫn đầu"])}</span></div></div>')
 
 
 _HEAD = ('<div class="nn-hd"><div style="text-align:center">#</div><div>NHÓM NGÀNH</div><div class="r">HIỆU SUẤT</div><div class="r" title="Giá trị giao dịch bình quân mỗi phiên trong kỳ được chọn">GTGD TB</div>'
@@ -118,8 +136,8 @@ def render(raw: pd.DataFrame, mkt: pd.Series, default_groups: dict, data_key: st
     # This panel ranks CONFIRMED EOD sessions even if another site mode is intraday.
     badge = f'<span class="nn-badge">🕒 EOD {(_html.escape(str(asof)) if asof else "")} · {period}</span>'
     half = int(np.ceil(len(d) / 2))
-    left = "".join(_row(i + 1, r) for i, (_, r) in enumerate(d.iloc[:half].iterrows()))
-    right = "".join(_row(half + i + 1, r) for i, (_, r) in enumerate(d.iloc[half:].iterrows()))
+    left = "".join(_row(i + 1, r, P, period) for i, (_, r) in enumerate(d.iloc[:half].iterrows()))
+    right = "".join(_row(half + i + 1, r, P, period) for i, (_, r) in enumerate(d.iloc[half:].iterrows()))
     st.markdown(CSS + f'<div class="nn-wrap"><div class="nn-head"><span style="font-size:20px">🔥</span><span class="nn-title">XẾP HẠNG SỨC MẠNH NHÓM NGÀNH</span>{badge}</div>'
                 f'<div class="nn-grid"><div>{_HEAD}{left}</div><div>{_HEAD if right else ""}{right}</div></div>'
                 f'<div class="nn-note">Khung {period}: hiệu suất tính từ nến EOD đã đóng của {ND.RANK_WINDOWS[period]} phiên giao dịch (1/5/21/63); nhóm dùng trung vị hoặc trung bình nếu dưới {ND.MIN_FOR_MEDIAN} mã. '
