@@ -1682,6 +1682,14 @@ def _open_chart_of(code: str):
     NAV.goto("Cổ phiếu", "Biểu đồ")
 
 
+# MIN_TRADE_CARD_FOCUS_V1: shared FA/TA panel, loaded only on explicit request.
+def _trade_score_panel(code, key):
+    if st.checkbox("Xem điểm FA / TA", key=key + "_show_scores"):
+        from vip_score_bridge import render_vip_scores
+        st.caption("Điểm theo khung Trung hạn/Dài hạn, dùng chung với Biểu đồ và VIP. Không phải điều kiện của tín hiệu T+2 hay Bán/Chốt lời.")
+        render_vip_scores(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date, key=key + "_scores", mode="stock")
+
+
 def _tone_card(r, tone: str, key: str):
     """Một thẻ ở các trang danh sách. tone = sell (tự tách BÁN / CHỐT LỜI theo cột 'Hành động bán'), tp, risk, over, surge, plunge, recover."""
     r = r.copy()
@@ -1705,8 +1713,11 @@ def _tone_card(r, tone: str, key: str):
     ctx = f'<div class="wb-sub" style="margin:-4px 0 12px">{htmllib.escape(gain + hint)}</div>'
     with st.container(key=f"wbcard-{tone}-{code}"):          # tiền tố wbcard- để ăn CSS thẻ và cuộn tới thẻ (_wb_scroll_to)
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
+        focus = key == "sell" and tone in ("sell", "tp")
         st.markdown(WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
-                                 _min_trading(), ctx, _action_html(code)), unsafe_allow_html=True)
+                                 _min_trading(), ctx, _action_html(code), sell_focus=focus), unsafe_allow_html=True)
+        if focus:
+            _trade_score_panel(code, f"trade_sell_{code}")
         if st.button("📊 Xem biểu đồ", key=f"{key}_chart_{code}", use_container_width=True):
             _open_chart_of(code)
 
@@ -1808,7 +1819,7 @@ def page_wait_buy():
             t2_wait = t2_wait[t2_wait["Nhóm"].apply(
                 lambda text: any(name in [p.strip() for p in str(text).split(",")] for name in sectors))]
         if not t2_wait.empty:
-            _t2_opportunity_cards(t2_wait, waiting=True)
+            _t2_opportunity_cards(t2_wait, waiting=True, score_panel=_trade_score_panel)
         else:
             st.caption("Không có mã T+2 phù hợp bộ lọc.")
     st.divider()
@@ -1893,7 +1904,7 @@ def _t2_opportunities_cached(_daily: pd.DataFrame, _asof, key: str) -> tuple[pd.
     return _research_filter(buy), _research_filter(wait)
 
 
-def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
+def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool, score_panel=None) -> None:
     """MIN_T2_COMPACT_CARDS_V1: compact presentation only; EOD signals unchanged.
 
     WAIT prioritizes the nearest unbroken resistance and its R:R; distant TP1
@@ -1912,9 +1923,9 @@ def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
             with st.container(border=True):
                 code = str(item["Mã"])
                 if waiting:
-                    st.markdown(f"**{code} · ⏳ CHỜ XÁC NHẬN T+2**")
+                    st.markdown(f"**:orange[{code} · ⏳ CHỜ XÁC NHẬN T+2]**")
                 else:
-                    st.markdown(f"**{code} · ⚡ MUA NGAY T+2**")
+                    st.markdown(f"**:green[{code} · ⚡ MUA NGAY T+2]**")
                 st.caption(f"{item['Tín hiệu']} · {item['Tuổi']} · Chỉ Trading T+2, KHÔNG nắm giữ dài hạn")
                 price = float(item["Giá EOD"])
                 stop = float(item["Cắt lỗ T+2"])
@@ -1959,6 +1970,8 @@ def _t2_opportunity_cards(data: pd.DataFrame, waiting: bool) -> None:
                 if memo:
                     with st.expander("Chi tiết tín hiệu T+2", expanded=False):
                         st.caption(memo)
+                if score_panel is not None:
+                    score_panel(code, f"trade_t2_{'wait' if waiting else 'buy'}_{code}")
     if len(data) > len(shown):
         st.caption(f"Đang hiển thị {len(shown)}/{len(data)} mã Trading T+2.")
 
@@ -2014,7 +2027,7 @@ def page_buy_now():
         st.caption("KHÔNG nắm giữ dài hạn. Dùng stoploss/TP động/R:R riêng của Trading T+2. "
                    "Không có kháng cự kỹ thuật chưa vượt trong vùng 3% tại EOD. "
                    "Giá khớp phiên tiếp theo có thể khác EOD.")
-        _t2_opportunity_cards(t2, waiting=False)
+        _t2_opportunity_cards(t2, waiting=False, score_panel=_trade_score_panel)
     if d.empty:
         return
     show_all = len(d) > WB_PER_GROUP and st.checkbox(f"Hiện tất cả {len(d)} mã", key="bn_all")

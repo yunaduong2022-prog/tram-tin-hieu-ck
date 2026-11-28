@@ -1027,7 +1027,30 @@ def _rr_label(row, target_col: str) -> str:
     return f"R:R 1:{rr:.1f}" if np.isfinite(rr) else "R:R —"
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "") -> str:
+# MIN_TRADE_CARD_FOCUS_V1: presentation only. All data comes from existing card inputs.
+def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, group):
+    esc = _html.escape
+    tone = 'var(--tag-amber-fg)' if group == 'a' else 'var(--red)'
+    background = 'var(--tag-amber-bg)' if group == 'a' else 'var(--tag-red-bg)'
+    title = 'LÝ DO CHỐT LỜI' if group == 'a' else 'LÝ DO BÁN'
+    reason = reason.strip() or 'Chưa có diễn giải tín hiệu.'
+    block = (f'<div class="trade-exit-reason" style="border:1px solid {tone};border-left:3px solid {tone};'
+             f'background:{background};border-radius:10px;padding:12px;margin:0 0 12px">'
+             f'<div style="color:{tone};font-size:12px;font-weight:800;margin-bottom:6px">{title}</div>'
+             f'<div style="color:var(--txt);font-size:13px;line-height:1.5">{esc(reason)}</div></div>')
+    sector = esc(str(meta.get('Ngành') or 'Chưa có'))
+    industry = f'<div class="wb-sub" style="margin:0 0 10px">{sector}</div>'
+    summary = '<div class="wb-sub" style="margin-top:14px">Thông tin tài chính nhanh · nguồn tổng hợp</div>'
+    summary += '<div class="wb-kv" style="gap:8px;margin-bottom:8px;padding-top:8px">' + ''.join(
+        f'<div><span>{k}</span><b>{esc(str(meta.get(k, "Chưa có")))}</b></div>' for k in ('P/E','P/B','ROE')) + '</div>'
+    detail = ('<details style="border-top:1px solid var(--line);padding-top:9px;color:var(--txt)">'
+              '<summary style="cursor:pointer;color:var(--muted);font-weight:700;font-size:13px">Thông tin cổ phiếu</summary>'
+              + meta_html + '</details>')
+    price_detail = ('<details style="margin:8px 0;color:var(--txt)"><summary style="cursor:pointer;color:var(--muted);font-size:13px">Vùng giá tham khảo từ thẻ gốc</summary>' + ladder + '</details>') if ladder else ''
+    return header + industry + block + context + lean + ma + divergence + wyckoff + action + summary + detail + price_detail
+
+
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "", *, sell_focus: bool = False) -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -1039,12 +1062,12 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
     chg = r.get("Chg %", np.nan)
     from price_colors import display
     _p = display(r["Mã"], r["Giá"], chg)
-    html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
+    header_html = (f'<div class="wb-head"><div class="wb-id"><span class="wb-code">{esc(str(r["Mã"]))}</span>'
             f'<span class="wb-px" style="color:{_p.color}">{px(r["Giá"])}<small>{_p.arrow} {_p.pct_text if _p.pct is not None else ""}</small></span></div>'
             f'<span class="wb-badge {_BADGE.get(group, group if group in ("g", "a", "n", "r", "v", "c") else "n")}{" buy" if state == "MUA" else ""}">{esc(BADGE_TEXT.get(state, state))}</span></div>'
             f'<div class="wb-name">{esc(str((meta or {}).get("Tên") or "Chưa có tên công ty"))}</div>'
-            f'{lean_html}{ctx_html}'
-            f'<div class="wb-kv">'
+            )
+    meta_html = (f'<div class="wb-kv">'
             f'<div><span>Score · RS</span><b>{r["Score"]:.1f} · {px(r["RS20"])}</b></div>'
             f'<div><span>P/B</span><b>{esc(str((meta or {}).get("P/B", "Chưa có")))}</b></div>'
             f'<div><span>ROE</span><b>{esc(str((meta or {}).get("ROE", "Chưa có")))}</b></div>'
@@ -1056,17 +1079,22 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
                if (meta or {}).get("EPS", "Chưa có") != "Chưa có" else "")
             + (f'<div class="wide"><span>Xếp hạng ngành</span><b>{esc(str(meta["Xếp hạng"]))}</b></div>' if (meta or {}).get("Xếp hạng") else "")
             + '</div>')
+    html = header_html + lean_html + ctx_html + meta_html
+    ladder_section = ''
     html += ma_html       # MA20/50/200 + chip Ngắn hạn/Trung hạn (app._ma_summary_html, cùng thẻ ở Bộ lọc)
     html += f'<div class="wb-note">{esc(_sentence(r["Lý do"]))}</div>'
     # Khung Vùng mua (thang giá) đặt lên trên; cảnh báo phân kỳ RSI và ghi chú Wyckoff đưa xuống dưới
     if pd.notna(r.get("Vùng mua từ")):
         go = r.get("Hành động") == "Vào ngay"
         tag = lambda t: f'<small>{t}</small>'
-        html += '<div style="margin-bottom:12px">' + ladder_html(
+        ladder_section = '<div style="margin-bottom:12px">' + ladder_html(
             r["Mã"], r.get("Giá vào"), r["Vùng mua từ"], r["Vùng mua đến"], go, r["Cắt lỗ"], r["Cắt lỗ %"],
             r["Mục tiêu 1"], r["Lời 1 %"], tag(_rr_label(r, "Mục tiêu 1")),
             r["Mục tiêu 2"], r["Lời 2 %"], tag(_rr_label(r, "Mục tiêu 2")),
             _sentence(r["Ghi chú hành động"]), foot_text, eod_entry=bool(r.get("Vào theo EOD", False))) + '</div>'
+        html += ladder_section
+    if sell_focus:
+        return _sell_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, group)
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
     html += action_html   # "Tóm tắt nhanh · Kết luận hành động" (action_summary.html)
