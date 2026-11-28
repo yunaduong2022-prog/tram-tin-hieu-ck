@@ -1028,7 +1028,36 @@ def _rr_label(row, target_col: str) -> str:
 
 
 # MIN_TRADE_CARD_FOCUS_V1: presentation only. All data comes from existing card inputs.
-def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, group):
+# MIN_ACTION_CARDS_COMPACT_V1: keep all source HTML available, never alter levels.
+def compact_details(label, content):
+    if not content:
+        return ''
+    return ('<details class="min-opp-details" style="margin:6px 0;border-top:1px solid var(--line);padding-top:7px;color:var(--txt)">'
+            '<summary style="cursor:pointer;color:var(--muted);font-weight:700;font-size:13px">' + _html.escape(label) + '</summary>' + content + '</details>')
+
+
+def _compact_reason(reason, block):
+    reason = str(reason or 'Chưa có diễn giải tín hiệu.')
+    if len(reason) <= 150:
+        return block
+    short = reason[:147].rsplit(' ', 1)[0] + '…'
+    return ('<div class="wb-note" style="margin:4px 0 8px">' + _html.escape(short) + '</div>' +
+            compact_details('Chi tiết lý do tín hiệu', block))
+
+
+def _compact_dry_stats(row):
+    sources = row.get('Nguồn cạn cung')
+    sources = sources if isinstance(sources, (list, tuple)) else []
+    v = pd.to_numeric(row.get('Vol / MA20 Vol'), errors='coerce')
+    vs = f'{float(v):.2f}x' if pd.notna(v) and np.isfinite(v) else '—'
+    return ('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 8px">'
+            '<div style="background:var(--card2);padding:8px;border-radius:8px"><div class="wb-sub" style="margin:0">Nguồn xác nhận</div>'
+            f'<b>{len(sources)}/4</b></div><div style="background:var(--card2);padding:8px;border-radius:8px"><div class="wb-sub" style="margin:0">Vol/MA20</div><b>{vs}</b></div></div>'
+            '<div class="wb-note">' + _html.escape(' · '.join(map(str, sources))) +
+            '<br>Cạn cung chưa phải tín hiệu mua.</div>')
+
+
+def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, group, *, compact=False):
     esc = _html.escape
     tone = 'var(--tag-amber-fg)' if group == 'a' else 'var(--red)'
     background = 'var(--tag-amber-bg)' if group == 'a' else 'var(--tag-red-bg)'
@@ -1047,11 +1076,15 @@ def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder,
               '<summary style="cursor:pointer;color:var(--muted);font-weight:700;font-size:13px">Thông tin cổ phiếu</summary>'
               + meta_html + '</details>')
     price_detail = ('<details style="margin:8px 0;color:var(--txt)"><summary style="cursor:pointer;color:var(--muted);font-size:13px">Vùng giá tham khảo từ thẻ gốc</summary>' + ladder + '</details>') if ladder else ''
+    if compact:
+        return (header + industry + _compact_reason(reason, block) + lean + ma + action
+                + compact_details('Bối cảnh tín hiệu', context) + compact_details('Wyckoff & Phân kỳ RSI', divergence + wyckoff)
+                + compact_details('Thông tin tài chính', summary + meta_html) + price_detail)
     return header + industry + block + context + lean + ma + divergence + wyckoff + action + summary + detail + price_detail
 
 
 # MIN_OPPORTUNITY_CARDS_V1: display only, preserve the existing card inputs.
-def _opportunity_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, kind):
+def _opportunity_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, kind, *, compact=False, row=None):
     esc = _html.escape
     labels = {
         'buy': ('LÝ DO MUA / ĐIỀU KIỆN VÀO LỆNH', 'var(--tag-green-fg)', 'var(--tag-green-bg)'),
@@ -1076,10 +1109,15 @@ def _opportunity_focus_html(header, meta_html, meta, reason, context, lean, ma, 
     summary += ''.join(f'<div><span>{k}</span><b>{esc(str(meta.get(k, "Chưa có")))}</b></div>' for k in ('P/E', 'P/B', 'ROE')) + '</div>'
     early_ladder = ladder if kind in ('buy', 'wait', 'watch') else ''
     later_ladder = details('Vùng giá tham khảo từ thẻ gốc', ladder) if not early_ladder else ''
+    if compact:
+        primary = (_compact_dry_stats(row) + compact_details('Chi tiết nguồn tín hiệu', block + context)) if kind == 'dry' and row is not None else (_compact_reason(reason, block) + compact_details('Bối cảnh tín hiệu', context))
+        return (header + industry + primary + lean + ma + early_ladder + action
+                + compact_details('Wyckoff & Phân kỳ RSI', divergence + wyckoff)
+                + compact_details('Thông tin tài chính', summary + meta_html) + later_ladder)
     return (header + industry + block + context + early_ladder + lean + ma + divergence + wyckoff + action
             + summary + details('Thông tin cổ phiếu', meta_html) + later_ladder)
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "", *, sell_focus: bool = False, opportunity_kind: str = "") -> str:
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "", *, sell_focus: bool = False, opportunity_kind: str = "", compact: bool = False) -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -1123,9 +1161,9 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
             _sentence(r["Ghi chú hành động"]), foot_text, eod_entry=bool(r.get("Vào theo EOD", False))) + '</div>'
         html += ladder_section
     if sell_focus:
-        return _sell_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, group)
+        return _sell_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, group, compact=compact)
     if opportunity_kind:
-        return _opportunity_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, opportunity_kind)
+        return _opportunity_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, opportunity_kind, compact=compact, row=r)
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
     html += action_html   # "Tóm tắt nhanh · Kết luận hành động" (action_summary.html)
