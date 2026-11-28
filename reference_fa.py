@@ -4,12 +4,16 @@ import shipping_fa
 import steel_fa
 import oil_fa
 import fertilizer_fa
-SYMBOLS=port_fa.SYMBOLS|shipping_fa.SYMBOLS|steel_fa.SYMBOLS|oil_fa.SYMBOLS|fertilizer_fa.SYMBOLS
+import retail_fa
+SYMBOLS=port_fa.SYMBOLS|shipping_fa.SYMBOLS|steel_fa.SYMBOLS|oil_fa.SYMBOLS|fertilizer_fa.SYMBOLS|retail_fa.SYMBOLS
+assert not retail_fa.SYMBOLS & (port_fa.SYMBOLS|shipping_fa.SYMBOLS|steel_fa.SYMBOLS|oil_fa.SYMBOLS|fertilizer_fa.SYMBOLS)
 assert not fertilizer_fa.SYMBOLS & (port_fa.SYMBOLS|shipping_fa.SYMBOLS|steel_fa.SYMBOLS|oil_fa.SYMBOLS)
 assert not oil_fa.SYMBOLS & (port_fa.SYMBOLS|shipping_fa.SYMBOLS|steel_fa.SYMBOLS)
 assert not steel_fa.SYMBOLS & (port_fa.SYMBOLS|shipping_fa.SYMBOLS)
 assert not port_fa.SYMBOLS&shipping_fa.SYMBOLS
 def compact_notes(tags):
+    if any(str(t).startswith(("FA tham khảo | Bán lẻ |", "FA Bán lẻ:")) for t in (tags or [])):
+        return retail_fa.compact_notes(tags)
     if any(str(t).startswith(('FA tham khảo | Phân bón |','FA Phân bón:')) for t in (tags or [])):
         return fertilizer_fa.compact_notes(tags)
     if any(str(t).startswith('FA tham khảo | Dầu khí |') for t in (tags or [])):
