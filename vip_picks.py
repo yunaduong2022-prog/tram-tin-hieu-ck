@@ -1033,7 +1033,7 @@ CSS = """
  .vpb .tp-tb tbody tr:not(.th) td{padding:8px}
  .vpb .tp-tb tbody tr:not(.th) td::before{font-size:9px}
 }
-@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"Hạng"}}
+@media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"STT"}}
 @media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(2)::before{content:"Lệnh"}}
 @media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(3)::before{content:"Mã CP"}}
 @media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(4)::before{content:"Vùng mua KN"}}
@@ -1048,7 +1048,7 @@ CSS = """
 @media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(13)::before{content:"Điểm kỹ thuật (TA)"}}
 @media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(14)::before{content:"Tổng điểm"}}
 @media(max-width:1399px){.vpb.vp-wait .tp-tb tbody tr:not(.th) td:nth-child(15)::before{content:"Khuyến nghị"}}
-@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"Hạng"}}
+@media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(1)::before{content:"STT"}}
 @media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(2)::before{content:"Lệnh"}}
 @media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(3)::before{content:"Mã CP"}}
 @media(max-width:1399px){.vpb.vp-hold .tp-tb tbody tr:not(.th) td:nth-child(4)::before{content:"Vùng mua KN"}}
@@ -1091,6 +1091,52 @@ CSS = """
 .vp-hold-bottom-value{font-weight:800;font-size:17px;font-variant-numeric:tabular-nums;text-align:right}
 @media(max-width:900px){.vp-hold-k-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:420px){.vp-hold-k-card{padding:9px}.vp-hold-k-value{font-size:14px}}
+</style>
+"""
+
+# MIN_VIP_DARK_FINANCE_V1: local dark-mode palette only.
+DARK_VIP_CSS = """
+<style>
+.tp-wrap.vpb{
+ --card:#1D2432;--card2:#252E3E;--line:#303B4D;--line2:#293344;
+ --txt:#E6EDF5;--txt2:#F3F6FA;--muted:#A7B5C9;--accent:#2DD4A7;--green:#2DD4A7;--red:#FF6B81;
+ --tag-green-bg:#0F2E26;--tag-green-fg:#5EE6C0;--tag-amber-bg:#3A2E12;--tag-amber-fg:#F5B942;
+ --tag-red-bg:#3A1A22;--tag-gray-bg:#262D38;--tag-gray-fg:#B1BAC4;
+ background:linear-gradient(135deg,#1D2432,#181D28);border:1px solid #303B4D;color:var(--txt);
+}
+.tp-wrap.vpb .tp-tb th{background:#252E3E;color:#A7B5C9;border-color:#303B4D}
+.tp-wrap.vpb .tp-tb th:first-child{white-space:nowrap;letter-spacing:0}
+.tp-wrap.vpb .tp-tb tbody tr:nth-child(odd):not(.th) td{background:#1D2432}
+.tp-wrap.vpb .tp-tb tbody tr:nth-child(even):not(.th) td{background:#181D28}
+.tp-wrap.vpb .tp-tb tbody tr:hover td{background:#252E3E}
+.tp-wrap.vpb .tp-tb td.pl,.tp-wrap.vpb .tp-tb td.pl.key{color:var(--txt)}
+.tp-wrap.vpb .pl-code,.tp-wrap.vpb .tp-sc,.tp-wrap.vpb .tp-score{color:var(--txt2)}
+.tp-wrap.vpb .tp-tb td.pl.ex,.tp-wrap.vpb .tp-chip{color:#C7D3E3}
+.tp-wrap.vpb .cmd-t{color:#F5B942}
+.tp-wrap.vpb .cmd-t.green,.tp-wrap.vpb .lv.up{color:#2DD4A7}
+.tp-wrap.vpb .cmd-t.red,.tp-wrap.vpb .lv.dn{color:#FF6B81}
+.tp-wrap.vpb .cmd-t.gray{color:#A7B5C9}
+.tp-wrap.vpb .lv.fl{color:#EAB308}
+.tp-wrap.vpb .tp-rec{color:var(--txt2)}
+.tp-wrap.vpb .tp-rec.green{color:#2DD4A7}
+.tp-wrap.vpb .tp-rec.red{color:#FF6B81}
+.tp-wrap.vpb .tp-rec.gold,.tp-wrap.vpb .tp-rec.amber{color:#F5B942}
+.tp-wrap.vpb .tp-rec.gray{color:#A7B5C9}
+.tp-wrap.vpb .tp-bar{background:#303B4D}
+.tp-wrap.vpb .tp-note{color:#A7B5C9}
+.tp-wrap .tp-chip.vip-note-neutral,.tp-wrap .vip-note-detail.vip-note-neutral{color:#C7D3E3}
+.tp-wrap .tp-chip.vip-note-pos,.tp-wrap .vip-note-detail.vip-note-pos{color:#2DD4A7}
+.tp-wrap .tp-chip.vip-note-neg,.tp-wrap .vip-note-detail.vip-note-neg{color:#FF8292}
+.tp-wrap .tp-chip.vip-note-warn,.tp-wrap .vip-note-detail.vip-note-warn{color:#F5C66D}
+.tp-wrap .tp-chip.vip-note-pos:before,.tp-wrap .tp-chip.vip-note-neg:before,.tp-wrap .tp-chip.vip-note-warn:before,.tp-wrap .tp-chip.vip-note-neutral:before{color:currentColor}
+.vp-hold-kpis{background:linear-gradient(135deg,#1D2432,#181D28);border-color:#303B4D;color:#E6EDF5}
+.vp-hold-k-card{background:#252E3E;border-color:#303B4D;color:#F3F6FA}
+.vp-hold-k-label,.vp-hold-k-note{color:#A7B5C9}
+.vp-hold-bottom{background:#1D2432;border-color:#303B4D;color:#E6EDF5}
+.vp-hold-positive{color:#2DD4A7!important}.vp-hold-negative{color:#FF6B81!important}.vp-hold-neutral{color:#F3F6FA!important}
+.vp-hero{background:linear-gradient(135deg,#1D2432,#181D28);border-color:#303B4D}
+.vp-badge{background:#252E3E;border-color:#303B4D;color:#F5B942}
+.vp-badge.n{background:#252E3E;border-color:#303B4D;color:#E6EDF5}
 </style>
 """
 
@@ -1258,6 +1304,27 @@ def _port_fa_detail_html(r):
     return '<details class="tp-note"><summary>FA tham khảo · chi tiết</summary>' + ''.join(f'<div>{_e(t)}</div>' for t in details) + '</details>'
 
 
+def _vip_note_tone(t, kind='fa'):
+    """Display-only classification. Unknown or unqualified data stays neutral."""
+    s = str(t).split(' | TOP ', 1)[0].casefold().strip()
+    if kind == 'ta':
+        if 'chưa đủ' in s or 'thiếu dữ liệu' in s: return 'neutral'
+        if ('trên ma' in s and 'dưới ma' in s) or 'xa ma20' in s or 'kl cạn' in s: return 'warn'
+        if s.startswith('dưới ma') or 'lực bán áp đảo' in s: return 'neg'
+        if s.startswith(('trên ma', 'dòng tiền vào')): return 'pos'
+        return 'neutral'
+    # Only explicit evaluations, not raw ratios or an inexpensive valuation by itself.
+    if any(x in s for x in ('thiếu dữ liệu','chưa đủ','không áp dụng','chưa xác minh')): return 'warn'
+    if any(x in s for x in ('– yếu','– rất yếu','– kém','– rất thấp','– rất cao','rủi ro:','cảnh báo:','thua lỗ','cfo âm','ttm âm','roe thấp','cơ bản yếu','không dương','lnst giảm','nợ xấu cao','đòn bẩy margin cao')): return 'neg'
+    if '– cao' in s:
+        return 'neg' if s.startswith(('npl','nợ xấu','nợ vay','nợ ròng','đòn bẩy','chi phí')) else 'warn'
+    if '– thấp' in s:
+        return 'neg' if s.startswith(('casa','llr','nim','roe','roa','bao phủ','cfo','tăng trưởng')) else 'warn'
+    if any(x in s for x in ('– trung bình','– khá','p/e cao','nền thấp','bất thường')): return 'warn'
+    if any(x in s for x in ('– rất tốt','– tốt','roe vượt trội')): return 'pos'
+    return 'neutral'
+
+
 def _vip_fa_preview_tags(r):
     """Choose at most three compact notes, keeping one risk if available."""
     tags = [str(t).strip() for t in _port_fa_display_tags(r) if str(t).strip()]
@@ -1291,10 +1358,10 @@ def _vip_fa_notes_html(r):
         # Hide rank suffix only in the preview; preserve the full note below.
         short = t.split(' | TOP ', 1)[0]
         if len(short) > 76: short = short[:73].rstrip() + '…'
-        preview += (f'<span class="tp-chip" title="{_e(t)}" style="white-space:normal;overflow-wrap:anywhere;'
+        preview += (f'<span class="tp-chip vip-note-{_vip_note_tone(t)}" title="{_e(t)}" style="white-space:normal;overflow-wrap:anywhere;'
                     f'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:2.9em">{_e(short)}</span>')
     if not raw: return preview
-    full = ''.join(f'<div style="margin:3px 0">{_e(t)}</div>' for t in raw)
+    full = ''.join(f'<div class="vip-note-detail vip-note-{_vip_note_tone(t)}" style="margin:3px 0">{_e(t)}</div>' for t in raw)
     return (preview + '<details class="tp-note" style="text-align:left;overflow-wrap:anywhere">'
             '<summary style="cursor:pointer;font-weight:700">Chi tiết FA</summary>'
             '<div style="max-height:320px;overflow-y:auto">' + full + '</div></details>')
@@ -1351,7 +1418,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
     fa += _vip_fa_notes_html(r)
     if _ok(r["TA"]):
         rsi = f'<div class="tp-mu" style="font-size:11.5px">RSI {r["RSI"]:.1f}</div>' if _ok(r["RSI"]) else ""
-        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{component_grade_badge(r["TA"])}{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
+        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{component_grade_badge(r["TA"])}{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip vip-note-{_vip_note_tone(t, "ta")}">{_e(t)}</span>' for t in r["TA tags"][:3])
     else:
         ta = '<span class="tp-mu">Chưa đủ số liệu</span>'
     label, tone, note = r["Khuyến nghị"]
@@ -1375,7 +1442,7 @@ def _row_html(i: int, r, mode: str = "hold") -> str:
 
 # Nhóm Chờ mua trình bày theo form riêng: Hạng | Lệnh | Mã CP (+ngày KN) | Vùng mua KN | Giá hiện tại | Cách vùng mua | Tỷ trọng | Ví dụ |
 # Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Khuyến nghị
-WAIT_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá hiện tại", "Cách vùng mua", "Tỷ trọng", "Ví dụ", "Cắt lỗ",
+WAIT_HEAD = ["STT", "Lệnh", "Mã CP", "Vùng mua KN", "Giá hiện tại", "Cách vùng mua", "Tỷ trọng", "Ví dụ", "Cắt lỗ",
              "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Khuyến nghị"]
 WAIT_WIDTH = [2.5, 6.5, 5.5, 8.5, 5.5, 7, 4.5, 9, 6, 6, 6, 9, 9.5, 5.5, 9]            # % bề rộng từng cột, tổng 100
 _WAIT_CMD = {"CHỜ VỀ VÙNG MUA": ("CHỜ MUA", "gold"), "VÙNG MUA": ("MUA NGAY", "green"), "DƯỚI VÙNG MUA": ("DƯỚI VÙNG", "gray")}
@@ -1418,7 +1485,7 @@ def _score_cells(r) -> tuple[str, str, str, str]:
     fa += _vip_fa_notes_html(r)
     if _ok(r["TA"]):
         rsi = f'<div class="tp-mu" style="font-size:11.5px">RSI {r["RSI"]:.1f}</div>' if _ok(r["RSI"]) else ""
-        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{component_grade_badge(r["TA"])}{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip">{_e(t)}</span>' for t in r["TA tags"][:3])
+        ta = f'<span class="tp-sc">{int(r["TA"])}<small>/100</small></span>{component_grade_badge(r["TA"])}{rsi}{_bar(r["TA"])}' + "".join(f'<span class="tp-chip vip-note-{_vip_note_tone(t, "ta")}">{_e(t)}</span>' for t in r["TA tags"][:3])
     else:
         ta = '<span class="tp-mu">Chưa đủ số liệu</span>'
     label, tone, note = r["Khuyến nghị"]
@@ -1484,7 +1551,7 @@ def wait_table_html(v: pd.DataFrame) -> str:
 
 # Nhóm Đang nắm giữ: Hạng | Lệnh | Mã CP (+ngày KN) | Vùng mua KN | Giá khớp lệnh | Giá hiện tại | Khối lượng | Lãi/Lỗ dự kiến (%) |
 # Cắt lỗ | Giá Mục Tiêu 1 | Giá Mục Tiêu 2 | Điểm cơ bản (FA) | Điểm kỹ thuật (TA) | Tổng điểm | Khuyến nghị
-HOLD_HEAD = ["Hạng", "Lệnh", "Mã CP", "Vùng mua KN", "Giá khớp lệnh", "Giá hiện tại", "Khối lượng", "Lãi/Lỗ dự kiến (%)", "Cắt lỗ",
+HOLD_HEAD = ["STT", "Lệnh", "Mã CP", "Vùng mua KN", "Giá khớp lệnh", "Giá hiện tại", "Khối lượng", "Lãi/Lỗ dự kiến (%)", "Cắt lỗ",
              "Giá Mục Tiêu 1", "Giá Mục Tiêu 2", "Điểm cơ bản (FA)", "Điểm kỹ thuật (TA)", "Tổng điểm", "Khuyến nghị"]
 HOLD_WIDTH = [2.5, 5.5, 6.5, 8.5, 7, 7, 6, 9.5, 6, 6, 6, 8, 9, 5.5, 7.5]            # % bề rộng từng cột, tổng 100
 
@@ -1719,7 +1786,7 @@ def table_html(v: pd.DataFrame, mode: str = "hold") -> str:
         return wait_table_html(v)
     if mode == "hold":
         return hold_table_html(v)
-    head = ["HẠNG", "MÃ CK", "GIÁ HIỆN TẠI", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "VÙNG MUA" if mode == "wait" else "GIÁ MUA",
+    head = ["STT", "MÃ CK", "GIÁ HIỆN TẠI", "+/-", "KHỐI LƯỢNG", "TỔNG ĐIỂM", "VÙNG MUA" if mode == "wait" else "GIÁ MUA",
             "CÁCH VÙNG MUA" if mode == "wait" else "LỢI NHUẬN", "TARGET", "CUTLOSS", "ĐIỂM BÁN", "ĐIỂM CƠ BẢN (FA)", "ĐIỂM KỸ THUẬT (TA)", "KHUYẾN NGHỊ"]
     th = "".join(f'<th class="{"l" if h == "MÃ CK" else ""}">{h}</th>' for h in head)
     body = "".join(_row_html(i + 1, r, mode) for i, (_, r) in enumerate(v.iterrows()))
@@ -2139,7 +2206,7 @@ def render(res: pd.DataFrame, frames_d: pd.DataFrame, wb: pd.DataFrame, fund_map
                        ". Đây không phải giá của phiên mới nhất; không tự tạo nến khi mã không có giao dịch.")
     plans = load()
     groups = {s_: plans[plans["Trạng thái"] == s_] for s_ in STATUSES}
-    st.markdown(CSS + (LIGHT_VIP_CSS if not TH.is_dark() else "") + _hero_html(len(groups["Chờ mua"]) + len(groups["Đang nắm giữ"])), unsafe_allow_html=True)
+    st.markdown(CSS + (LIGHT_VIP_CSS if not TH.is_dark() else DARK_VIP_CSS) + _hero_html(len(groups["Chờ mua"]) + len(groups["Đang nắm giữ"])), unsafe_allow_html=True)
 
     if admin:
         _admin_panel(available)
