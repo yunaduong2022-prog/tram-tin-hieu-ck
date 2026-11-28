@@ -1050,7 +1050,36 @@ def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder,
     return header + industry + block + context + lean + ma + divergence + wyckoff + action + summary + detail + price_detail
 
 
-def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "", *, sell_focus: bool = False) -> str:
+# MIN_OPPORTUNITY_CARDS_V1: display only, preserve the existing card inputs.
+def _opportunity_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, kind):
+    esc = _html.escape
+    labels = {
+        'buy': ('LÝ DO MUA / ĐIỀU KIỆN VÀO LỆNH', 'var(--tag-green-fg)', 'var(--tag-green-bg)'),
+        'wait': ('ĐIỀU KIỆN THEO DÕI / CHỜ MUA', 'var(--tag-amber-fg)', 'var(--tag-amber-bg)'),
+        'watch': ('TRẠNG THÁI THEO DÕI', 'var(--txt)', 'var(--card2)'),
+        'surge': ('LÝ DO TĂNG MẠNH', 'var(--tag-green-fg)', 'var(--tag-green-bg)'),
+        'plunge': ('CẢNH BÁO GIẢM MẠNH', 'var(--red)', 'var(--tag-red-bg)'),
+        'recover': ('DẤU HIỆU PHỤC HỒI', 'var(--txt)', 'var(--card2)'),
+        'dry': ('NGUỒN XÁC NHẬN CẠN CUNG', 'var(--txt)', 'var(--card2)'),
+        'risk': ('CẢNH BÁO SUY YẾU', 'var(--red)', 'var(--tag-red-bg)'),
+        'over': ('CẢNH BÁO MUA ĐUỔI', 'var(--tag-amber-fg)', 'var(--tag-amber-bg)'),
+    }
+    title, tone, bg = labels[kind]
+    industry = '<div class="wb-sub" style="margin:0 0 10px">' + esc(str(meta.get('Ngành') or 'Chưa có')) + '</div>'
+    block = (f'<div class="min-opp-reason" style="border:1px solid var(--line);border-left:3px solid {tone};background:{bg};border-radius:10px;padding:12px;margin:0 0 12px">'
+             f'<div style="color:{tone};font-size:12px;font-weight:800;margin-bottom:6px">{title}</div>'
+             f'<div style="color:var(--txt);font-size:13px;line-height:1.5">{esc(reason or "Chưa có diễn giải tín hiệu.")}</div></div>')
+    def details(label, content):
+        return ('<details class="min-opp-details" style="margin:8px 0;border-top:1px solid var(--line);padding-top:8px;color:var(--txt)">'
+                '<summary style="cursor:pointer;color:var(--muted);font-weight:700;font-size:13px">' + esc(label) + '</summary>' + content + '</details>') if content else ''
+    summary = '<div class="wb-sub" style="margin-top:14px">Thông tin tài chính nhanh · nguồn tổng hợp</div><div class="wb-kv" style="gap:8px;margin-bottom:8px;padding-top:8px">'
+    summary += ''.join(f'<div><span>{k}</span><b>{esc(str(meta.get(k, "Chưa có")))}</b></div>' for k in ('P/E', 'P/B', 'ROE')) + '</div>'
+    early_ladder = ladder if kind in ('buy', 'wait', 'watch') else ''
+    later_ladder = details('Vùng giá tham khảo từ thẻ gốc', ladder) if not early_ladder else ''
+    return (header + industry + block + context + early_ladder + lean + ma + divergence + wyckoff + action
+            + summary + details('Thông tin cổ phiếu', meta_html) + later_ladder)
+
+def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str = "", ma_html: str = "", wy_html: str = "", lean_html: str = "", foot_text: str = "", ctx_html: str = "", action_html: str = "", *, sell_focus: bool = False, opportunity_kind: str = "") -> str:
     """HTML phần thông tin của thẻ (nút "Xem biểu đồ" do Streamlit vẽ riêng bên dưới).
 
     meta = {"Tên", "Ngành", "Vốn hóa", "P/B", "ROE"} đã định dạng sẵn (xem app._wb_meta).
@@ -1095,6 +1124,8 @@ def card_html(r: pd.Series, group: str, meta: dict | None = None, div_html: str 
         html += ladder_section
     if sell_focus:
         return _sell_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, group)
+    if opportunity_kind:
+        return _opportunity_focus_html(header_html, meta_html, meta or {}, _sentence(r['Lý do']), ctx_html, lean_html, ma_html, ladder_section, div_html, wy_html, action_html, opportunity_kind)
     html += div_html      # cảnh báo phân kỳ RSI (rsi_divergence.html), rỗng nếu không có tín hiệu
     html += wy_html       # ghi chú Wyckoff: pha hiện tại + chú thích pha (wyckoff.note_html)
     html += action_html   # "Tóm tắt nhanh · Kết luận hành động" (action_summary.html)

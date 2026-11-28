@@ -1389,6 +1389,8 @@ def page_filter():
                 forecast = _forecast(states) if states else "Chưa rõ xu hướng"
                 up = "tăng" in forecast.lower(); down = "giảm" in forecast.lower()
                 bg, fg = ("#DDF1EB", "#08785E") if up else (("#FCE4E8", "#C02645") if down else ("#EEF1F5", "#626B78"))
+                if TH.is_dark():
+                    bg, fg = ("var(--tag-green-bg)", "var(--tag-green-fg)") if up else (("var(--tag-red-bg)", "var(--red)") if down else ("var(--tag-gray-bg)", "var(--tag-gray-fg)"))
                 groups = MEMBER.get(code, [])
                 sectors = [g for g in groups if g != WL.VN30]
                 industry = htmllib.escape(", ".join(sectors)) if sectors else "Khác / chưa phân loại"
@@ -1405,12 +1407,14 @@ def page_filter():
                 pb_text, roe_text = _fmt(fd.get("P/B"), "{:.2f}"), _fmt(fd.get("ROE"), "{:.1f}%")
                 chg = r.get("Chg_%", np.nan)
                 chg_text, price_color, chg_tip, chg_sub = swing_view(r)     # "Đã giảm X% từ đỉnh" / "Đã tăng X% từ đáy"
+                if TH.is_dark():
+                    price_color = {"#C02645": "var(--red)", "#08785E": "var(--green)", "#B45309": "var(--tag-amber-fg)", "#374151": "var(--muted)"}.get(price_color, price_color)
                 if CHIP_ONLY_GOOD:     # chỉ hiện các chỉ báo "Tốt" (chip xanh); đặt False để hiện đủ Tốt/Xấu/Chưa rõ
                     good = [lb for lb, v in states.items() if v == "Tốt"]
                     chips_html = "".join(f'<span class="tag-chip">{htmllib.escape(lb)}</span>' for lb in good) \
                         or '<span class="muted">Chưa có chỉ báo Tốt</span>'
                 else:
-                    chips_html = "".join(_status_chip(lb, v) for lb, v in states.items())
+                    chips_html = "".join(_opportunity_filter_chip(lb, v) for lb, v in states.items())
                 mtf_html, strat_html = mtf_block(mtf_cached(frames, code, DATA_KEY), code, parts=True) if show_mtf else ("", "")
                 div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
                 lean_html = _lean_html(code)
@@ -1421,6 +1425,11 @@ def page_filter():
                                    f'style="background:{_tbg};color:{_tfg}">{htmllib.escape(_tl)}</span></div>')
                 else:
                     status_html = ""
+                filter_reason = ''
+                if _wb and str(_wb.get("Lý do") or "").strip():
+                    filter_reason = ('<div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0 12px;background:var(--card2)">'
+                                     '<div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:5px">LÝ DO TRẠNG THÁI</div>'
+                                     + htmllib.escape(str(_wb["Lý do"])) + '</div>')
                 html = (f'<div class="stock-card in-box">'
                         f'<div class="stock-header"><div><div class="stock-title"><span class="stock-code">{code}</span>'
                         f'<span class="badge-forecast" style="background:{bg};color:{fg}">{forecast}</span></div>'
@@ -1428,6 +1437,7 @@ def page_filter():
                         f'<div class="price-box" style="flex-wrap:wrap"><span class="price-val" style="color:{_min_price_text_color(PC.display(code, r['Giá'], chg))}">{r["Giá"]:,.2f}</span>'
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
+                        filter_reason +
                         f'<div class="metrics-grid">'
                         f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
                         f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
@@ -1436,7 +1446,8 @@ def page_filter():
                         + _ma_summary_html(code)
                         + f'<div class="tag-container">' + chips_html + '</div>' + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '') + div_html + _wy_note(code, True) + mtf_html + _action_html(code) + '</div>')
                 with st.container(border=True):
-                    st.markdown(html, unsafe_allow_html=True)
+                    st.markdown(_opportunity_card_html(html), unsafe_allow_html=True)
+                    _opportunity_score_panel(code, f"opp_filter_{code}")
                     if st.button("📊 Xem biểu đồ", key=f"chart_{code}", use_container_width=True):
                         st.session_state["selected_code"] = code
                         # các selectbox có key riêng giữ giá trị cũ -> đồng bộ luôn để mở đúng mã vừa bấm
@@ -1648,11 +1659,36 @@ function go(){const d=window.parent.document;
 go();</script>""" % json.dumps(code), height=0)
 
 
-def _wb_card(r, group):
+# MIN_OPPORTUNITY_CARDS_V1: reuse the existing score panel without changing trade cards.
+def _opportunity_card_html(content):
+    css = '<style>\n.min-opportunity-card .ma-overview .ma-pill.ma-positive{background:var(--tag-green-bg);color:var(--tag-green-fg)}\n.min-opportunity-card .ma-overview .ma-pill.ma-negative{background:var(--tag-red-bg);color:var(--red)}\n.min-opportunity-card .ma-overview .ma-pill.ma-caution{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}\n.min-opportunity-card .ma-overview .ma-pill.ma-neutral{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}\n.stApp .min-opportunity-card .wb-px small{color:inherit!important}\n.min-opportunity-card .min-opp-details{overflow-wrap:anywhere}\n</style>' if TH.is_dark() else ''
+    return css + '<div class="min-opportunity-card">' + content + '</div>'
+
+
+def _opportunity_filter_chip(label, state):
+    content = _status_chip(label, state)
+    if TH.is_dark():
+        for old, new in (("#DDF1EB", "var(--tag-green-bg)"), ("#08785E", "var(--tag-green-fg)"),
+                         ("#FCE4E8", "var(--tag-red-bg)"), ("#C02645", "var(--red)"),
+                         ("#EEF1F5", "var(--tag-gray-bg)"), ("#626B78", "var(--tag-gray-fg)")):
+            content = content.replace(old, new)
+    return content
+
+
+def _opportunity_score_panel(code, key):
+    if st.checkbox("Xem điểm FA / TA", key=key + "_show_scores",
+                   help="Điểm tham khảo Trung hạn/Dài hạn, dùng chung với Biểu đồ và VIP. Không phải điều kiện kích hoạt tín hiệu."):
+        from vip_score_bridge import render_vip_scores
+        render_vip_scores(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date,
+                          key=key + "_scores", mode="stock")
+
+
+def _wb_card(r, group, *, opportunity_kind="wait"):
     gi = WB.BUY_GROUPS.index(group)
     with st.container(key=f"wbcard-{gi}-{r['Mã']}"):
         div_html = DV.html(divergence_cached(frames, str(r["Mã"]), DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading(), "", _action_html(r["Mã"])), unsafe_allow_html=True)
+        st.markdown(_opportunity_card_html(WB.card_html(r, group, _wb_meta(str(r["Mã"])), div_html, _ma_summary_html(str(r["Mã"])), _wy_note(r["Mã"]), _lean_html(r["Mã"]), _min_trading(), "", _action_html(r["Mã"]), opportunity_kind=opportunity_kind)), unsafe_allow_html=True)
+        _opportunity_score_panel(str(r["Mã"]), f"opp_{opportunity_kind}_{gi}_{r['Mã']}")
         if st.button("📊 Xem biểu đồ", key=f"wb_{group}_{r['Mã']}", use_container_width=True):
             st.session_state["selected_code"] = r["Mã"]
             for _k in ("mtf_code", "tab_code"):
@@ -1714,10 +1750,18 @@ def _tone_card(r, tone: str, key: str):
     with st.container(key=f"wbcard-{tone}-{code}"):          # tiền tố wbcard- để ăn CSS thẻ và cuộn tới thẻ (_wb_scroll_to)
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
         focus = key == "sell" and tone in ("sell", "tp")
-        st.markdown(WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
-                                 _min_trading(), ctx, _action_html(code), sell_focus=focus), unsafe_allow_html=True)
         if focus:
+            st.markdown(WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
+                                     _min_trading(), ctx, _action_html(code), sell_focus=focus), unsafe_allow_html=True)
             _trade_score_panel(code, f"trade_sell_{code}")
+        else:
+            if tone == "dry":
+                sources = r.get("Nguồn cạn cung") or []
+                ctx = f'<div class="wb-sub" style="margin:0 0 10px"><b>{len(sources)} nguồn xác nhận</b></div>' + ctx
+            content = WB.card_html(r, badge, _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code),
+                                   _min_trading(), ctx, _action_html(code), opportunity_kind=tone)
+            st.markdown(_opportunity_card_html(content), unsafe_allow_html=True)
+            _opportunity_score_panel(code, f"opp_{key}_{tone}_{code}")
         if st.button("📊 Xem biểu đồ", key=f"{key}_chart_{code}", use_container_width=True):
             _open_chart_of(code)
 
@@ -2037,7 +2081,7 @@ def page_buy_now():
             if r["Trạng thái"] in (WB.BUY_SIGNAL, WB.GOOD_ENTRY) or bool(r.get("Vào theo EOD", False)):  # nhãn trên thẻ Mua ngay: "MUA"
                 r = r.copy()
                 r["Trạng thái"] = "MUA"
-            _wb_card(r, str(r["Danh sách"]))
+            _wb_card(r, str(r["Danh sách"]), opportunity_kind="buy")
     if len(d) > WB_PER_GROUP and not show_all:
         st.caption(f"Đang hiển thị {WB_PER_GROUP}/{len(d)} mã có thứ tự ưu tiên cao nhất.")
     _rt_focus_scroll()
@@ -2077,10 +2121,11 @@ def _wl_card(r, u, ver):
     code = str(r["Mã"])
     with st.container(key=f"wbcard-wl-{code}"):          # tiền tố wbcard- để ăn CSS thẻ của waiting_buy
         div_html = DV.html(divergence_cached(frames, code, DATA_KEY + "|" + E.ENGINE_VERSION + "|dv1"))
-        st.markdown(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading(), "", _action_html(code)), unsafe_allow_html=True)
+        st.markdown(_opportunity_card_html(WB.card_html(r, str(r["Danh sách"]), _wb_meta(code), div_html, _ma_summary_html(code), _wy_note(code), _lean_html(code), _min_trading(), "", _action_html(code), opportunity_kind="watch")), unsafe_allow_html=True)
         pos = MW.position_html(u, r["Giá"])
         if pos:
             st.markdown(pos, unsafe_allow_html=True)
+        _opportunity_score_panel(code, f"opp_watch_{code}")
         b1, b2 = st.columns([3, 2])
         if b1.button("📊 Xem biểu đồ", key=f"wl_chart_{code}", use_container_width=True):
             st.session_state["selected_code"] = code
