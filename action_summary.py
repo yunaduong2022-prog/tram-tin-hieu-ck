@@ -268,6 +268,17 @@ def rules() -> str:
 .ac-box.ac-compact .ac-tb th:last-child,.ac-box.ac-compact .ac-tb td.lv{width:30%}
 .ac-conflict{border:1px solid var(--tag-amber-fg);background:var(--tag-amber-bg);color:var(--txt);border-radius:9px;padding:8px 10px;margin:6px 0 10px;font-size:12px;line-height:1.5}
 .ac-conflict b{color:var(--tag-amber-fg);font-size:11.5px}
+
+.ac-box.ac-v2{padding:9px 10px;margin:6px 0 8px}
+.ac-v2 .ac-t{margin-bottom:4px}
+.ac-v2-picture{font-size:12px;line-height:1.4;color:var(--muted);margin-bottom:5px;display:flex;flex-wrap:wrap;gap:3px 6px}
+.ac-v2-row{padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;line-height:1.4;overflow-wrap:break-word}
+.ac-v2-head{display:flex;align-items:baseline;flex-wrap:wrap;justify-content:space-between;gap:2px 8px}
+.ac-v2-head span{color:var(--muted);font-weight:650}
+.ac-v2-text{color:var(--txt);margin-top:2px}
+.ac-v2-level{color:var(--txt2);font-weight:550;margin-top:2px}
+.ac-v2 .ac-ft{font-size:10.5px;line-height:1.35;margin-top:5px}
+.ac-conflict.ac-conflict-v2{padding:6px 8px;margin:5px 0;font-size:12px;line-height:1.4}
 """
 
 
@@ -286,7 +297,7 @@ def _date_label(d) -> str:
 
 
 # MIN_ACTION_CARDS_COMPACT_V1: presentation only, no change to _signals/_rows/_levels.
-def _card_conflict(s):
+def _card_conflict(s, *, compact=False):
     positive = []
     negative = []
     if s['buy']: positive.append('Trạng thái mua: ' + s['state'])
@@ -302,6 +313,9 @@ def _card_conflict(s):
     if not positive or not negative:
         return ''
     msg = ' · '.join(positive) + ' | ' + ' · '.join(negative)
+    if compact:
+        short = msg.replace('Trạng thái mua: ', '').replace('Dự báo nghiêng ', 'Dự báo ').replace('Giá trên hoặc bằng MA20/50/200', 'Giá ≥ MA20/50/200')
+        return '<div class="ac-conflict ac-conflict-v2"><b>TRÁI CHIỀU: </b>' + _html.escape(short) + '</div>'
     return ('<div class="ac-conflict"><b>TÍN HIỆU TRÁI CHIỀU</b><div>' + _html.escape(msg) +
             '</div><div>Đối chiếu khung thời gian và kết luận hành động bên dưới.</div></div>')
 
@@ -314,6 +328,25 @@ def _card_action_color(head):
     if head.startswith(('GIẢI NGÂN', 'MUA', 'ĐƯỢC DÙNG')):
         return 'var(--green)'
     return 'var(--txt2)'
+
+
+# MIN_ACTION_CARDS_COMPACT_V2: only presentation; keep all action levels.
+def _compact_action_body(rows):
+    esc = _html.escape
+    out = []
+    for pos, head, why, zone in rows:
+        # Preserve all conditions and numeric levels; shorten only exact known prose.
+        why_short = why.replace('chưa có xu hướng rõ, không mua thêm.', 'Xu hướng chưa rõ; không mua thêm.').replace(' Wyckoff đang nghiêng phân phối, thận trọng hơn.', ' Thận trọng: Wyckoff phân phối.').replace('chỉ thăm dò nhỏ khi giá giữ được hỗ trợ và vol cải thiện.', 'Chỉ thăm dò nhỏ nếu giữ hỗ trợ, vol cải thiện.')
+        out.append(f'<div class="ac-v2-row"><div class="ac-v2-head"><span>{esc(pos)}</span><b style="color:{_card_action_color(head)}">{esc(head)}</b></div>'
+                   f'<div class="ac-v2-text">{esc(why_short)}</div>' + (f'<div class="ac-v2-level">{esc(zone)}</div>' if zone else '') + '</div>')
+    return ''.join(out)
+
+
+def _compact_action_picture(s):
+    name = {'+': 'Tích cực', '~': 'Trung tính', '-': 'Tiêu cực'}
+    color = {'+': 'var(--tag-green-fg)', '~': 'var(--tag-amber-fg)', '-': 'var(--red)'}
+    return '<div class="ac-v2-picture" aria-label="Đánh giá tổng hợp">' + ' · '.join(
+        f'<span>{label}: <b style="color:{color[s[key]]}">{name[s[key]]}</b></span>' for label,key in [('Ngắn hạn','short'),('Trung hạn','mid')]) + '</div>'
 
 
 def html(ctx: dict, *, compact=False, show_conflict=False) -> str:
@@ -331,7 +364,12 @@ def html(ctx: dict, *, compact=False, show_conflict=False) -> str:
             if code else "")
     if compact:
         head = ''
-    conflict = _card_conflict(s) if show_conflict else ''
+    conflict = _card_conflict(s, compact=compact) if show_conflict else ''
+    if compact:
+        return (conflict + '<div class="ac-box ac-compact ac-v2"><div class="ac-t">KẾT LUẬN HÀNH ĐỘNG</div>'
+                + _compact_action_picture(s) + _compact_action_body(_rows(ctx, s, lv))
+                + '<div class="ac-ft"><span>Chỉ tham khảo, không phải khuyến nghị đầu tư.</span>'
+                + (f'<span class="ac-dt">{esc(_date_label(ctx["date"]))}</span>' if ctx.get("date") is not None else '') + '</div></div>')
     return (conflict + ('<div class="ac-box ac-compact">' if compact else '<div class="ac-box">') + head + '<div class="ac-t">📝 Tóm tắt nhanh · Kết luận hành động</div>' + _picture(s) +
             '<table class="ac-tb"><thead><tr><th>Vị thế tài khoản</th><th>Hành động</th><th>Vùng giá / Mốc lưu ý</th></tr></thead>'
             f'<tbody>{body}</tbody></table>'

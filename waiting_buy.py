@@ -1045,16 +1045,39 @@ def _compact_reason(reason, block):
             compact_details('Chi tiết lý do tín hiệu', block))
 
 
-def _compact_dry_stats(row):
+def _compact_dry_stats(row, lean=""):
     sources = row.get('Nguồn cạn cung')
     sources = sources if isinstance(sources, (list, tuple)) else []
     v = pd.to_numeric(row.get('Vol / MA20 Vol'), errors='coerce')
     vs = f'{float(v):.2f}x' if pd.notna(v) and np.isfinite(v) else '—'
-    return ('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 8px">'
-            '<div style="background:var(--card2);padding:8px;border-radius:8px"><div class="wb-sub" style="margin:0">Nguồn xác nhận</div>'
-            f'<b>{len(sources)}/4</b></div><div style="background:var(--card2);padding:8px;border-radius:8px"><div class="wb-sub" style="margin:0">Vol/MA20</div><b>{vs}</b></div></div>'
-            '<div class="wb-note">' + _html.escape(' · '.join(map(str, sources))) +
-            '<br>Cạn cung chưa phải tín hiệu mua.</div>')
+    forecast, tone = ('▲ Tăng', 'var(--tag-green-fg)') if 'NGHIÊNG TĂNG' in lean else (('▼ Giảm', 'var(--red)') if 'NGHIÊNG GIẢM' in lean else ('Chưa rõ', 'var(--muted)'))
+    items = [('Xác nhận', f'{len(sources)}/4', 'var(--txt2)'), ('Vol/MA20', vs, 'var(--txt2)'), ('Dự báo D', forecast, tone)]
+    return ('<div class="min-v2-stats">' + ''.join(f'<div><span>{label}</span><b style="color:{color}">{_html.escape(value)}</b></div>' for label,value,color in items) + '</div>'
+            '<div class="min-v2-sources">' + _html.escape(' · '.join(map(str, sources))) +
+            ' · Cạn cung chưa phải tín hiệu mua.</div>')
+
+
+# MIN_ACTION_CARDS_COMPACT_V2
+def compact_ma_parts(ma, action):
+    # MA-only interpretation remains available in details. If aggregate action is missing, keep it visible.
+    marker = '<div class="ma-overview"'
+    if 'class="ac-box ac-compact ac-v2"' in action and marker in ma:
+        first, last = ma.split(marker, 1)
+        return first, marker + last
+    return ma, ''
+
+
+def compact_analysis(*parts):
+    return compact_details('Phân tích chi tiết cổ phiếu', ''.join(
+        '<div class="min-v2-section"><b class="min-v2-label">' + _html.escape(label) + '</b>' + content + '</div>'
+        for label, content in parts if content))
+
+
+def _compact_reason_line(reason, tone):
+    reason = str(reason or 'Chưa có diễn giải tín hiệu.')
+    # Preserve long risk statements in the detail section; never truncate a numeric token.
+    short = reason if len(reason) <= 150 else reason[:147].rsplit(' ', 1)[0] + '…'
+    return f'<div class="min-v2-reason" style="border-left:2px solid {tone}">{_html.escape(short)}</div>'
 
 
 def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder, divergence, wyckoff, action, group, *, compact=False):
@@ -1077,9 +1100,11 @@ def _sell_focus_html(header, meta_html, meta, reason, context, lean, ma, ladder,
               + meta_html + '</details>')
     price_detail = ('<details style="margin:8px 0;color:var(--txt)"><summary style="cursor:pointer;color:var(--muted);font-size:13px">Vùng giá tham khảo từ thẻ gốc</summary>' + ladder + '</details>') if ladder else ''
     if compact:
-        return (header + industry + _compact_reason(reason, block) + lean + ma + action
-                + compact_details('Bối cảnh tín hiệu', context) + compact_details('Wyckoff & Phân kỳ RSI', divergence + wyckoff)
-                + compact_details('Thông tin tài chính', summary + meta_html) + price_detail)
+        ma_main, ma_detail = compact_ma_parts(ma, action)
+        return (header + _compact_reason_line(reason, tone) + lean + ma_main + action
+                + compact_analysis(('Lý do & bối cảnh tín hiệu', block + context), ('Cấu trúc MA', ma_detail),
+                                   ('Wyckoff & Phân kỳ RSI', divergence + wyckoff), ('Thông tin tài chính', summary + meta_html),
+                                   ('Vùng giá tham khảo', ladder)))
     return header + industry + block + context + lean + ma + divergence + wyckoff + action + summary + detail + price_detail
 
 
@@ -1110,10 +1135,16 @@ def _opportunity_focus_html(header, meta_html, meta, reason, context, lean, ma, 
     early_ladder = ladder if kind in ('buy', 'wait', 'watch') else ''
     later_ladder = details('Vùng giá tham khảo từ thẻ gốc', ladder) if not early_ladder else ''
     if compact:
-        primary = (_compact_dry_stats(row) + compact_details('Chi tiết nguồn tín hiệu', block + context)) if kind == 'dry' and row is not None else (_compact_reason(reason, block) + compact_details('Bối cảnh tín hiệu', context))
-        return (header + industry + primary + lean + ma + early_ladder + action
-                + compact_details('Wyckoff & Phân kỳ RSI', divergence + wyckoff)
-                + compact_details('Thông tin tài chính', summary + meta_html) + later_ladder)
+        ma_main, ma_detail = compact_ma_parts(ma, action)
+        if kind == 'dry' and row is not None:
+            primary = _compact_dry_stats(row, lean)
+            forecast = ''
+        else:
+            primary, forecast = _compact_reason_line(reason, tone), lean
+        return (header + primary + forecast + ma_main + early_ladder + action
+                + compact_analysis(('Lý do & bối cảnh tín hiệu', block + context), ('Cấu trúc MA', ma_detail),
+                                   ('Wyckoff & Phân kỳ RSI', divergence + wyckoff), ('Thông tin tài chính', summary + meta_html),
+                                   ('Vùng giá tham khảo', '' if early_ladder else ladder)))
     return (header + industry + block + context + early_ladder + lean + ma + divergence + wyckoff + action
             + summary + details('Thông tin cổ phiếu', meta_html) + later_ladder)
 

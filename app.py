@@ -1330,6 +1330,24 @@ def _kq_reset_page():
     st.session_state["kq_page"] = 1
 
 
+# MIN_ACTION_CARDS_COMPACT_V2: the generic filter has a separate card renderer.
+def _filter_card_body(code, industry, vn30_badge, cap_text, pb_text, roe_text, chips_html, strat_html, div_html, mtf_html):
+    finance = (f'<div class="metrics-grid">'
+               f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
+               f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
+               f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
+               f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>')
+    ma = _ma_summary_html(code)
+    chips = '<div class="tag-container">' + chips_html + '</div>'
+    strategy = f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else ''
+    wy = div_html + _wy_note(code, True)
+    action = _action_html(code, card_view=True)
+    if not _compact_cards():
+        return finance + ma + chips + strategy + wy + mtf_html + action
+    main, detail = WB.compact_ma_parts(ma, action)
+    return main + strategy + action + WB.compact_analysis(('Cấu trúc MA', detail), ('Chi tiết chỉ báo', chips), ('Wyckoff & Phân kỳ RSI', wy), ('Thông tin tài chính', finance), ('Phân tích đa khung', mtf_html))
+
+
 def page_filter():
     st.title("🔍 Bộ lọc cổ phiếu")
     header()
@@ -1464,16 +1482,7 @@ def page_filter():
                         f'<span class="price-chg" style="color:{price_color}" title="{htmllib.escape(chg_tip)}">{chg_text}</span></div>'
                         + (f'<div class="muted" style="font-size:12px;margin:-4px 0 8px">{htmllib.escape(chg_sub).replace(chr(10), "<br>")}</div>' if chg_sub else "") +
                         filter_reason +
-                        _card_extra('Thông tin tài chính', f'<div class="metrics-grid">'
-                        f'<div class="metric-item">Ngành: <b>{industry}{vn30_badge}</b></div>'
-                        f'<div class="metric-item">Vốn hóa: <b>{cap_text}</b></div>'
-                        f'<div class="metric-item">P/B: <b>{pb_text}</b></div>'
-                        f'<div class="metric-item">ROE: <b>{roe_text}</b></div></div>')
-                        + _ma_summary_html(code)
-                        + _card_extra('Chi tiết chỉ báo', f'<div class="tag-container">' + chips_html + '</div>')
-                        + (f'<div style="margin-bottom:12px">{strat_html}</div>' if strat_html else '')
-                        + _card_extra('Wyckoff & Phân kỳ RSI', div_html + _wy_note(code, True))
-                        + _card_extra('Phân tích đa khung', mtf_html) + _action_html(code, card_view=True) + '</div>')
+                        _filter_card_body(code, industry, vn30_badge, cap_text, pb_text, roe_text, chips_html, strat_html, div_html, mtf_html) + '</div>')
                 with st.container(border=True):
                     st.markdown(_opportunity_card_html(html), unsafe_allow_html=True)
                     _opportunity_score_panel(code, f"opp_filter_{code}")
@@ -1691,6 +1700,9 @@ go();</script>""" % json.dumps(code), height=0)
 # MIN_OPPORTUNITY_CARDS_V1: reuse the existing score panel without changing trade cards.
 def _opportunity_card_html(content):
     css = '<style>\n.min-opportunity-card .ma-overview .ma-pill.ma-positive{background:var(--tag-green-bg);color:var(--tag-green-fg)}\n.min-opportunity-card .ma-overview .ma-pill.ma-negative{background:var(--tag-red-bg);color:var(--red)}\n.min-opportunity-card .ma-overview .ma-pill.ma-caution{background:var(--tag-amber-bg);color:var(--tag-amber-fg)}\n.min-opportunity-card .ma-overview .ma-pill.ma-neutral{background:var(--tag-gray-bg);color:var(--tag-gray-fg)}\n.stApp .min-opportunity-card .wb-px small{color:inherit!important}\n.min-opportunity-card .min-opp-details{overflow-wrap:anywhere}\n</style>' if TH.is_dark() else ''
+    if _compact_cards():
+        css += '<style>' + '\n.min-v2 .wb-head{margin-bottom:8px;gap:7px}\n.min-v2 .wb-name{margin:0 0 7px;line-height:1.35}\n.min-v2 .wb-id{gap:5px}\n.min-v2 .wb-badge{padding:4px 8px}\n.min-v2 .wb-badge.buy{font-size:18px;padding:5px 9px}\n.min-v2 .ma-summary{gap:5px!important;margin:5px 0!important}\n.min-v2 .ma-item{padding:6px!important}\n.min-v2 .ma-label,.min-v2 .ma-value,.min-v2 .ma-state{margin:0!important;line-height:1.35!important}\n.min-v2 .lean-line{margin:4px 0!important}\n.min-v2 .min-opp-details{margin:4px 0!important;padding-top:5px!important}\n.min-v2 .min-v2-section{margin:8px 0;padding-top:6px;border-top:1px solid var(--line)}\n.min-v2 .min-v2-label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}\n.min-v2 .min-v2-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:5px 0}\n.min-v2 .min-v2-stats>div{background:var(--card2);border-radius:7px;padding:6px;min-width:0;overflow-wrap:break-word}\n.min-v2 .min-v2-stats span{display:block;color:var(--muted);font-size:11px;line-height:1.3}\n.min-v2 .min-v2-stats b{font-size:14px;line-height:1.4}\n.min-v2 .min-v2-sources{font-size:12px;line-height:1.4;color:var(--muted);margin:4px 0}\n.min-v2 .min-v2-reason{font-size:12.5px;line-height:1.45;color:var(--txt);padding:4px 7px;margin:5px 0;background:var(--card2);border-radius:5px}\n[class*="st-key-wbcard-"]:has(.min-v2){padding:12px 12px 10px;gap:8px!important}\n' + '</style>'
+        return css + '<div class="min-opportunity-card min-v2">' + content + '</div>'
     return css + '<div class="min-opportunity-card">' + content + '</div>'
 
 
