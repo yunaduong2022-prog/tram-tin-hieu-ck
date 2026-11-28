@@ -142,14 +142,7 @@ def collect_public(day,prices):
             good=[q for raw in data if (q:=normalize_ssi_row(raw,day,market,prices,'SSI_IBOARD_PUBLIC')) is not None]
             rows.extend(good)
             print(f'SSI_BOARD | {market} | raw={len(data)} matched={len(good)}',flush=True)
-            # Early exit only after full validation, including conflicting duplicates and BSR if applicable.
-            try:
-                valid,_=normalize(Records(rows),day,'SSI_IBOARD_PUBLIC',prices)
-                if day=='2026-11-27' and prices.get('BSR')==24.1:
-                    b=valid.get((day,'BSR'))
-                    if not b or abs(b[4]-24.1)>1e-7: continue
-                return Records(rows)
-            except RuntimeError: pass
+            # Collect every board before coverage validation; HOSE alone is insufficient.
         except Exception as e:
             print('SSI_BOARD_FAILED | '+market+' | '+type(e).__name__+' | '+str(e)[:200],flush=True)
     return Records(rows)
