@@ -1684,10 +1684,10 @@ def _open_chart_of(code: str):
 
 # MIN_TRADE_CARD_FOCUS_V1: shared FA/TA panel, loaded only on explicit request.
 def _trade_score_panel(code, key):
-    if st.checkbox("Xem điểm FA / TA", key=key + "_show_scores"):
+    if st.checkbox("Xem điểm FA / TA", key=key + "_show_scores",
+                   help="Điểm theo khung Trung hạn/Dài hạn, dùng chung với Biểu đồ và VIP. Không phải điều kiện của tín hiệu T+2 hay Bán/Chốt lời."):
         from vip_score_bridge import render_vip_scores
-        st.caption("Điểm theo khung Trung hạn/Dài hạn, dùng chung với Biểu đồ và VIP. Không phải điều kiện của tín hiệu T+2 hay Bán/Chốt lời.")
-        render_vip_scores(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date, key=key + "_scores", mode="stock")
+        render_vip_scores(code, frames["D"], res_df, _wb_meta_maps(WY_KEY)[1], latest_date, key=key + "_scores", mode="trade")
 
 
 def _tone_card(r, tone: str, key: str):

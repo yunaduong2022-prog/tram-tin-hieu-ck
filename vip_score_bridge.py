@@ -214,6 +214,27 @@ def bank_fa_notes(values, points, *, estimated=False, ranks=None):
     return notes
 
 
+# MIN_TRADE_SCORE_COMPACT_V1: display-only, scoped to trade cards.
+def _trade_score_details(label, value, scale, tags, kind):
+    from vip_picks import _vip_note_tone
+    rows = []
+    for tag in tags or []:
+        note = str(tag).strip()
+        if not note:
+            continue
+        tone = _vip_note_tone(note, kind=kind)
+        if tone not in ('pos', 'neg', 'warn', 'neutral'):
+            tone = 'neutral'
+        rows.append(f'<li class="mvs-trade-{tone}">{html.escape(note)}</li>')
+    if not rows:
+        rows.append('<li class="mvs-trade-neutral">Chưa đủ dữ liệu chỉ tiêu.</li>')
+    v = _finite(value)
+    amount = '—' if v is None else f'{v:.2f}'.rstrip('0').rstrip('.').replace('.', ',') + f'/{scale}'
+    return ('<details class="mvs-trade-details"><summary>'
+            f'<span>Chi tiết {html.escape(label)}</span><span class="mvs-trade-detail-score">{amount}</span>'
+            '</summary><ul class="mvs-trade-tags">' + ''.join(rows) + '</ul></details>')
+
+
 def _panel_html(result, *, mode):
     """Three compact VIP-style columns with a gradient bar and sourced FA/TA tags.
 
@@ -249,6 +270,9 @@ def _panel_html(result, *, mode):
 
     if mode == 'live':
         style += "<style>.mvs-vip .mvs-item{padding:5px 4px}.mvs-vip .mvs-label{min-height:29px;font-size:10px}.mvs-vip .mvs-score{font-size:24px}.mvs-vip .mvs-badge{margin-left:3px;padding:2px 4px}.mvs-vip .mvs-tags{font-size:12px}</style>"
+
+    if mode == 'trade':
+        style += '<style>\n.mvs-vip.mvs-trade{padding:9px;margin:8px 0 10px;container-type:inline-size}\n.mvs-vip.mvs-trade .mvs-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}\n.mvs-vip.mvs-trade .mvs-item,.mvs-vip.mvs-trade .mvs-item:last-child{border:1px solid var(--line,#303B4D);border-radius:8px;background:var(--card2,#252E3E);padding:8px 3px 5px;min-width:0}\n.mvs-vip.mvs-trade .mvs-label{font-size:10px;min-height:28px;margin:0 0 5px;overflow-wrap:anywhere;line-height:1.3}\n.mvs-vip.mvs-trade .mvs-score{font-size:clamp(15px,5.5cqw,24px);font-variant-numeric:tabular-nums}\n.mvs-vip.mvs-trade .mvs-scale{font-size:10px}\n.mvs-vip.mvs-trade .mvs-badge{display:table;margin:5px auto 0;font-size:10px;padding:2px 5px}\n.mvs-vip.mvs-trade .mvs-bar{height:5px;margin:6px auto 3px;width:90%;background:var(--bar,#303B4D)}\n.mvs-vip.mvs-trade .mvs-trade-details{margin-top:8px;border:1px solid var(--line,#303B4D);border-radius:7px;background:var(--card2,#252E3E);padding:7px 9px;min-width:0}\n.mvs-vip.mvs-trade .mvs-trade-details summary{cursor:pointer;font-size:12px;font-weight:700;line-height:1.45;overflow-wrap:anywhere}\n.mvs-vip.mvs-trade .mvs-trade-detail-score{float:right;margin-left:6px;color:var(--muted,#A7B5C9);font-size:11px}\n.mvs-vip.mvs-trade .mvs-trade-tags{margin:8px 0 0;padding-left:16px;list-style:disc;font-size:12px;line-height:1.5;overflow-wrap:anywhere;clear:both}\n.mvs-vip.mvs-trade .mvs-trade-tags li{margin:4px 0}\n.mvs-vip.mvs-trade .mvs-trade-pos{color:var(--green,#2DD4A7)}\n.mvs-vip.mvs-trade .mvs-trade-neg{color:var(--red,#FF6B81)}\n.mvs-vip.mvs-trade .mvs-trade-warn{color:var(--tag-amber-fg,#F5B942)}\n.mvs-vip.mvs-trade .mvs-trade-neutral{color:var(--txt,#E6EDF5)}\n</style>'
 
     is_bds = str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS
     is_ck = str(result.get('code','')).upper() in __import__('ck_fa').SYMBOLS
@@ -308,14 +332,20 @@ def _panel_html(result, *, mode):
     ):
         scale = result.get('fa_scale',100) if not cells else 100
         cell_badge = grade_html if is_total else component_grade_badge(val, scale=scale, css_class="mvs-badge", grade=__import__("reference_fa").score_grade(val) if is_port and not cells else None)
-        if mode == 'live' and detail:
+        if mode == 'trade' and not is_total:
+            kind = 'ta' if cells else 'fa'
+            tags = technical_tags if kind == 'ta' else result.get('tags_fa') or []
+            live_details.append(_trade_score_details(label, val, scale, tags, kind))
+            detail = ''
+        elif mode == 'live' and detail:
             live_details.append(f'<details style="margin:6px 0;padding:5px 0;border-top:1px solid {line}"><summary style="cursor:pointer;font-size:12px;font-weight:700">Chi tiết {html.escape(label)}</summary>{detail}</details>')
             detail = ''
         cells.append('<div class="mvs-item">'
                      f'<div class="mvs-label" style="color:{muted}">{html.escape(label)}</div>'
                      f'<div style="color:{text_color}">{score_text(val, total=is_total, scale=scale, exact=(is_bds or is_ck or is_port) and not cells)}{cell_badge}</div>'
                      + bar(val*100/scale if _finite(val) is not None else None) + detail + '</div>')
-    return (style + f'<section class="mvs-vip" style="background:{bg};border:1px solid {line};color:{text_color}">'
+    panel_class = "mvs-vip mvs-trade" if mode == "trade" else "mvs-vip"
+    return (style + f'<section class="{panel_class}" style="background:{bg};border:1px solid {line};color:{text_color}">'
             '<div class="mvs-grid">' + ''.join(cells) + '</div>' + ''.join(live_details) + '</section>')
 
 
@@ -364,7 +394,8 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
 
     # Explicit horizon avoids silently displaying VIP long-horizon weights as medium.
     frame = st.selectbox('Khung chấm điểm (theo Khuyến nghị khách hàng)', FRAMES,
-                         key=key + '_frame', help='Đối chiếu đúng khung Trung hạn hoặc Dài hạn trong Khuyến nghị khách hàng.')
+                         key=key + '_frame', help=('Đối chiếu đúng khung Trung hạn hoặc Dài hạn trong Khuyến nghị khách hàng.'
+                         + (' Điểm theo khung Trung hạn/Dài hạn, dùng chung với Biểu đồ và VIP. Không phải điều kiện của tín hiệu T+2 hay Bán/Chốt lời.' if mode == 'trade' else '')))
     result = compute_vip_scores(code, frames_d, screener, fundamentals, frame=frame,
                                 asof=asof, vip_module=vip)
     bank = result.get('bank')
@@ -415,7 +446,7 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             if bank is not None:
                 import bank_web_review
                 bank_web_review.render(frames_d, asof, symbol=result['code'], key=key, resolved=True, rows=research_rows)
-    elif str(result.get('code','')).upper() not in (__import__('bds_fa').SYMBOLS | __import__('ck_fa').SYMBOLS | __import__('reference_fa').SYMBOLS):
+    elif mode != 'trade' and str(result.get('code','')).upper() not in (__import__('bds_fa').SYMBOLS | __import__('ck_fa').SYMBOLS | __import__('reference_fa').SYMBOLS):
         w = vip.weights_of(frame)
         eod = f" · EOD {result['asof']:%d/%m/%Y}" if result.get('asof') is not None else ''
         st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}{eod} · '
@@ -427,6 +458,13 @@ def render_vip_scores(code, frames_d, screener, fundamentals, asof, *, key, mode
             st.caption('So sánh cùng kỳ BCTC trong 28 ngân hàng theo dõi; P/B cùng phiên EOD. NPL và P/B xếp từ thấp đến cao; các chỉ tiêu khác từ cao đến thấp. Đồng hạng nếu giá trị gốc bằng nhau. P/B thấp không đồng nghĩa cổ phiếu tốt.')
             st.dataframe(pd.DataFrame(bank_rank_table(ranks)),hide_index=True,use_container_width=True)
     with st.expander('Giải thích điểm FA / TA / hệ thống', expanded=False):
+        if mode == 'trade':
+            w = vip.weights_of(frame)
+            st.caption(f'Khung {frame} · FA {w[0]:.0%} / TA {w[1]:.0%} / Hệ thống {w[2]:.0%}. Điểm TA lấy nến Ngày EOD.')
+            if result.get('asof') is not None:
+                st.caption(f"Dữ liệu EOD: {result['asof']:%d/%m/%Y}")
+            if display.get('status'):
+                st.caption(display['status'])
         if str(result.get('code','')).upper() in __import__('bds_fa').SYMBOLS:
             import bds_fa_eod
             st.write(bds_fa_eod.detail(result['code']))
